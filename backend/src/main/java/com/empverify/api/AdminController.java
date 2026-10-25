@@ -39,6 +39,7 @@ public class AdminController {
     private final EmployeeRepository employees;
     private final ReferenceImageRepository referenceImages;
     private final VerificationCheckRepository checks;
+    private final com.empverify.repo.CheckReviewRepository reviews;
     private final DeviceService deviceService;
     private final ImageStorage storage;
     private final AuditService audit;
@@ -47,12 +48,14 @@ public class AdminController {
             EmployeeRepository employees,
             ReferenceImageRepository referenceImages,
             VerificationCheckRepository checks,
+            com.empverify.repo.CheckReviewRepository reviews,
             DeviceService deviceService,
             ImageStorage storage,
             AuditService audit) {
         this.employees = employees;
         this.referenceImages = referenceImages;
         this.checks = checks;
+        this.reviews = reviews;
         this.deviceService = deviceService;
         this.storage = storage;
         this.audit = audit;
@@ -120,12 +123,83 @@ public class AdminController {
         return toResponse(employee);
     }
 
-    /** Recent checks across the fleet, newest first (dashboard feed). */
+    public record AdminCheckRow(
+            String checkId, String status, boolean mismatchFlag, Double similarityScore,
+            String checkType, String employeeId, String employeeCode, String employeeName,
+            String deviceId, boolean hasEvidence, String errorDetail,
+            java.time.Instant requestedAt, java.time.Instant completedAt,
+            String reviewResolution) {}
+
+    /** Recent checks across the fleet, newest first, with employee context (dashboard feed). */
     @GetMapping("/checks")
-    public List<CheckController.CheckResultResponse> recentChecks(
-            @RequestParam(defaultValue = "50") int limit) {
-        return checks.findAllByOrderByRequestedAtDesc(PageRequest.of(0, Math.min(limit, 200)))
-                .stream().map(CheckController::toResult).toList();
+    public List<AdminCheckRow> recentChecks(@RequestParam(defaultValue = "50") int limit) {
+        var rows = checks.findAllByOrderByRequestedAtDesc(PageRequest.of(0, Math.min(limit, 200)));
+        var employeesById = new java.util.HashMap<UUID, Employee>();
+        employees.findAllById(rows.stream().map(c -> c.getEmployeeId()).distinct().toList())
+                .forEach(e -> employeesById.put(e.getId(), e));
+        var reviewByCheck = new java.util.HashMap<UUID, String>();
+        reviews.findByCheckIdInOrderByCreatedAtDesc(rows.stream().map(c -> c.getId()).toList())
+                .forEach(r -> reviewByCheck.putIfAbsent(r.getCheckId(), r.getResolution()));
+
+        return rows.stream().map(c -> {
+            var emp = employeesById.get(c.getEmployeeId());
+            return new AdminCheckRow(
+                    c.getId().toString(), c.getStatus().name(), c.isMismatchFlag(),
+                    c.getSimilarityScore() == null ? null : c.getSimilarityScore().doubleValue(),
+                    c.getCheckType().name(), c.getEmployeeId().toString(),
+                    emp == null ? null : emp.getEmployeeCode(),
+                    emp == null ? null : emp.getFullName(),
+                    c.getDeviceId().toString(),
+                    c.getEvidenceS3Key() != null, c.getErrorDetail(),
+                    c.getRequestedAt(), c.getCompletedAt(),
+                    reviewByCheck.get(c.getId()));
+        }).toList();
+    }
+
+    public record ReviewRequest(
+            @NotBlank @jakarta.validation.constraints.Pattern(
+                regexp = "CONFIRMED_EMPLOYEE|CONFIRMED_MISMATCH|TECHNICAL_ISSUE|INCONCLUSIVE")
+            String resolution,
+            String notes) {}
+
+    /** Records a human review of a flagged check. CHECK is a review status, never a verdict. */
+    @PostMapping("/checks/{checkId}/review")
+    public AdminCheckRow review(@PathVariable UUID checkId, @Valid @RequestBody ReviewRequest request) {
+        var check = checks.findById(checkId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "check not found"));
+        var review = new com.empverify.domain.CheckReview();
+        review.setCheckId(checkId);
+        review.setReviewer("admin");
+        review.setResolution(request.resolution());
+        review.setNotes(request.notes());
+        reviews.save(review);
+        audit.record("admin", "CHECK_REVIEWED", "check", checkId.toString(),
+                "{\"resolution\":\"" + request.resolution() + "\"}");
+        var emp = employees.findById(check.getEmployeeId()).orElse(null);
+        return new AdminCheckRow(
+                check.getId().toString(), check.getStatus().name(), check.isMismatchFlag(),
+                check.getSimilarityScore() == null ? null : check.getSimilarityScore().doubleValue(),
+                check.getCheckType().name(), check.getEmployeeId().toString(),
+                emp == null ? null : emp.getEmployeeCode(),
+                emp == null ? null : emp.getFullName(),
+                check.getDeviceId().toString(),
+                check.getEvidenceS3Key() != null, check.getErrorDetail(),
+                check.getRequestedAt(), check.getCompletedAt(),
+                request.resolution());
+    }
+
+    /** Evidence image for a flagged check (retained only for non-MATCH outcomes). */
+    @GetMapping("/checks/{checkId}/evidence")
+    public org.springframework.http.ResponseEntity<byte[]> evidence(@PathVariable UUID checkId) {
+        var check = checks.findById(checkId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "check not found"));
+        if (check.getEvidenceS3Key() == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "no evidence retained for this check");
+        }
+        audit.record("admin", "EVIDENCE_VIEWED", "check", checkId.toString(), null);
+        return org.springframework.http.ResponseEntity.ok()
+                .header("Content-Type", "image/jpeg")
+                .body(storage.load(check.getEvidenceS3Key()));
     }
 
     private EmployeeResponse toResponse(Employee employee) {

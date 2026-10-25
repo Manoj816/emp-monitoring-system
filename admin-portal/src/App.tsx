@@ -1,15 +1,43 @@
-/**
- * Admin portal shell. Phase 1 screens:
- *  - Login (Cognito-hosted UI redirect)
- *  - Employees: enrollment, reference-image capture/upload, device list
- *  - Dashboard: latest verification status per employee
- *  - Review queue: CHECK / MULTIPLE_FACES events with evidence + resolution form
- */
+import { useState } from "react";
+import { getAdminKey, setAdminKey } from "./api";
+import EmployeesPage from "./pages/EmployeesPage";
+import ChecksPage from "./pages/ChecksPage";
+
+type Tab = "employees" | "checks";
+
 export default function App() {
+  const [tab, setTab] = useState<Tab>("employees");
+  const [adminKey, setKeyState] = useState(getAdminKey());
+
   return (
-    <main style={{ fontFamily: "system-ui", padding: "2rem" }}>
-      <h1>EmpVerify Admin</h1>
-      <p>Phase 1 scaffold — screens to be implemented.</p>
-    </main>
+    <>
+      <header className="app">
+        <h1>EmpVerify Admin</h1>
+        <div className="spacer" />
+        <label>
+          Admin key
+          <input
+            type="password"
+            value={adminKey}
+            onChange={(e) => {
+              setKeyState(e.target.value);
+              setAdminKey(e.target.value);
+            }}
+            style={{ width: 160 }}
+          />
+        </label>
+      </header>
+
+      <nav className="tabs">
+        <button className={tab === "employees" ? "active" : ""} onClick={() => setTab("employees")}>
+          Employees
+        </button>
+        <button className={tab === "checks" ? "active" : ""} onClick={() => setTab("checks")}>
+          Verification checks
+        </button>
+      </nav>
+
+      <main className="page">{tab === "employees" ? <EmployeesPage /> : <ChecksPage />}</main>
+    </>
   );
 }
