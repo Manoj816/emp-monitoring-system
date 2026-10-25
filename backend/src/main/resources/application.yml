@@ -3,21 +3,27 @@ spring:
     name: emp-verify-backend
 
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:empverify}
+    # 127.0.0.1 (not localhost): avoids IPv6 ::1 resolution hitting unrelated listeners
+    url: jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:5433}/${DB_NAME:empverify}
     username: ${DB_USER:empverify}
     password: ${DB_PASSWORD:empverify}
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none # schema is owned by Flyway
     open-in-view: false
 
   flyway:
     enabled: true
     locations: classpath:db/migration
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+
 server:
-  port: 8080
+  port: ${SERVER_PORT:8082}
 
 management:
   endpoints:
@@ -30,13 +36,25 @@ empverify:
   # us-east-1 | us-west-2 | eu-west-1 | ap-northeast-1 | ap-south-1
   aws:
     region: ${AWS_REGION:ap-south-1}
-    s3-bucket: ${S3_BUCKET:}
+
+  # "stub" (local dev: no AWS needed) or "rekognition" (real matching).
+  verifier: ${EMPVERIFY_VERIFIER:stub}
+  stub-similarity: 95.0
+
+  # "local" (dev: ./data/images) or "s3" (Phase 1 deploy).
+  storage: ${EMPVERIFY_STORAGE:local}
+  local-storage-dir: ${EMPVERIFY_STORAGE_DIR:./data/images}
+
+  security:
+    # Dev-only shared secrets; replaced by Cognito + managed secrets at deployment.
+    admin-api-key: ${ADMIN_API_KEY:dev-admin-key}
+    device-token-secret: ${DEVICE_TOKEN_SECRET:dev-device-token-secret-change-me}
+    device-token-ttl-seconds: 3600
+    enrollment-token-ttl-hours: 24
+
   verification:
     # Similarity >= match-threshold  -> MATCH
     # review-threshold..match-threshold -> CHECK
     # < review-threshold             -> CHECK with mismatch flag
-    match-threshold: 90
-    review-threshold: 75
-  device:
-    # One-time enrollment tokens are issued by admins; checks expire if not completed in time.
+    # (per-policy values in check_policies override at runtime)
     check-expiry-seconds: 120

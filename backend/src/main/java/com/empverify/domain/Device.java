@@ -1,0 +1,66 @@
+package com.empverify.domain;
+
+import com.empverify.domain.Enums.DevicePlatform;
+import com.empverify.domain.Enums.DeviceStatus;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.time.Instant;
+import java.util.UUID;
+
+@Entity
+@Table(name = "devices")
+public class Device {
+
+    @Id
+    private UUID id = UUID.randomUUID();
+
+    @Column(name = "employee_id", nullable = false)
+    private UUID employeeId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private DevicePlatform platform;
+
+    private String hostname;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private DeviceStatus status = DeviceStatus.PENDING;
+
+    @Column(name = "credential_hash")
+    private String credentialHash;
+
+    @Column(name = "agent_version")
+    private String agentVersion;
+
+    @Column(name = "registered_at")
+    private Instant registeredAt;
+
+    @Column(name = "last_seen_at")
+    private Instant lastSeenAt;
+
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt = Instant.now();
+
+    public UUID getId() { return id; }
+    public UUID getEmployeeId() { return employeeId; }
+    public void setEmployeeId(UUID v) { this.employeeId = v; }
+    public DevicePlatform getPlatform() { return platform; }
+    public void setPlatform(DevicePlatform v) { this.platform = v; }
+    public String getHostname() { return hostname; }
+    public void setHostname(String v) { this.hostname = v; }
+    public DeviceStatus getStatus() { return status; }
+    public void setStatus(DeviceStatus v) { this.status = v; }
+    public String getCredentialHash() { return credentialHash; }
+    public void setCredentialHash(String v) { this.credentialHash = v; }
+    public String getAgentVersion() { return agentVersion; }
+    public void setAgentVersion(String v) { this.agentVersion = v; }
+    public Instant getRegisteredAt() { return registeredAt; }
+    public void setRegisteredAt(Instant v) { this.registeredAt = v; }
+    public Instant getLastSeenAt() { return lastSeenAt; }
+    public void setLastSeenAt(Instant v) { this.lastSeenAt = v; }
+}

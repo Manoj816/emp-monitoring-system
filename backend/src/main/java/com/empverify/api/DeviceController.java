@@ -1,14 +1,14 @@
 package com.empverify.api;
 
+import com.empverify.service.DeviceService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
-import org.springframework.http.HttpStatus;
+import java.util.UUID;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Device lifecycle endpoints used by the desktop agent.
@@ -17,6 +17,12 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/v1/devices")
 public class DeviceController {
+
+    private final DeviceService deviceService;
+
+    public DeviceController(DeviceService deviceService) {
+        this.deviceService = deviceService;
+    }
 
     public record RegisterRequest(
             @NotBlank String enrollmentToken,
@@ -37,14 +43,14 @@ public class DeviceController {
      */
     @PostMapping("/register")
     public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
-        // TODO: validate enrollment token, create device row, return generated credentials.
-        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Phase 1 service pending");
+        var registration = deviceService.register(
+                request.enrollmentToken(), request.platform(), request.hostname(), request.agentVersion());
+        return new RegisterResponse(registration.deviceId().toString(), registration.deviceSecret());
     }
 
     @PostMapping("/auth")
     public AuthResponse auth(@Valid @RequestBody AuthRequest request) {
-        // TODO: verify secret hash, issue short-lived device token.
-        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Phase 1 service pending");
+        var auth = deviceService.authenticate(UUID.fromString(request.deviceId()), request.deviceSecret());
+        return new AuthResponse(auth.accessToken(), auth.expiresInSeconds());
     }
 }
-

@@ -33,9 +33,9 @@ reference image. Independent of Teams/Zoom. Full design:
 ## Local development
 
 ```sh
-docker compose up -d                 # PostgreSQL on :5432
-cd backend && ./mvnw spring-boot:run # API on :8080 (JDK 21)
-cd admin-portal && npm run dev       # portal on :5173, proxies /api -> :8080
+docker compose up -d                 # PostgreSQL on :5433
+cd backend && ./mvnw spring-boot:run # API on :8082 (JDK 21)
+cd admin-portal && npm run dev       # portal on :5173, proxies /api -> :8082
 cd desktop-agent && dotnet build     # agent (.NET 10 SDK)
 ```
 

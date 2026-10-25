@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     proxy: {
       // Local dev: forward API calls to the Spring Boot backend.
-      "/api": "http://localhost:8080",
+      "/api": "http://localhost:8082",
     },
   },
 });

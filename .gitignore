@@ -2,6 +2,9 @@
 backend/target/
 *.class
 
+# Local dev image storage (reference images + evidence)
+backend/data/
+
 # .NET
 desktop-agent/**/bin/
 desktop-agent/**/obj/
