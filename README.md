@@ -36,8 +36,18 @@ reference image. Independent of Teams/Zoom. Full design:
 docker compose up -d                 # PostgreSQL on :5433
 cd backend && ./mvnw spring-boot:run # API on :8082 (JDK 21)
 cd admin-portal && npm run dev       # portal on :5173, proxies /api -> :8082
-cd desktop-agent && dotnet build     # agent (.NET 10 SDK)
+run-agent.cmd                        # desktop agent (published exe or dotnet run)
 ```
+
+Dev-machine note: if `dotnet`/`java` on PATH are the wrong versions, the
+toolchains live at `%LOCALAPPDATA%\Microsoft\dotnet` (SDK 10) and
+`%USERPROFILE%\.jdks\jdk-21.*` (set `JAVA_HOME` accordingly), or use
+`run-agent.cmd`, which resolves this automatically.
+
+Agent smoke test: issue an enrollment token
+(`POST /api/v1/admin/employees/{id}/enrollment-tokens` with header
+`X-Admin-Key: dev-admin-key`), paste it into the agent's registration screen,
+then click "Verify now" for a real webcam capture verified by the backend.
 
 ## CI/CD
 

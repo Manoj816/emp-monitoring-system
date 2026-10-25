@@ -8,6 +8,7 @@ backend/data/
 # .NET
 desktop-agent/**/bin/
 desktop-agent/**/obj/
+desktop-agent/publish/
 *.user
 
 # Node
