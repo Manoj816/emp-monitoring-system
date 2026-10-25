@@ -32,11 +32,18 @@ reference image. Independent of Teams/Zoom. Full design:
 
 ## Local development
 
+Everyday commands run through the root `package.json` (Windows dev machines;
+full details in `docs/local-dev-runbook.md`):
+
 ```sh
-docker compose up -d                 # PostgreSQL on :5433
-cd backend && ./mvnw spring-boot:run # API on :8082 (JDK 21)
-cd admin-portal && npm run dev       # portal on :5173, proxies /api -> :8082
-run-agent.cmd                        # desktop agent (published exe or dotnet run)
+npm run db          # start PostgreSQL (:5433)        npm run db:stop / db:reset
+npm run backend     # start the API (:8082)           backend:build / backend:test
+npm run agent       # launch the desktop agent        agent:build / agent:test / agent:publish
+npm run portal      # admin portal dev server (:5173) portal:install first time
+npm run health      # backend health check
+npm run employees   # list enrolled employees
+npm run token       # issue an enrollment token       npm run token -- E-0002
+npm run checks      # recent verification checks
 ```
 
 Dev-machine note: if `dotnet`/`java` on PATH are the wrong versions, the

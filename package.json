@@ -1,0 +1,32 @@
+{
+  "name": "empverify",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Dev task runner for the Remote Workforce Identity Verification System (Windows dev machines)",
+  "scripts": {
+    "db": "docker compose up -d",
+    "db:stop": "docker compose stop",
+    "db:reset": "docker compose down -v",
+
+    "backend": "cd backend && set \"JAVA_HOME=%USERPROFILE%\\.jdks\\jdk-21.0.12.1+1\" && mvnw.cmd spring-boot:run",
+    "backend:build": "cd backend && set \"JAVA_HOME=%USERPROFILE%\\.jdks\\jdk-21.0.12.1+1\" && mvnw.cmd -B -DskipTests package",
+    "backend:test": "cd backend && set \"JAVA_HOME=%USERPROFILE%\\.jdks\\jdk-21.0.12.1+1\" && mvnw.cmd -B verify",
+
+    "agent": "run-agent.cmd",
+    "agent:build": "\"%LOCALAPPDATA%\\Microsoft\\dotnet\\dotnet.exe\" build desktop-agent -c Release",
+    "agent:test": "\"%LOCALAPPDATA%\\Microsoft\\dotnet\\dotnet.exe\" test desktop-agent -c Release",
+    "agent:publish": "\"%LOCALAPPDATA%\\Microsoft\\dotnet\\dotnet.exe\" publish desktop-agent/src/EmpVerify.Agent.Windows -c Release -r win-x64 --self-contained -o desktop-agent/publish",
+
+    "portal": "npm --prefix admin-portal run dev",
+    "portal:install": "npm --prefix admin-portal install",
+    "portal:build": "npm --prefix admin-portal run build",
+    "liveness": "npm --prefix liveness-ui run dev",
+    "liveness:install": "npm --prefix liveness-ui install",
+    "liveness:build": "npm --prefix liveness-ui run build",
+
+    "health": "curl -s http://localhost:8082/actuator/health",
+    "employees": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/admin.ps1 employees",
+    "token": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/admin.ps1 token",
+    "checks": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/admin.ps1 checks"
+  }
+}
