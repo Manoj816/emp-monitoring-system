@@ -1,0 +1,229 @@
+openapi: 3.0.3
+info:
+  title: EmpVerify Agent API
+  description: >
+    Contract between the desktop agent and the backend. Platform-neutral by design:
+    the same contract serves the Windows (C#/.NET) agent and a future macOS agent.
+    All verification decisions are made server-side; the agent never computes or
+    reports its own verification result.
+  version: 1.0.0
+
+servers:
+  - url: https://api.example.com
+    description: Replace with the deployed backend URL.
+
+tags:
+  - name: device
+    description: Registration and authentication of agent installations.
+  - name: checks
+    description: Verification check lifecycle.
+
+paths:
+  /api/v1/devices/register:
+    post:
+      tags: [device]
+      summary: Register a new agent installation
+      description: >
+        Exchanges a one-time enrollment token (issued by an administrator) for a
+        device identity. The device secret is returned exactly once; the agent must
+        store it in the OS credential store (Windows Credential Manager / macOS
+        Keychain). Only a hash is retained server-side.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enrollmentToken, platform]
+              properties:
+                enrollmentToken: { type: string }
+                platform: { type: string, enum: [WINDOWS, MACOS] }
+                hostname: { type: string }
+                agentVersion: { type: string }
+      responses:
+        "200":
+          description: Device registered.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deviceId: { type: string, format: uuid }
+                  deviceSecret: { type: string, description: Shown exactly once. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { description: Enrollment token invalid, expired, or already used. }
+
+  /api/v1/devices/auth:
+    post:
+      tags: [device]
+      summary: Exchange device credentials for a short-lived access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deviceId, deviceSecret]
+              properties:
+                deviceId: { type: string, format: uuid }
+                deviceSecret: { type: string }
+      responses:
+        "200":
+          description: Token issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  expiresInSeconds: { type: integer }
+        "401": { description: Unknown device, bad secret, or device revoked. }
+
+  /api/v1/policy:
+    get:
+      tags: [checks]
+      summary: Current check policy for the authenticated device
+      description: >
+        Fetched at session start. The agent schedules random check times with jitter
+        inside the returned work window; the policy always comes from the server.
+      responses:
+        "200":
+          description: Active policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workWindowStart: { type: string, example: "09:00" }
+                  workWindowEnd: { type: string, example: "17:00" }
+                  timezone: { type: string, example: "Asia/Kolkata" }
+                  maxChecksPerDay: { type: integer, example: 4 }
+                  responseTimeoutSeconds: { type: integer, example: 120 }
+                  livenessOnSessionStart: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/checks:
+    post:
+      tags: [checks]
+      summary: Open a verification check
+      description: >
+        Issues a one-time check ID and nonce with a short expiry (replay protection).
+        The agent then prompts the employee, captures a frame, and uploads it.
+      parameters:
+        - name: checkType
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [SESSION_START, PERIODIC, LIVENESS, ESCALATION]
+      responses:
+        "200":
+          description: Check opened.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checkId: { type: string, format: uuid }
+                  nonce: { type: string }
+                  expiresAt: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/checks/{checkId}/capture:
+    post:
+      tags: [checks]
+      summary: Upload the captured frame for a pending check
+      description: >
+        Server validates nonce and expiry, then runs DetectFaces (face count, quality)
+        and CompareFaces against the active reference image. Captures for MATCH
+        results are discarded; evidence is retained only for CHECK/flagged outcomes.
+      parameters:
+        - { name: checkId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [nonce, image]
+              properties:
+                nonce: { type: string }
+                image: { type: string, format: binary }
+                cameraDeviceName:
+                  type: string
+                  description: Reported camera device; used to flag virtual webcams.
+      responses:
+        "200":
+          description: Verification outcome.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CheckResult" }
+        "409": { description: Nonce already used or check expired. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/checks/{checkId}/liveness-session:
+    post:
+      tags: [checks]
+      summary: Create a Face Liveness session for this check (Phase 2)
+      description: >
+        Backend creates the Rekognition Face Liveness session and returns a one-time
+        URL to the hosted React liveness page. The agent releases the camera, opens
+        the URL in the default browser, then polls the result endpoint.
+      parameters:
+        - { name: checkId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Session created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  livenessUrl: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+
+  /api/v1/checks/{checkId}/result:
+    get:
+      tags: [checks]
+      summary: Poll the outcome of a check
+      parameters:
+        - { name: checkId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Current state of the check.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CheckResult" }
+
+components:
+  securitySchemes:
+    deviceToken:
+      type: http
+      scheme: bearer
+      description: Short-lived device token from /api/v1/devices/auth.
+
+  responses:
+    BadRequest: { description: Malformed request. }
+    Unauthorized: { description: Missing, expired, or revoked device token. }
+
+  schemas:
+    CheckResult:
+      type: object
+      properties:
+        checkId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [PENDING, MATCH, CHECK, NO_FACE, MULTIPLE_FACES, VERIFICATION_ERROR, EXPIRED]
+        mismatchFlag:
+          type: boolean
+          description: >
+            True when the score fell below the review threshold. A flag for human
+            review — never, by itself, a finding of misconduct.
+        similarityScore: { type: number, nullable: true }
+        livenessConfidence: { type: number, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+
+security:
+  - deviceToken: []

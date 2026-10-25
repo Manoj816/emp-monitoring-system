@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EmpVerify.Agent.Core/EmpVerify.Agent.Core.csproj" />
+    <Project Path="src/EmpVerify.Agent.Windows/EmpVerify.Agent.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EmpVerify.Agent.Core.Tests/EmpVerify.Agent.Core.Tests.csproj" />
+  </Folder>
+</Solution>

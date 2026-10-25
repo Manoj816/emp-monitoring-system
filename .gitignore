@@ -1,0 +1,33 @@
+# Java / Maven
+backend/target/
+*.class
+
+# .NET
+desktop-agent/**/bin/
+desktop-agent/**/obj/
+*.user
+
+# Node
+node_modules/
+dist/
+*.local
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# IDE / OS
+.idea/
+.vscode/
+*.suo
+Thumbs.db
+.DS_Store
+
+# Local env
+.env
+.env.*
+
+# Unrelated local tooling caches
+.sf/

@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: emp-verify-backend
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:empverify}
+    username: ${DB_USER:empverify}
+    password: ${DB_PASSWORD:empverify}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+empverify:
+  # AWS region must support Rekognition Face Liveness:
+  # us-east-1 | us-west-2 | eu-west-1 | ap-northeast-1 | ap-south-1
+  aws:
+    region: ${AWS_REGION:ap-south-1}
+    s3-bucket: ${S3_BUCKET:}
+  verification:
+    # Similarity >= match-threshold  -> MATCH
+    # review-threshold..match-threshold -> CHECK
+    # < review-threshold             -> CHECK with mismatch flag
+    match-threshold: 90
+    review-threshold: 75
+  device:
+    # One-time enrollment tokens are issued by admins; checks expire if not completed in time.
+    check-expiry-seconds: 120

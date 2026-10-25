@@ -1,0 +1,32 @@
+name: Desktop Agent CI
+
+on:
+  push:
+    branches: [main]
+    paths: ["desktop-agent/**", ".github/workflows/agent.yml"]
+  pull_request:
+    paths: ["desktop-agent/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build
+        working-directory: desktop-agent
+        run: dotnet build -c Release
+
+      - name: Test
+        working-directory: desktop-agent
+        run: dotnet test -c Release --no-build
+
+      # MSIX packaging + code signing is added once the signing certificate is
+      # procured (Azure Trusted Signing). Until then CI validates build + tests.

@@ -1,0 +1,20 @@
+# Local development infrastructure. Run: docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: empverify
+      POSTGRES_USER: empverify
+      POSTGRES_PASSWORD: empverify
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U empverify"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
