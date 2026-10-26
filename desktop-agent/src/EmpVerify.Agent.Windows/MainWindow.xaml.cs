@@ -1,17 +1,19 @@
-﻿using System.Net.Http;
+﻿using System.ComponentModel;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Threading;
 using EmpVerify.Agent.Core;
 using EmpVerify.Agent.Core.Api;
 using EmpVerify.Agent.Core.Scheduling;
 using EmpVerify.Agent.Windows.Services;
+using WinForms = System.Windows.Forms;
 
 namespace EmpVerify.Agent.Windows;
 
 /// <summary>
-/// Phase 1 agent shell: register once with an enrollment token, then run
-/// scheduled randomized checks (visible prompt + capture) and a manual
-/// "Verify now". Tray icon + background start come with the MSIX packaging work.
+/// Agent window: register with an enrollment token, then run scheduled randomized
+/// checks and a manual "Verify now". The app runs as a background tray agent, so
+/// closing this window hides it to the tray rather than exiting; checks continue.
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -28,13 +30,39 @@ public partial class MainWindow : Window
     private IReadOnlyList<DateTimeOffset> _plan = Array.Empty<DateTimeOffset>();
     private DateTimeOffset _lastHandled = DateTimeOffset.MinValue;
     private bool _checkRunning;
+    private bool _exiting;
+    private WinForms.NotifyIcon? _trayIcon;
 
     public MainWindow()
     {
         InitializeComponent();
         BackendUrlBox.Text = _settings.BackendUrl;
-        Loaded += async (_, _) => await TryConnectAsync();
         _timer.Tick += async (_, _) => await OnScheduleTickAsync();
+    }
+
+    /// <summary>True when this device already has stored registration credentials.</summary>
+    public bool IsRegistered => DpapiCredentialStore.CredentialsExist();
+
+    public void AttachTray(WinForms.NotifyIcon trayIcon) => _trayIcon = trayIcon;
+
+    /// <summary>Connects and starts scheduling. Called once at startup (shown or background).</summary>
+    public async Task InitializeAsync() => await TryConnectAsync();
+
+    /// <summary>Tray "Verify now": the click is the consent, so no extra prompt.</summary>
+    public async Task VerifyNowFromTrayAsync() => await RunCheckAsync(CheckType.SessionStart, promptFirst: false);
+
+    /// <summary>Lets App close the window for real (bypass hide-to-tray) on Exit.</summary>
+    public void PrepareExit() => _exiting = true;
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        // Closing the window hides the agent to the tray; it keeps verifying.
+        if (!_exiting)
+        {
+            e.Cancel = true;
+            Hide();
+        }
+        base.OnClosing(e);
     }
 
     private async Task TryConnectAsync()
@@ -84,12 +112,15 @@ public partial class MainWindow : Window
             _policy = await _api.GetPolicyAsync(CancellationToken.None);
             _flow = new VerificationFlow(_api, _camera, _notifications);
 
+            // Agent is active: make sure it starts at login (no-op when MSIX-packaged).
+            StartupManager.EnsureEnabled();
+
             _plan = _scheduler.PlanDay(_policy, DateTimeOffset.Now);
             _lastHandled = DateTimeOffset.Now;
             _timer.Start();
 
             VerifyNowButton.IsEnabled = true;
-            StatusText.Text = "Connected — scheduled checks active.";
+            SetStatus("Connected — scheduled checks active.");
             Log($"Connected. Policy: window {_policy.WorkWindowStart}-{_policy.WorkWindowEnd}, " +
                 $"{_policy.MaxChecksPerDay} checks/day, {_policy.ResponseTimeoutSeconds}s response window.");
             var next = _scheduler.NextCheck(_plan, DateTimeOffset.Now);
@@ -98,7 +129,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             Log($"Connection failed: {ex.Message}");
-            StatusText.Text = "Connection failed.";
+            SetStatus("Connection failed.");
         }
     }
 
@@ -120,7 +151,6 @@ public partial class MainWindow : Window
 
     private async void VerifyNow_Click(object sender, RoutedEventArgs e)
     {
-        // Employee-initiated: the click is the consent, no extra prompt needed.
         await RunCheckAsync(CheckType.SessionStart, promptFirst: false);
     }
 
@@ -131,13 +161,13 @@ public partial class MainWindow : Window
             return;
         }
         _checkRunning = true;
-        VerifyNowButton.IsEnabled = false;
+        await Dispatcher.InvokeAsync(() => VerifyNowButton.IsEnabled = false);
         try
         {
             var result = await _flow.RunCheckAsync(
                 type, TimeSpan.FromSeconds(_policy.ResponseTimeoutSeconds), promptFirst,
                 CancellationToken.None);
-            Log(result.Outcome switch
+            var message = result.Outcome switch
             {
                 FlowOutcome.Completed =>
                     $"{type} check: {result.Result!.Status}" +
@@ -145,7 +175,12 @@ public partial class MainWindow : Window
                 FlowOutcome.NotAccepted => $"{type} check missed (no response within the window).",
                 FlowOutcome.CameraBusy => $"{type} check deferred — camera in use by another app.",
                 _ => $"{type} check failed — no camera available or access denied.",
-            });
+            };
+            Log(message);
+            if (result.Outcome == FlowOutcome.Completed)
+            {
+                SetStatus($"Last check: {result.Result!.Status} at {DateTime.Now:HH:mm}.");
+            }
         }
         catch (Exception ex)
         {
@@ -154,12 +189,23 @@ public partial class MainWindow : Window
         finally
         {
             _checkRunning = false;
-            VerifyNowButton.IsEnabled = true;
+            await Dispatcher.InvokeAsync(() => VerifyNowButton.IsEnabled = true);
         }
     }
 
     private AgentApiClient CreateApi() =>
         new(new HttpClient { BaseAddress = new Uri(_settings.BackendUrl) });
+
+    private void SetStatus(string status)
+    {
+        StatusText.Text = status;
+        if (_trayIcon is not null)
+        {
+            // NotifyIcon.Text is capped at 63 characters.
+            var text = $"EmpVerify — {status}";
+            _trayIcon.Text = text.Length > 63 ? text[..63] : text;
+        }
+    }
 
     private void Log(string message)
     {

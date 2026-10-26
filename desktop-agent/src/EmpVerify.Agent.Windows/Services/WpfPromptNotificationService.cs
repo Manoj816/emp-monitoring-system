@@ -12,7 +12,7 @@ public sealed class WpfPromptNotificationService : INotificationService
 {
     public async Task<bool> PromptForCheckAsync(TimeSpan responseWindow, CancellationToken cancellationToken)
     {
-        return await Application.Current.Dispatcher.InvokeAsync(() =>
+        return await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
         {
             var prompt = new CheckPromptWindow(responseWindow);
             return prompt.ShowDialog() == true;

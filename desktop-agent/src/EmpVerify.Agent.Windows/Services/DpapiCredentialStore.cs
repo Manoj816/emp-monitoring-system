@@ -17,6 +17,9 @@ public sealed class DpapiCredentialStore : ICredentialStore
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "EmpVerify", "device.credentials");
 
+    /// <summary>Fast synchronous check used at startup to decide show-vs-background.</summary>
+    public static bool CredentialsExist() => File.Exists(FilePath);
+
     public Task SaveAsync(DeviceCredentials credentials, CancellationToken cancellationToken)
     {
         var json = JsonSerializer.Serialize(credentials);

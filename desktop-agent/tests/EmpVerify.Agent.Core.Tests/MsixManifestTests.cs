@@ -12,6 +12,8 @@ public class MsixManifestTests
         "http://schemas.microsoft.com/appx/manifest/foundation/windows10";
     private static readonly XNamespace Rescap =
         "http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities";
+    private static readonly XNamespace Uap5 =
+        "http://schemas.microsoft.com/appx/manifest/uap/windows10/5";
 
     private static XDocument LoadManifest()
     {
@@ -67,5 +69,13 @@ public class MsixManifestTests
             .Element(Foundation + "Application")!;
         Assert.Equal("EmpVerify.Agent.Windows.exe", (string?)app.Attribute("Executable"));
         Assert.Equal("Windows.FullTrustApplication", (string?)app.Attribute("EntryPoint"));
+    }
+
+    [Fact]
+    public void DeclaresStartupTaskForLoginAutostart()
+    {
+        var startupTask = LoadManifest().Descendants(Uap5 + "StartupTask").FirstOrDefault();
+        Assert.NotNull(startupTask);
+        Assert.Equal("true", (string?)startupTask!.Attribute("Enabled"));
     }
 }
