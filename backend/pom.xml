@@ -81,6 +81,11 @@
 			<groupId>software.amazon.awssdk</groupId>
 			<artifactId>rekognition</artifactId>
 		</dependency>
+		<!-- S3 image storage; active only with empverify.storage=s3 -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator-test</artifactId>

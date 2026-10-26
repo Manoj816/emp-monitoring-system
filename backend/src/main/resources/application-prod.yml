@@ -1,0 +1,31 @@
+# Production profile (activate with SPRING_PROFILES_ACTIVE=prod).
+# Everything here is driven by environment variables injected by the deployment
+# (ECS task definition + Secrets Manager). No secrets live in this file.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+
+empverify:
+  aws:
+    region: ${AWS_REGION}
+    s3-bucket: ${S3_BUCKET}
+    kms-key-id: ${KMS_KEY_ID}
+
+  # Real AWS services in production.
+  verifier: rekognition
+  liveness: rekognition
+  storage: s3
+  liveness-ui-url: ${LIVENESS_UI_URL}
+
+  security:
+    # Must be strong secrets from Secrets Manager, not the dev defaults.
+    admin-api-key: ${ADMIN_API_KEY}
+    device-token-secret: ${DEVICE_TOKEN_SECRET}
+    device-token-ttl-seconds: 3600
+    enrollment-token-ttl-hours: 24
+
+  retention:
+    evidence-days: ${EVIDENCE_RETENTION_DAYS:90}

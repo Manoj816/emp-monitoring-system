@@ -36,14 +36,24 @@ empverify:
   # us-east-1 | us-west-2 | eu-west-1 | ap-northeast-1 | ap-south-1
   aws:
     region: ${AWS_REGION:ap-south-1}
+    s3-bucket: ${S3_BUCKET:}
+    kms-key-id: ${KMS_KEY_ID:}
 
   # "stub" (local dev: no AWS needed) or "rekognition" (real matching).
   verifier: ${EMPVERIFY_VERIFIER:stub}
   stub-similarity: 95.0
 
-  # "local" (dev: ./data/images) or "s3" (Phase 1 deploy).
+  # "stub" (local dev) or "rekognition" (real Face Liveness).
+  liveness: ${EMPVERIFY_LIVENESS:stub}
+  # Base URL of the hosted React liveness page the agent opens in a browser.
+  liveness-ui-url: ${LIVENESS_UI_URL:http://localhost:5174}
+
+  # "local" (dev: ./data/images) or "s3" (deploy).
   storage: ${EMPVERIFY_STORAGE:local}
   local-storage-dir: ${EMPVERIFY_STORAGE_DIR:./data/images}
+
+  retention:
+    evidence-days: ${EVIDENCE_RETENTION_DAYS:90}
 
   security:
     # Dev-only shared secrets; replaced by Cognito + managed secrets at deployment.

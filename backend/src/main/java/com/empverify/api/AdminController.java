@@ -124,6 +124,12 @@ public class AdminController {
         deviceService.revokeDevice(deviceId, "admin");
     }
 
+    /** Verifies the tamper-evident audit log hash chain is intact. */
+    @GetMapping("/audit/verify")
+    public java.util.Map<String, Object> verifyAudit() {
+        return java.util.Map.of("intact", audit.verifyChain());
+    }
+
     /** Offboards an employee: marks OFFBOARDED and revokes all their devices. */
     @PostMapping("/employees/{employeeId}/offboard")
     public OffboardResponse offboard(@PathVariable UUID employeeId) {
