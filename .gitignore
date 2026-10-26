@@ -9,6 +9,8 @@ backend/data/
 desktop-agent/**/bin/
 desktop-agent/**/obj/
 desktop-agent/publish/
+desktop-agent/packaging/stage/
+desktop-agent/packaging/out/
 *.user
 
 # Node

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSIX package manifest for the EmpVerify desktop agent (full-trust WPF app).
+
+  - runFullTrust: required for a packaged Win32/WPF desktop app.
+  - webcam DeviceCapability: grants camera access AND makes the app appear in
+    Settings > Privacy > Camera, so the OS camera-in-use indicator and the
+    employee-facing permission surface work as the product requires.
+  - Publisher MUST exactly match the signing certificate's subject. For dev this
+    is "CN=EmpVerify Dev" (self-signed by build-msix.ps1). For production,
+    replace it with the real code-signing certificate's subject and re-pack.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="EmpVerify.Agent"
+    Publisher="CN=EmpVerify Dev"
+    Version="0.1.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>EmpVerify Agent</DisplayName>
+    <PublisherDisplayName>EmpVerify</PublisherDisplayName>
+    <Logo>Images\StoreLogo.png</Logo>
+    <Description>Remote workforce identity verification agent.</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="EmpVerifyAgent"
+                Executable="EmpVerify.Agent.Windows.exe"
+                EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="EmpVerify Agent"
+        Description="Remote workforce identity verification agent."
+        BackgroundColor="#1B2A4A"
+        Square150x150Logo="Images\Square150x150Logo.png"
+        Square44x44Logo="Images\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Images\Wide310x150Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <DeviceCapability Name="webcam" />
+  </Capabilities>
+</Package>

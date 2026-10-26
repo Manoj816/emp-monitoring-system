@@ -11,6 +11,7 @@ reference image. Independent of Teams/Zoom. Full design:
 |---|---|---|
 | `backend/` | REST API: device registration, checks, verification, audit | Java 21, Spring Boot, PostgreSQL, Flyway |
 | `desktop-agent/` | Windows agent (platform-neutral core + WPF head) | C# / .NET 10 |
+| `desktop-agent/packaging/` | Per-machine MSIX installer (manifest, build/install scripts) | MSIX |
 | `admin-portal/` | Admin dashboard: enrollment, review queue | React + TypeScript (Vite) |
 | `liveness-ui/` | Face Liveness page opened from the agent (Phase 2) | React + Amplify UI |
 | `infra/` | Terraform: OIDC bootstrap + AWS modules | Terraform |

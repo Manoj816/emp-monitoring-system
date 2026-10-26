@@ -28,5 +28,39 @@ jobs:
         working-directory: desktop-agent
         run: dotnet test -c Release --no-build
 
-      # MSIX packaging + code signing is added once the signing certificate is
-      # procured (Azure Trusted Signing). Until then CI validates build + tests.
+  package:
+    # Builds the MSIX on main. windows-latest already has the Windows SDK
+    # (makeappx/signtool). Dev self-signed packaging validates the pipeline;
+    # production signing uses a real certificate via repository secrets.
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build MSIX (dev-signed)
+        working-directory: desktop-agent/packaging
+        shell: pwsh
+        run: ./build-msix.ps1
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: empverify-agent-msix
+          path: desktop-agent/packaging/out/*.msix
+
+      # Production signing (uncomment once the code-signing certificate exists;
+      # store it as base64 in secrets, never in the repo):
+      # - name: Decode signing certificate
+      #   shell: pwsh
+      #   run: |
+      #     [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx",
+      #       [Convert]::FromBase64String("${{ secrets.SIGNING_PFX_BASE64 }}"))
+      # - name: Build MSIX (production-signed)
+      #   working-directory: desktop-agent/packaging
+      #   shell: pwsh
+      #   run: ./build-msix.ps1 -PfxPath "$env:RUNNER_TEMP\cert.pfx" -PfxPassword (ConvertTo-SecureString "${{ secrets.SIGNING_PFX_PASSWORD }}" -AsPlainText -Force)
