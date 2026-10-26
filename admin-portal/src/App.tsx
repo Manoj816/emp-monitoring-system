@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { getAdminKey, setAdminKey } from "./api";
 import EmployeesPage from "./pages/EmployeesPage";
+import DevicesPage from "./pages/DevicesPage";
 import ChecksPage from "./pages/ChecksPage";
 
-type Tab = "employees" | "checks";
+type Tab = "employees" | "devices" | "checks";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("employees");
@@ -32,12 +33,19 @@ export default function App() {
         <button className={tab === "employees" ? "active" : ""} onClick={() => setTab("employees")}>
           Employees
         </button>
+        <button className={tab === "devices" ? "active" : ""} onClick={() => setTab("devices")}>
+          Devices
+        </button>
         <button className={tab === "checks" ? "active" : ""} onClick={() => setTab("checks")}>
           Verification checks
         </button>
       </nav>
 
-      <main className="page">{tab === "employees" ? <EmployeesPage /> : <ChecksPage />}</main>
+      <main className="page">
+        {tab === "employees" && <EmployeesPage />}
+        {tab === "devices" && <DevicesPage />}
+        {tab === "checks" && <ChecksPage />}
+      </main>
     </>
   );
 }

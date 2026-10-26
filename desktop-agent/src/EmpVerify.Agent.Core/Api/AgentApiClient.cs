@@ -7,7 +7,7 @@ namespace EmpVerify.Agent.Core.Api;
 /// Typed client for the agent endpoints defined in docs/openapi/agent-api.yaml.
 /// The server is the sole authority on verification outcomes.
 /// </summary>
-public sealed class AgentApiClient
+public sealed class AgentApiClient : IAgentApi
 {
     private readonly HttpClient _http;
 

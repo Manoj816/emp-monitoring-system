@@ -34,6 +34,18 @@ export type ReviewResolution =
   | "TECHNICAL_ISSUE"
   | "INCONCLUSIVE";
 
+export interface DeviceSummary {
+  id: string;
+  employeeId: string;
+  employeeName: string | null;
+  platform: string;
+  hostname: string | null;
+  status: string;
+  agentVersion: string | null;
+  registeredAt: string | null;
+  lastSeenAt: string | null;
+}
+
 const KEY_STORAGE = "empverify.adminKey";
 
 export function getAdminKey(): string {
@@ -93,6 +105,22 @@ export const api = {
     request<{ enrollmentToken: string }>(`/api/v1/admin/employees/${employeeId}/enrollment-tokens`, {
       method: "POST",
     }),
+
+  listDevices: () => request<DeviceSummary[]>("/api/v1/admin/devices"),
+
+  revokeDevice: (deviceId: string) =>
+    fetch(`/api/v1/admin/devices/${deviceId}/revoke`, {
+      method: "POST",
+      headers: { "X-Admin-Key": getAdminKey() },
+    }).then((r) => {
+      if (!r.ok) throw new Error(`revoke failed: ${r.status}`);
+    }),
+
+  offboardEmployee: (employeeId: string) =>
+    request<{ employeeId: string; status: string; devicesRevoked: number }>(
+      `/api/v1/admin/employees/${employeeId}/offboard`,
+      { method: "POST" },
+    ),
 
   listChecks: (limit = 100) => request<AdminCheckRow[]>(`/api/v1/admin/checks?limit=${limit}`),
 

@@ -24,11 +24,11 @@ public sealed record FlowResult(FlowOutcome Outcome, CheckResult? Result);
 /// </summary>
 public sealed class VerificationFlow
 {
-    private readonly AgentApiClient _api;
+    private readonly IAgentApi _api;
     private readonly ICameraService _camera;
     private readonly INotificationService _notifications;
 
-    public VerificationFlow(AgentApiClient api, ICameraService camera, INotificationService notifications)
+    public VerificationFlow(IAgentApi api, ICameraService camera, INotificationService notifications)
     {
         _api = api;
         _camera = camera;

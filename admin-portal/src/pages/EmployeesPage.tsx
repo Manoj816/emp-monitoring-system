@@ -59,6 +59,17 @@ export default function EmployeesPage() {
     });
   }
 
+  function offboard(employee: Employee) {
+    if (!confirm(`Offboard ${employee.fullName}? This revokes all their devices and marks them OFFBOARDED.`)) {
+      return;
+    }
+    void run(async () => {
+      const result = await api.offboardEmployee(employee.id);
+      setToken(null);
+      alert(`${employee.fullName} offboarded. Devices revoked: ${result.devicesRevoked}.`);
+    });
+  }
+
   function pickFile(employee: Employee) {
     fileTargetRef.current = employee;
     fileInputRef.current?.click();
@@ -137,6 +148,9 @@ export default function EmployeesPage() {
                 <button className="action" disabled={busy || !emp.hasReferenceImage} onClick={() => issueToken(emp)}
                         title={emp.hasReferenceImage ? "" : "Enroll a reference image first"}>
                   Issue token
+                </button>{" "}
+                <button className="action" disabled={busy || emp.status === "OFFBOARDED"} onClick={() => offboard(emp)}>
+                  Offboard
                 </button>
               </td>
             </tr>

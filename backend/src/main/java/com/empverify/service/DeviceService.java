@@ -13,6 +13,7 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -130,6 +131,57 @@ public class DeviceService {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "device revoked");
         }
         return device;
+    }
+
+    public List<Device> listDevices() {
+        return devices.findAll();
+    }
+
+    public List<Device> devicesForEmployee(UUID employeeId) {
+        return devices.findByEmployeeId(employeeId);
+    }
+
+    /**
+     * Revokes a device's authorization. Takes effect immediately: every
+     * authenticated agent endpoint re-checks active status, and re-authentication
+     * is refused. This is the admin lever for a lost/retired machine.
+     */
+    @Transactional
+    public void revokeDevice(UUID deviceId, String actor) {
+        var device = devices.findById(deviceId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "device not found"));
+        if (device.getStatus() != DeviceStatus.REVOKED) {
+            device.setStatus(DeviceStatus.REVOKED);
+            devices.save(device);
+        }
+        audit.record(actor, "DEVICE_REVOKED", "device", deviceId.toString(), null);
+    }
+
+    /**
+     * Offboards an employee: marks them OFFBOARDED and revokes all their devices
+     * so none can continue verifying (PRD Requirement 7 offboarding). Biometric
+     * reference deletion is handled under the retention policy separately.
+     *
+     * @return the number of devices revoked
+     */
+    @Transactional
+    public int offboardEmployee(UUID employeeId, String actor) {
+        var employee = employees.findById(employeeId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "employee not found"));
+        employee.setStatus(EmployeeStatus.OFFBOARDED);
+        employees.save(employee);
+
+        int revoked = 0;
+        for (var device : devices.findByEmployeeId(employeeId)) {
+            if (device.getStatus() != DeviceStatus.REVOKED) {
+                device.setStatus(DeviceStatus.REVOKED);
+                devices.save(device);
+                revoked++;
+            }
+        }
+        audit.record(actor, "EMPLOYEE_OFFBOARDED", "employee", employeeId.toString(),
+                "{\"devicesRevoked\":" + revoked + "}");
+        return revoked;
     }
 
     private static String randomSecret() {

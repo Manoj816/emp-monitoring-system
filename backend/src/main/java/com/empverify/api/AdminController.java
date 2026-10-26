@@ -96,6 +96,41 @@ public class AdminController {
         return new EnrollmentTokenResponse(deviceService.issueEnrollmentToken(employeeId, "admin"));
     }
 
+    public record DeviceSummary(
+            String id, String employeeId, String employeeName, String platform,
+            String hostname, String status, String agentVersion,
+            java.time.Instant registeredAt, java.time.Instant lastSeenAt) {}
+
+    public record OffboardResponse(String employeeId, String status, int devicesRevoked) {}
+
+    /** All registered devices with employee context (device-management view). */
+    @GetMapping("/devices")
+    public List<DeviceSummary> listDevices() {
+        var employeesById = new java.util.HashMap<UUID, Employee>();
+        employees.findAll().forEach(e -> employeesById.put(e.getId(), e));
+        return deviceService.listDevices().stream().map(d -> {
+            var emp = employeesById.get(d.getEmployeeId());
+            return new DeviceSummary(
+                    d.getId().toString(), d.getEmployeeId().toString(),
+                    emp == null ? null : emp.getFullName(),
+                    d.getPlatform().name(), d.getHostname(), d.getStatus().name(),
+                    d.getAgentVersion(), d.getRegisteredAt(), d.getLastSeenAt());
+        }).toList();
+    }
+
+    /** Revokes a device's authorization (lost/retired machine). */
+    @PostMapping("/devices/{deviceId}/revoke")
+    public void revokeDevice(@PathVariable UUID deviceId) {
+        deviceService.revokeDevice(deviceId, "admin");
+    }
+
+    /** Offboards an employee: marks OFFBOARDED and revokes all their devices. */
+    @PostMapping("/employees/{employeeId}/offboard")
+    public OffboardResponse offboard(@PathVariable UUID employeeId) {
+        int revoked = deviceService.offboardEmployee(employeeId, "admin");
+        return new OffboardResponse(employeeId.toString(), "OFFBOARDED", revoked);
+    }
+
     /** Uploads/replaces the employee's reference image; the previous one is marked REPLACED. */
     @PostMapping("/employees/{employeeId}/reference-image")
     public EmployeeResponse uploadReferenceImage(
