@@ -19,5 +19,7 @@ public interface IAgentApi
 
     Task<LivenessSession> CreateLivenessSessionAsync(string checkId, CancellationToken ct);
 
+    Task<CaptureSession> CreateCaptureSessionAsync(string checkId, CancellationToken ct);
+
     Task<CheckResult> GetResultAsync(string checkId, CancellationToken ct);
 }

@@ -7,7 +7,9 @@ export default defineConfig({
     // Matches the backend's default liveness-ui-url.
     port: 5174,
     proxy: {
-      "/api": "http://localhost:8082",
+      // Demo: proxy API calls to the deployed backend (server-side, so no CORS).
+      // Switch back to http://localhost:8082 to run against a local backend.
+      "/api": "http://empverify-alb-95474567.us-east-1.elb.amazonaws.com",
     },
   },
 });

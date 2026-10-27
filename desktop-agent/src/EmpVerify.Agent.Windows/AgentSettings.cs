@@ -12,6 +12,12 @@ public sealed class AgentSettings
 
     public string BackendUrl { get; set; } = "http://localhost:8082";
 
+    // Demo overrides (off by default). Edit settings.json to control checks for a demo:
+    //   DemoIntervalMinutes > 0  -> run a check every N minutes (ignores the 1/day plan)
+    //   DemoCheckAt = "HH:mm"    -> run one check today at this local time
+    public int DemoIntervalMinutes { get; set; }
+    public string? DemoCheckAt { get; set; }
+
     public static AgentSettings Load()
     {
         try

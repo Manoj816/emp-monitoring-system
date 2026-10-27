@@ -110,4 +110,14 @@ public sealed class AgentApiClient : IAgentApi
         var body = (await response.Content.ReadFromJsonAsync<LivenessSessionDto>(ct))!;
         return new LivenessSession(body.LivenessUrl, body.ExpiresAt);
     }
+
+    private sealed record CaptureSessionDto(string CaptureUrl, DateTimeOffset ExpiresAt);
+
+    public async Task<CaptureSession> CreateCaptureSessionAsync(string checkId, CancellationToken ct)
+    {
+        var response = await _http.PostAsync($"/api/v1/checks/{checkId}/capture-session", content: null, ct);
+        response.EnsureSuccessStatusCode();
+        var body = (await response.Content.ReadFromJsonAsync<CaptureSessionDto>(ct))!;
+        return new CaptureSession(body.CaptureUrl, body.ExpiresAt);
+    }
 }

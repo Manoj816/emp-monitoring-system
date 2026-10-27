@@ -39,6 +39,7 @@ public class VerificationService {
     private final ImageStorage storage;
     private final AuditService audit;
     private final long checkExpirySeconds;
+    private final String livenessUiUrl;
 
     public VerificationService(
             VerificationCheckRepository checks,
@@ -48,7 +49,8 @@ public class VerificationService {
             FaceVerifier verifier,
             ImageStorage storage,
             AuditService audit,
-            @Value("${empverify.verification.check-expiry-seconds}") long checkExpirySeconds) {
+            @Value("${empverify.verification.check-expiry-seconds}") long checkExpirySeconds,
+            @Value("${empverify.liveness-ui-url}") String livenessUiUrl) {
         this.checks = checks;
         this.referenceImages = referenceImages;
         this.deviceService = deviceService;
@@ -57,6 +59,50 @@ public class VerificationService {
         this.storage = storage;
         this.audit = audit;
         this.checkExpirySeconds = checkExpirySeconds;
+        this.livenessUiUrl = livenessUiUrl;
+    }
+
+    public record CaptureSession(String captureUrl, Instant expiresAt) {}
+
+    /**
+     * Agent-initiated: the one-time browser URL for the interactive capture page.
+     * The employee opens it, captures a photo, and the browser submits it to
+     * {@link #captureFromBrowser}. Mirrors the liveness-session flow.
+     */
+    @Transactional(readOnly = true)
+    public CaptureSession captureSession(UUID deviceId, UUID checkId) {
+        var check = getOwnedCheck(deviceId, checkId);
+        if (check.getStatus() != CheckStatus.PENDING) {
+            throw new ApiException(HttpStatus.CONFLICT, "check already completed");
+        }
+        String url = livenessUiUrl + "/capture?checkId=" + checkId + "&token=" + check.getNonce();
+        return new CaptureSession(url, check.getExpiresAt());
+    }
+
+    /**
+     * Browser-initiated capture: the interactive page uploads the photo the
+     * employee took. Public, gated by the one-time check nonce (single-use
+     * because the check leaves PENDING), so no device token is required.
+     */
+    @Transactional
+    public VerificationCheck captureFromBrowser(
+            UUID checkId, String nonce, byte[] imageBytes, String cameraDeviceName) {
+        var check = checks.findById(checkId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "check not found"));
+        if (check.getStatus() != CheckStatus.PENDING) {
+            throw new ApiException(HttpStatus.CONFLICT, "check already completed");
+        }
+        if (!MessageDigest.isEqual(
+                check.getNonce().getBytes(StandardCharsets.UTF_8),
+                nonce.getBytes(StandardCharsets.UTF_8))) {
+            throw new ApiException(HttpStatus.CONFLICT, "nonce mismatch");
+        }
+        if (check.getExpiresAt().isBefore(Instant.now())) {
+            check.setStatus(CheckStatus.EXPIRED);
+            check.setCompletedAt(Instant.now());
+            return checks.save(check);
+        }
+        return runComparison(check, imageBytes, cameraDeviceName);
     }
 
     @Transactional
@@ -93,6 +139,16 @@ public class VerificationService {
             return checks.save(check);
         }
 
+        return runComparison(check, imageBytes, cameraDeviceName);
+    }
+
+    /**
+     * Shared verdict logic for both the device capture and the browser capture:
+     * compare the frame to the enrolled reference, map similarity to a status,
+     * flag virtual cameras, and record the outcome.
+     */
+    private VerificationCheck runComparison(
+            VerificationCheck check, byte[] imageBytes, String cameraDeviceName) {
         var reference = referenceImages
                 .findByEmployeeIdAndStatus(check.getEmployeeId(), ReferenceImageStatus.ACTIVE)
                 .orElse(null);
@@ -107,7 +163,7 @@ public class VerificationService {
             return complete(check, outcome.status(), false, null, outcome.errorDetail(), imageBytes);
         }
 
-        var policy = policyService.effectiveFor(deviceService.requireActiveDevice(deviceId));
+        var policy = policyService.effectiveForEmployee(check.getEmployeeId());
         var mapped = mapSimilarity(outcome.similarity(),
                 policy.getMatchThreshold().doubleValue(), policy.getReviewThreshold().doubleValue());
 

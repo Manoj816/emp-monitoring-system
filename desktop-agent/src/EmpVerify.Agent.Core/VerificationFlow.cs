@@ -68,6 +68,39 @@ public sealed class VerificationFlow
     }
 
     /// <summary>
+    /// Interactive capture check: opens a check, launches the browser capture
+    /// page, and polls for the server's verdict until it resolves or the window
+    /// elapses. The employee takes the photo in the browser (the click is the
+    /// consent) — the agent never captures silently and never computes the result.
+    /// </summary>
+    public async Task<FlowResult> RunBrowserCaptureCheckAsync(
+        CheckType type, TimeSpan responseWindow, CancellationToken ct,
+        Func<TimeSpan, CancellationToken, Task>? poll = null)
+    {
+        if (_browser is null)
+        {
+            throw new InvalidOperationException("Interactive capture requires a browser launcher.");
+        }
+        poll ??= Task.Delay;
+
+        var check = await _api.OpenCheckAsync(type, ct);
+        var session = await _api.CreateCaptureSessionAsync(check.CheckId, ct);
+        _browser.Open(session.CaptureUrl);
+
+        var deadline = DateTimeOffset.UtcNow + responseWindow;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var result = await _api.GetResultAsync(check.CheckId, ct);
+            if (result.Status != CheckStatus.Pending)
+            {
+                return new FlowResult(FlowOutcome.Completed, result);
+            }
+            await poll(TimeSpan.FromSeconds(2), ct);
+        }
+        return new FlowResult(FlowOutcome.NotAccepted, null);
+    }
+
+    /// <summary>
     /// Interactive liveness check: opens a liveness check, launches the hosted
     /// challenge in the browser, and polls for the server's verdict until it
     /// resolves or the window elapses. The agent never computes the result.

@@ -18,6 +18,8 @@ public sealed record OpenCheck(string CheckId, string Nonce, DateTimeOffset Expi
 
 public sealed record LivenessSession(string LivenessUrl, DateTimeOffset ExpiresAt);
 
+public sealed record CaptureSession(string CaptureUrl, DateTimeOffset ExpiresAt);
+
 public sealed record CheckResult(
     string CheckId,
     CheckStatus Status,

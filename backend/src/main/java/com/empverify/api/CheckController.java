@@ -99,6 +99,20 @@ public class CheckController {
         return toResult(check);
     }
 
+    public record CaptureSessionResponse(String captureUrl, java.time.OffsetDateTime expiresAt) {}
+
+    /**
+     * Creates an interactive-capture session for this check and returns the
+     * one-time URL the agent opens in the browser. The employee captures a photo
+     * there; the agent then polls /result.
+     */
+    @PostMapping("/checks/{checkId}/capture-session")
+    public CaptureSessionResponse captureSession(@PathVariable UUID checkId, Authentication auth) {
+        var session = verificationService.captureSession(deviceId(auth), checkId);
+        return new CaptureSessionResponse(
+                session.captureUrl(), session.expiresAt().atOffset(ZoneOffset.UTC));
+    }
+
     public record LivenessSessionResponse(String livenessUrl, java.time.OffsetDateTime expiresAt) {}
 
     /**
