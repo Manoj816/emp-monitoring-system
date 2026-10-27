@@ -129,8 +129,8 @@ resource "aws_ecs_task_definition" "backend" {
   family                   = "${var.project}-backend"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = "512"
-  memory                   = "1024"
+  cpu                      = "512"  # 0.5 vCPU — ample for ~10 users
+  memory                   = "2048" # 2 GB — comfortable headroom for the JVM (~+$1/mo on Spot)
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.task.arn
 
@@ -144,6 +144,8 @@ resource "aws_ecs_task_definition" "backend" {
     }]
     environment = [
       { name = "SPRING_PROFILES_ACTIVE", value = "prod" },
+      # Let the JVM use most of the 2 GB container (heap defaults to only 25% otherwise).
+      { name = "JAVA_TOOL_OPTIONS", value = "-XX:MaxRAMPercentage=75.0" },
       { name = "AWS_REGION", value = var.aws_region },
       { name = "S3_BUCKET", value = aws_s3_bucket.images.bucket },
       { name = "DB_HOST", value = aws_db_instance.main.address },

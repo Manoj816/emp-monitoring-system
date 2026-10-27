@@ -55,7 +55,7 @@ This stack is deliberately minimal — scale up for production.
 | Choice | Why |
 |---|---|
 | **No NAT Gateway** | Saves ~$33/mo. Tasks run in public subnets with public IPs; SGs still restrict ingress to the ALB. |
-| **Fargate Spot**, 1 task | ~70% cheaper than on-demand. |
+| **Fargate Spot**, 1 task (0.5 vCPU / 2 GB) | ~70% cheaper than on-demand; 2 GB gives the JVM headroom (~+$1/mo). |
 | **RDS db.t4g.micro**, single-AZ | Smallest current-gen, free-tier eligible; 1-day backups. |
 | **S3 SSE-S3**, RDS default key | No customer KMS key ($1/mo + request costs avoided). |
 | **7-day log retention** | Minimal CloudWatch storage. |
