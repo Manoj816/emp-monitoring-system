@@ -1,6 +1,7 @@
 name: Backend CI/CD
 
 on:
+  workflow_dispatch: # allow manual runs from the Actions tab
   push:
     branches: [main]
     paths: ["backend/**", ".github/workflows/backend.yml"]

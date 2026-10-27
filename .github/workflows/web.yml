@@ -1,6 +1,7 @@
 name: Web CI (admin portal + liveness UI)
 
 on:
+  workflow_dispatch: # allow manual runs from the Actions tab
   push:
     branches: [main]
     paths: ["admin-portal/**", "liveness-ui/**", ".github/workflows/web.yml"]

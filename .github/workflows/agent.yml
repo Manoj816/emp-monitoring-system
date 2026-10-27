@@ -1,6 +1,7 @@
 name: Desktop Agent CI
 
 on:
+  workflow_dispatch: # allow manual runs from the Actions tab
   push:
     branches: [main]
     paths: ["desktop-agent/**", ".github/workflows/agent.yml"]
