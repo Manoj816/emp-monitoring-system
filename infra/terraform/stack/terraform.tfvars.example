@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and adjust. All have defaults; override as needed.
+aws_region              = "ap-south-1"
+project                 = "empverify"
+desired_count           = 1
+evidence_retention_days = 90
+
+# Set after the liveness UI is deployed to Amplify:
+# liveness_ui_url = "https://liveness.example.com"
+
+# After the first image is pushed to ECR, point the service at it
+# (or let CI update the running service):
+# container_image = "<account>.dkr.ecr.ap-south-1.amazonaws.com/empverify-backend:latest"
