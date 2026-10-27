@@ -37,3 +37,6 @@ Thumbs.db
 
 # Unrelated local tooling caches
 .sf/
+
+# Local deploy helper (has a machine-specific terraform path)
+infra/terraform/deploy.ps1

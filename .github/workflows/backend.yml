@@ -63,9 +63,24 @@ jobs:
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
-      - name: Deploy to ECS
+      - name: Deploy to ECS (new task-def revision with the new image)
         run: |
-          aws ecs update-service \
-            --cluster "${{ vars.ECS_CLUSTER }}" \
-            --service "${{ vars.ECS_SERVICE }}" \
-            --force-new-deployment
+          FAMILY="empverify-backend"
+          CLUSTER="${{ vars.ECS_CLUSTER }}"
+          SERVICE="${{ vars.ECS_SERVICE }}"
+
+          # Take the current task definition, swap in the new image, drop the
+          # read-only fields, and register a new revision.
+          CURRENT=$(aws ecs describe-task-definition --task-definition "$FAMILY" --query taskDefinition)
+          NEW=$(echo "$CURRENT" | jq --arg IMG "$IMAGE" '
+            .containerDefinitions[0].image = $IMG
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                  .compatibilities, .registeredAt, .registeredBy)')
+          NEW_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW" \
+            --query taskDefinition.taskDefinitionArn --output text)
+          echo "Registered $NEW_ARN"
+
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+            --task-definition "$NEW_ARN" --force-new-deployment
+          echo "Waiting for the service to stabilize..."
+          aws ecs wait services-stable --cluster "$CLUSTER" --service "$SERVICE"
