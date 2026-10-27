@@ -27,12 +27,16 @@ public sealed class VerificationFlow
     private readonly IAgentApi _api;
     private readonly ICameraService _camera;
     private readonly INotificationService _notifications;
+    private readonly IBrowserLauncher? _browser;
 
-    public VerificationFlow(IAgentApi api, ICameraService camera, INotificationService notifications)
+    public VerificationFlow(
+        IAgentApi api, ICameraService camera, INotificationService notifications,
+        IBrowserLauncher? browser = null)
     {
         _api = api;
         _camera = camera;
         _notifications = notifications;
+        _browser = browser;
     }
 
     /// <param name="promptFirst">
@@ -61,5 +65,38 @@ public sealed class VerificationFlow
         var check = await _api.OpenCheckAsync(type, ct);
         var result = await _api.UploadCaptureAsync(check, frame, ct);
         return new FlowResult(FlowOutcome.Completed, result);
+    }
+
+    /// <summary>
+    /// Interactive liveness check: opens a liveness check, launches the hosted
+    /// challenge in the browser, and polls for the server's verdict until it
+    /// resolves or the window elapses. The agent never computes the result.
+    /// </summary>
+    public async Task<FlowResult> RunLivenessCheckAsync(
+        TimeSpan responseWindow, CancellationToken ct,
+        Func<TimeSpan, CancellationToken, Task>? poll = null)
+    {
+        if (_browser is null)
+        {
+            throw new InvalidOperationException("Liveness requires a browser launcher.");
+        }
+        poll ??= Task.Delay;
+
+        var check = await _api.OpenCheckAsync(CheckType.Liveness, ct);
+        var session = await _api.CreateLivenessSessionAsync(check.CheckId, ct);
+        _browser.Open(session.LivenessUrl);
+
+        var deadline = DateTimeOffset.UtcNow + responseWindow;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var result = await _api.GetResultAsync(check.CheckId, ct);
+            if (result.Status != CheckStatus.Pending)
+            {
+                return new FlowResult(FlowOutcome.Completed, result);
+            }
+            await poll(TimeSpan.FromSeconds(2), ct);
+        }
+        // Not completed in the browser within the window — recorded as not accepted.
+        return new FlowResult(FlowOutcome.NotAccepted, null);
     }
 }

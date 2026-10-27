@@ -16,6 +16,8 @@ public sealed record CheckPolicy(
 
 public sealed record OpenCheck(string CheckId, string Nonce, DateTimeOffset ExpiresAt);
 
+public sealed record LivenessSession(string LivenessUrl, DateTimeOffset ExpiresAt);
+
 public sealed record CheckResult(
     string CheckId,
     CheckStatus Status,

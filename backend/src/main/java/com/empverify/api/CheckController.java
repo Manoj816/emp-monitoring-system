@@ -33,14 +33,17 @@ public class CheckController {
     private final VerificationService verificationService;
     private final DeviceService deviceService;
     private final PolicyService policyService;
+    private final com.empverify.service.LivenessService livenessService;
 
     public CheckController(
             VerificationService verificationService,
             DeviceService deviceService,
-            PolicyService policyService) {
+            PolicyService policyService,
+            com.empverify.service.LivenessService livenessService) {
         this.verificationService = verificationService;
         this.deviceService = deviceService;
         this.policyService = policyService;
+        this.livenessService = livenessService;
     }
 
     public record PolicyResponse(
@@ -96,10 +99,17 @@ public class CheckController {
         return toResult(check);
     }
 
-    /** Creates a Face Liveness session for this check (Phase 2). */
+    public record LivenessSessionResponse(String livenessUrl, java.time.OffsetDateTime expiresAt) {}
+
+    /**
+     * Creates a liveness session for this check and returns the one-time URL the
+     * agent opens in the default browser. The agent then polls /result.
+     */
     @PostMapping("/checks/{checkId}/liveness-session")
-    public void livenessSession(@PathVariable UUID checkId) {
-        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Phase 2");
+    public LivenessSessionResponse livenessSession(@PathVariable UUID checkId, Authentication auth) {
+        var session = livenessService.createSession(deviceId(auth), checkId);
+        return new LivenessSessionResponse(
+                session.livenessUrl(), session.expiresAt().atOffset(ZoneOffset.UTC));
     }
 
     /** Polled by the agent for the outcome of a check. */

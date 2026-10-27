@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private readonly DpapiCredentialStore _credentialStore = new();
     private readonly WindowsCameraService _camera = new();
     private readonly WpfPromptNotificationService _notifications = new();
+    private readonly WindowsBrowserLauncher _browser = new();
     private readonly CheckScheduler _scheduler = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(30) };
 
@@ -110,7 +111,7 @@ public partial class MainWindow : Window
             _api = CreateApi();
             await _api.AuthenticateAsync(credentials, CancellationToken.None);
             _policy = await _api.GetPolicyAsync(CancellationToken.None);
-            _flow = new VerificationFlow(_api, _camera, _notifications);
+            _flow = new VerificationFlow(_api, _camera, _notifications, _browser);
 
             // Agent is active: make sure it starts at login (no-op when MSIX-packaged).
             StartupManager.EnsureEnabled();
@@ -120,6 +121,7 @@ public partial class MainWindow : Window
             _timer.Start();
 
             VerifyNowButton.IsEnabled = true;
+            LivenessButton.IsEnabled = true;
             SetStatus("Connected — scheduled checks active.");
             Log($"Connected. Policy: window {_policy.WorkWindowStart}-{_policy.WorkWindowEnd}, " +
                 $"{_policy.MaxChecksPerDay} checks/day, {_policy.ResponseTimeoutSeconds}s response window.");
@@ -152,6 +154,43 @@ public partial class MainWindow : Window
     private async void VerifyNow_Click(object sender, RoutedEventArgs e)
     {
         await RunCheckAsync(CheckType.SessionStart, promptFirst: false);
+    }
+
+    private async void Liveness_Click(object sender, RoutedEventArgs e)
+    {
+        if (_flow is null || _policy is null || _checkRunning)
+        {
+            return;
+        }
+        _checkRunning = true;
+        LivenessButton.IsEnabled = false;
+        VerifyNowButton.IsEnabled = false;
+        try
+        {
+            Log("Liveness check: opening the browser challenge...");
+            var result = await _flow.RunLivenessCheckAsync(
+                TimeSpan.FromSeconds(_policy.ResponseTimeoutSeconds), CancellationToken.None);
+            if (result.Outcome == FlowOutcome.Completed)
+            {
+                Log($"Liveness check: {result.Result!.Status}" +
+                    (result.Result.LivenessConfidence is { } c ? $" (liveness {c:F1})" : ""));
+                SetStatus($"Last liveness: {result.Result.Status} at {DateTime.Now:HH:mm}.");
+            }
+            else
+            {
+                Log("Liveness check not completed within the window.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Liveness check error: {ex.Message}");
+        }
+        finally
+        {
+            _checkRunning = false;
+            LivenessButton.IsEnabled = true;
+            VerifyNowButton.IsEnabled = true;
+        }
     }
 
     private async Task RunCheckAsync(CheckType type, bool promptFirst)

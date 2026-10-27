@@ -33,7 +33,8 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/actuator/health",
                     "/api/v1/devices/register",
-                    "/api/v1/devices/auth"
+                    "/api/v1/devices/auth",
+                    "/api/v1/liveness/**"
                 ).permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .anyRequest().hasAnyRole("DEVICE", "ADMIN"));

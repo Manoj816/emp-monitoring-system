@@ -21,7 +21,11 @@ public class PolicyService {
 
     /** Employee's assigned policy, falling back to the seeded 'default' policy. */
     public CheckPolicy effectiveFor(Device device) {
-        UUID policyId = employees.findById(device.getEmployeeId())
+        return effectiveForEmployee(device.getEmployeeId());
+    }
+
+    public CheckPolicy effectiveForEmployee(UUID employeeId) {
+        UUID policyId = employees.findById(employeeId)
                 .map(e -> e.getPolicyId())
                 .orElse(null);
         if (policyId != null) {

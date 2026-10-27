@@ -150,9 +150,22 @@ public class VerificationService {
     private VerificationCheck complete(
             VerificationCheck check, CheckStatus status, boolean mismatch,
             Double similarity, String detail, byte[] imageBytes) {
+        return recordOutcome(check, status, mismatch, similarity, null, detail, imageBytes);
+    }
+
+    /**
+     * Finalizes a check: sets outcome fields, retains evidence only for non-MATCH
+     * results (data minimization), persists, and writes the audit entry. Shared by
+     * the passive capture path and the liveness path.
+     */
+    @Transactional
+    public VerificationCheck recordOutcome(
+            VerificationCheck check, CheckStatus status, boolean mismatch,
+            Double similarity, Double livenessConfidence, String detail, byte[] imageBytes) {
         check.setStatus(status);
         check.setMismatchFlag(mismatch);
         check.setSimilarityScore(similarity == null ? null : BigDecimal.valueOf(similarity));
+        check.setLivenessConfidence(livenessConfidence == null ? null : BigDecimal.valueOf(livenessConfidence));
         check.setErrorDetail(detail);
         check.setCompletedAt(Instant.now());
 

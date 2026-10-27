@@ -91,4 +91,14 @@ public sealed class AgentApiClient : IAgentApi
     {
         return (await _http.GetFromJsonAsync<CheckResult>($"/api/v1/checks/{checkId}/result", ct))!;
     }
+
+    private sealed record LivenessSessionDto(string LivenessUrl, DateTimeOffset ExpiresAt);
+
+    public async Task<LivenessSession> CreateLivenessSessionAsync(string checkId, CancellationToken ct)
+    {
+        var response = await _http.PostAsync($"/api/v1/checks/{checkId}/liveness-session", content: null, ct);
+        response.EnsureSuccessStatusCode();
+        var body = (await response.Content.ReadFromJsonAsync<LivenessSessionDto>(ct))!;
+        return new LivenessSession(body.LivenessUrl, body.ExpiresAt);
+    }
 }

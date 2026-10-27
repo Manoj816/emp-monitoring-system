@@ -24,6 +24,8 @@
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,0">
             <Button x:Name="VerifyNowButton" Content="Verify now" Padding="10,4"
                     IsEnabled="False" Click="VerifyNow_Click"/>
+            <Button x:Name="LivenessButton" Content="Liveness check" Padding="10,4" Margin="8,0,0,0"
+                    IsEnabled="False" Click="Liveness_Click"/>
             <TextBlock x:Name="StatusText" Margin="12,4,0,0" Text="Not registered."/>
         </StackPanel>
 

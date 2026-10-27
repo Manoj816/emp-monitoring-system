@@ -17,5 +17,7 @@ public interface IAgentApi
 
     Task<CheckResult> UploadCaptureAsync(OpenCheck check, CapturedFrame frame, CancellationToken ct);
 
+    Task<LivenessSession> CreateLivenessSessionAsync(string checkId, CancellationToken ct);
+
     Task<CheckResult> GetResultAsync(string checkId, CancellationToken ct);
 }

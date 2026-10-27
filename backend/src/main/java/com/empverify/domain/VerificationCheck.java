@@ -48,6 +48,9 @@ public class VerificationCheck {
     @Column(nullable = false)
     private String nonce;
 
+    @Column(name = "liveness_session_id")
+    private String livenessSessionId;
+
     @Column(name = "error_detail")
     private String errorDetail;
 
@@ -79,6 +82,8 @@ public class VerificationCheck {
     public void setEvidenceS3Key(String v) { this.evidenceS3Key = v; }
     public String getNonce() { return nonce; }
     public void setNonce(String v) { this.nonce = v; }
+    public String getLivenessSessionId() { return livenessSessionId; }
+    public void setLivenessSessionId(String v) { this.livenessSessionId = v; }
     public String getErrorDetail() { return errorDetail; }
     public void setErrorDetail(String v) { this.errorDetail = v; }
     public Instant getRequestedAt() { return requestedAt; }

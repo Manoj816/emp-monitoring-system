@@ -47,6 +47,8 @@ empverify:
   liveness: ${EMPVERIFY_LIVENESS:stub}
   # Base URL of the hosted React liveness page the agent opens in a browser.
   liveness-ui-url: ${LIVENESS_UI_URL:http://localhost:5174}
+  # Minimum live-person confidence to accept; below this is treated as CHECK.
+  liveness-threshold: ${LIVENESS_THRESHOLD:80}
 
   # "local" (dev: ./data/images) or "s3" (deploy).
   storage: ${EMPVERIFY_STORAGE:local}
