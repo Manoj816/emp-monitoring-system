@@ -52,7 +52,8 @@ class VerificationServiceTest {
     @BeforeEach
     void setUp() {
         service = new VerificationService(
-                checks, referenceImages, deviceService, policyService, verifier, storage, audit, 120);
+                checks, referenceImages, deviceService, policyService, verifier, storage, audit, 120,
+                "http://localhost:5174");
     }
 
     private VerificationCheck pendingCheck(String nonce, Instant expiresAt) {
@@ -75,7 +76,7 @@ class VerificationServiceTest {
         var device = new Device();
         device.setEmployeeId(employeeId);
         lenient().when(deviceService.requireActiveDevice(deviceId)).thenReturn(device);
-        lenient().when(policyService.effectiveFor(any())).thenReturn(new CheckPolicy()); // 90 / 75 defaults
+        lenient().when(policyService.effectiveForEmployee(any())).thenReturn(new CheckPolicy()); // 90 / 75 defaults
         when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
     }
 
@@ -137,6 +138,30 @@ class VerificationServiceTest {
 
         assertEquals(CheckStatus.NO_FACE, result.getStatus());
         assertNull(result.getSimilarityScore());
+    }
+
+    @Test
+    void browserCaptureMatchesAgainstReference() {
+        var check = pendingCheck("nonce-b", Instant.now().plusSeconds(60));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        stubReferenceAndSave();
+        when(verifier.verify(any(), any())).thenReturn(Outcome.similarityOf(95.0));
+
+        // No device id: the browser path is gated by the one-time nonce only.
+        var result = service.captureFromBrowser(check.getId(), "nonce-b", new byte[] {9}, "Integrated Camera");
+
+        assertEquals(CheckStatus.MATCH, result.getStatus());
+        assertFalse(result.isMismatchFlag());
+    }
+
+    @Test
+    void browserCaptureRejectsNonceMismatch() {
+        var check = pendingCheck("nonce-b", Instant.now().plusSeconds(60));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+
+        assertThrows(ApiException.class,
+                () -> service.captureFromBrowser(check.getId(), "wrong-nonce", new byte[] {9}, null));
+        verify(verifier, never()).verify(any(), any());
     }
 
     @Test
