@@ -144,6 +144,8 @@ resource "aws_ecs_task_definition" "backend" {
     }]
     environment = [
       { name = "SPRING_PROFILES_ACTIVE", value = "prod" },
+      # App must listen on the container/ALB port (8080), not its 8082 dev default.
+      { name = "SERVER_PORT", value = "8080" },
       # Let the JVM use most of the 2 GB container (heap defaults to only 25% otherwise).
       { name = "JAVA_TOOL_OPTIONS", value = "-XX:MaxRAMPercentage=75.0" },
       { name = "AWS_REGION", value = var.aws_region },
@@ -176,6 +178,9 @@ resource "aws_ecs_service" "backend" {
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = var.desired_count
+
+  # Give the JVM/Spring Boot time to start before ELB health checks can kill the task.
+  health_check_grace_period_seconds = 120
 
   # Cost: Spot capacity instead of on-demand Fargate. Tasks run in public subnets
   # (no NAT) with public IPs; the ECS security group still allows ingress only
