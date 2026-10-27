@@ -1,5 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace EmpVerify.Agent.Core.Api;
 
@@ -10,6 +12,13 @@ namespace EmpVerify.Agent.Core.Api;
 public sealed class AgentApiClient : IAgentApi
 {
     private readonly HttpClient _http;
+
+    // The backend serializes enums as SCREAMING_SNAKE_CASE strings (e.g. "NO_FACE").
+    // Map them onto the PascalCase CheckStatus members; keep Web defaults (camelCase props).
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseUpper) }
+    };
 
     public AgentApiClient(HttpClient http)
     {
@@ -84,12 +93,12 @@ public sealed class AgentApiClient : IAgentApi
 
         var response = await _http.PostAsync($"/api/v1/checks/{check.CheckId}/capture", form, ct);
         response.EnsureSuccessStatusCode();
-        return (await response.Content.ReadFromJsonAsync<CheckResult>(ct))!;
+        return (await response.Content.ReadFromJsonAsync<CheckResult>(JsonOptions, ct))!;
     }
 
     public async Task<CheckResult> GetResultAsync(string checkId, CancellationToken ct)
     {
-        return (await _http.GetFromJsonAsync<CheckResult>($"/api/v1/checks/{checkId}/result", ct))!;
+        return (await _http.GetFromJsonAsync<CheckResult>($"/api/v1/checks/{checkId}/result", JsonOptions, ct))!;
     }
 
     private sealed record LivenessSessionDto(string LivenessUrl, DateTimeOffset ExpiresAt);
