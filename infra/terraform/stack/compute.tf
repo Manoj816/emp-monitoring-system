@@ -74,12 +74,6 @@ resource "aws_iam_role_policy" "task" {
         Action   = ["s3:ListBucket"]
         Resource = aws_s3_bucket.images.arn
       },
-      {
-        Sid      = "Kms"
-        Effect   = "Allow"
-        Action   = ["kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey"]
-        Resource = aws_kms_key.main.arn
-      },
     ]
   })
 }
@@ -125,6 +119,12 @@ resource "aws_ecs_cluster" "main" {
   name = "${var.project}-cluster"
 }
 
+# Enable Spot so the service can run on FARGATE_SPOT (~70% cheaper for test).
+resource "aws_ecs_cluster_capacity_providers" "main" {
+  cluster_name       = aws_ecs_cluster.main.name
+  capacity_providers = ["FARGATE", "FARGATE_SPOT"]
+}
+
 resource "aws_ecs_task_definition" "backend" {
   family                   = "${var.project}-backend"
   requires_compatibilities = ["FARGATE"]
@@ -146,7 +146,6 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "SPRING_PROFILES_ACTIVE", value = "prod" },
       { name = "AWS_REGION", value = var.aws_region },
       { name = "S3_BUCKET", value = aws_s3_bucket.images.bucket },
-      { name = "KMS_KEY_ID", value = aws_kms_key.main.arn },
       { name = "DB_HOST", value = aws_db_instance.main.address },
       { name = "DB_PORT", value = "5432" },
       { name = "DB_NAME", value = var.db_name },
@@ -175,12 +174,19 @@ resource "aws_ecs_service" "backend" {
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = var.desired_count
-  launch_type     = "FARGATE"
+
+  # Cost: Spot capacity instead of on-demand Fargate. Tasks run in public subnets
+  # (no NAT) with public IPs; the ECS security group still allows ingress only
+  # from the ALB.
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE_SPOT"
+    weight            = 1
+  }
 
   network_configuration {
-    subnets          = aws_subnet.private[*].id
+    subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.ecs.id]
-    assign_public_ip = false
+    assign_public_ip = true
   }
 
   load_balancer {
@@ -194,5 +200,5 @@ resource "aws_ecs_service" "backend" {
     ignore_changes = [task_definition]
   }
 
-  depends_on = [aws_lb_listener.http]
+  depends_on = [aws_lb_listener.http, aws_ecs_cluster_capacity_providers.main]
 }

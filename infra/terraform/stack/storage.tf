@@ -1,15 +1,6 @@
-# KMS key encrypting images at rest (S3) and the RDS volume.
-resource "aws_kms_key" "main" {
-  description             = "${var.project} data encryption"
-  deletion_window_in_days = 7
-  enable_key_rotation     = true
-  tags                    = { Name = "${var.project}-kms" }
-}
-
-resource "aws_kms_alias" "main" {
-  name          = "alias/${var.project}"
-  target_key_id = aws_kms_key.main.key_id
-}
+# Cost: no customer-managed KMS key for the test env. S3 uses free SSE-S3 (AES256)
+# and RDS uses the free AWS-managed default key. For production, add a customer KMS
+# key (aws_kms_key) and point S3 + RDS at it for key control and rotation.
 
 # S3 bucket for reference images and CHECK-event evidence.
 resource "aws_s3_bucket" "images" {
@@ -28,10 +19,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "images" {
   bucket = aws_s3_bucket.images.id
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm     = "aws:kms"
-      kms_master_key_id = aws_kms_key.main.arn
+      sse_algorithm = "AES256" # SSE-S3, free. Switch to aws:kms with a CMK for prod.
     }
-    bucket_key_enabled = true
   }
 }
 
@@ -86,5 +75,5 @@ resource "aws_ecr_lifecycle_policy" "backend" {
 
 resource "aws_cloudwatch_log_group" "backend" {
   name              = "/ecs/${var.project}-backend"
-  retention_in_days = 30
+  retention_in_days = 7 # short retention keeps log storage cheap for test
 }

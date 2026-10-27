@@ -31,18 +31,10 @@ resource "aws_subnet" "private" {
   tags              = { Name = "${var.project}-private-${count.index}" }
 }
 
-resource "aws_eip" "nat" {
-  domain = "vpc"
-  tags   = { Name = "${var.project}-nat-eip" }
-}
-
-resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id
-  tags          = { Name = "${var.project}-nat" }
-  depends_on    = [aws_internet_gateway.main]
-}
-
+# Cost: no NAT Gateway (~$33/mo). Fargate tasks run in public subnets with public
+# IPs; their security group still permits ingress only from the ALB. Private
+# subnets host RDS only, which needs no internet egress. For production, add a NAT
+# Gateway (or VPC endpoints) and move tasks to private subnets.
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
   route {
@@ -58,13 +50,10 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# Private route table has only the implicit local route (RDS needs no egress).
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main.id
-  }
-  tags = { Name = "${var.project}-private-rt" }
+  tags   = { Name = "${var.project}-private-rt" }
 }
 
 resource "aws_route_table_association" "private" {

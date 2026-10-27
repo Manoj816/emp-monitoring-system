@@ -41,8 +41,15 @@ variable "db_engine_version" {
 }
 
 variable "db_instance_class" {
-  type    = string
-  default = "db.t4g.micro"
+  description = "Smallest current-gen (free-tier eligible). Scale up for production."
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "db_backup_retention" {
+  description = "Days of automated backups. 1 = minimal for test; use >= 7 in production."
+  type        = number
+  default     = 1
 }
 
 variable "evidence_retention_days" {

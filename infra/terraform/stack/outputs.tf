@@ -20,10 +20,6 @@ output "s3_bucket" {
   value = aws_s3_bucket.images.bucket
 }
 
-output "kms_key_id" {
-  value = aws_kms_key.main.arn
-}
-
 output "db_endpoint" {
   value = aws_db_instance.main.address
 }

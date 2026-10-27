@@ -53,8 +53,7 @@ resource "aws_db_instance" "main" {
   instance_class          = var.db_instance_class
   allocated_storage       = 20
   storage_type            = "gp3"
-  storage_encrypted       = true
-  kms_key_id              = aws_kms_key.main.arn
+  storage_encrypted       = true # default AWS-managed RDS key (free)
   db_name                 = var.db_name
   username                = var.db_username
   password                = random_password.db.result
@@ -62,7 +61,7 @@ resource "aws_db_instance" "main" {
   vpc_security_group_ids  = [aws_security_group.rds.id]
   multi_az                = false
   publicly_accessible     = false
-  backup_retention_period = 7
+  backup_retention_period = var.db_backup_retention
   skip_final_snapshot     = true
   apply_immediately       = true
   tags                    = { Name = "${var.project}-db" }

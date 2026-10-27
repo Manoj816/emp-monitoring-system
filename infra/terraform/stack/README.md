@@ -48,7 +48,26 @@ the app never uses static credentials.
   biometric traffic must be encrypted in transit.
 - **Remote state**: `versions.tf` has a commented S3 backend. Enable it (bucket +
   DynamoDB lock) before a second person runs Terraform.
-- **Cost**: NAT gateway, ALB, RDS, and Fargate are the always-on cost drivers
-  (~$150–250/mo). Rekognition is usage-priced on top.
+## Cost (tuned for a cheap test environment)
+
+This stack is deliberately minimal — scale up for production.
+
+| Choice | Why |
+|---|---|
+| **No NAT Gateway** | Saves ~$33/mo. Tasks run in public subnets with public IPs; SGs still restrict ingress to the ALB. |
+| **Fargate Spot**, 1 task | ~70% cheaper than on-demand. |
+| **RDS db.t4g.micro**, single-AZ | Smallest current-gen, free-tier eligible; 1-day backups. |
+| **S3 SSE-S3**, RDS default key | No customer KMS key ($1/mo + request costs avoided). |
+| **7-day log retention** | Minimal CloudWatch storage. |
+| **Cognito** | Free tier. |
+
+Remaining always-on cost is mainly the **ALB (~$16/mo)** and **RDS** (free-tier or
+~$12/mo). Ballpark **~$20–30/mo** + usage-priced Rekognition, versus ~$150+ for a
+production-grade setup.
+
+**Harden for production** (not in this test stack): customer-managed KMS key for
+S3/RDS, HTTPS (ACM + 443 listener), Multi-AZ RDS with 7+ day backups, NAT Gateway
+or VPC endpoints with tasks in private subnets, on-demand Fargate + autoscaling,
+and longer log retention.
 - Generated secrets live only in Secrets Manager and Terraform state — keep state
   in the encrypted S3 backend, not local disk, for any shared use.
