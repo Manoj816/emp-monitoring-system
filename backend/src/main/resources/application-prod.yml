@@ -12,7 +12,9 @@ empverify:
   aws:
     region: ${AWS_REGION}
     s3-bucket: ${S3_BUCKET}
-    kms-key-id: ${KMS_KEY_ID}
+    # Empty default: the cost-optimized stack uses SSE-S3 (AES256), no KMS CMK.
+    # S3ImageStorage switches to SSE-KMS only when this is non-blank.
+    kms-key-id: ${KMS_KEY_ID:}
 
   # Real AWS services in production.
   verifier: rekognition
