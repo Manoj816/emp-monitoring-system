@@ -41,6 +41,22 @@ the app never uses static credentials.
    backend URL (`alb_dns_name`, fronted with HTTPS).
 6. Enrol the first admin user in the Cognito user pool.
 
+## CI (GitHub Actions)
+
+`.github/workflows/infra.yml` runs Terraform through Actions:
+
+- **validate** (always, no AWS credentials): `fmt -check` + `validate` for both the
+  bootstrap and stack modules on every PR/push.
+- **plan** (PRs) and **apply** (main) — **inert until you opt in**. To enable:
+  1. Create a Terraform OIDC role with broad permissions (this stack creates VPC,
+     RDS, IAM, Cognito, …) — separate from the limited app-deploy role the
+     bootstrap creates — and set its ARN as the `TF_ROLE_ARN` repository variable.
+  2. Enable remote state (uncomment the S3 backend in `versions.tf`, create the
+     bucket + lock table) — CI runners are ephemeral, so local state is lost.
+  3. Add required reviewers to the `infra` GitHub environment for an approval gate.
+
+Until then, infrastructure is applied manually (below), and CI only validates it.
+
 ## Notes
 
 - **HTTPS**: the listener is HTTP:80 for bring-up. Add an ACM certificate and a

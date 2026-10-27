@@ -1,0 +1,90 @@
+name: Infra (Terraform)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ["infra/terraform/**", ".github/workflows/infra.yml"]
+  push:
+    branches: [main]
+    paths: ["infra/terraform/**", ".github/workflows/infra.yml"]
+
+permissions:
+  contents: read
+  id-token: write # OIDC: assume the Terraform role without stored keys
+
+jobs:
+  # Always runs — no AWS credentials needed. Keeps the HCL formatted and valid.
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [infra/terraform/bootstrap, infra/terraform/stack]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.3"
+      - name: Format check
+        working-directory: ${{ matrix.dir }}
+        run: terraform fmt -check -recursive
+      - name: Init (no backend)
+        working-directory: ${{ matrix.dir }}
+        run: terraform init -backend=false
+      - name: Validate
+        working-directory: ${{ matrix.dir }}
+        run: terraform validate
+
+  # Plan on PRs. Inert until you opt in by setting the TF_ROLE_ARN repo variable.
+  #
+  # Requirements before enabling plan/apply in CI:
+  #   1. A Terraform OIDC role with broad permissions (this stack creates VPC, RDS,
+  #      IAM, Cognito, etc.) — SEPARATE from the limited app-deploy role in
+  #      infra/terraform/bootstrap. Set its ARN as the TF_ROLE_ARN repo variable.
+  #   2. Remote state: uncomment the S3 backend in stack/versions.tf and create the
+  #      state bucket + lock table first. CI runners are ephemeral, so local state
+  #      would be lost between runs.
+  plan:
+    if: vars.TF_ROLE_ARN != '' && github.event_name == 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: infra
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.3"
+      - name: Assume Terraform role (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.TF_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Init
+        working-directory: infra/terraform/stack
+        run: terraform init -input=false
+      - name: Plan
+        working-directory: infra/terraform/stack
+        run: terraform plan -no-color -input=false
+
+  # Apply on main. Add required reviewers to the "infra" environment in GitHub
+  # for a manual approval gate before any change is applied.
+  apply:
+    if: vars.TF_ROLE_ARN != '' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: infra
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.3"
+      - name: Assume Terraform role (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.TF_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Init
+        working-directory: infra/terraform/stack
+        run: terraform init -input=false
+      - name: Apply
+        working-directory: infra/terraform/stack
+        run: terraform apply -auto-approve -input=false
