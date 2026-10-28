@@ -19,6 +19,28 @@ export default function ChecksPage() {
   const [resolution, setResolution] = useState<ReviewResolution>("CONFIRMED_EMPLOYEE");
   const [notes, setNotes] = useState("");
   const [evidence, setEvidence] = useState<{ checkId: string; url: string } | null>(null);
+  // Side-by-side pictures for the review dialog: the enrolled photo and the frame
+  // captured during this check (when retained).
+  const [reviewImages, setReviewImages] = useState<{ reference?: string; captured?: string }>({});
+
+  useEffect(() => {
+    if (!reviewing) {
+      setReviewImages({});
+      return;
+    }
+    let cancelled = false;
+    const row = reviewing;
+    (async () => {
+      const [reference, captured] = await Promise.all([
+        api.loadReferenceImage(row.employeeId).catch(() => undefined),
+        row.hasEvidence ? api.loadEvidence(row.checkId).catch(() => undefined) : Promise.resolve(undefined),
+      ]);
+      if (!cancelled) setReviewImages({ reference, captured });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reviewing]);
 
   async function refresh() {
     try {
@@ -82,7 +104,7 @@ export default function ChecksPage() {
         <thead>
           <tr>
             <th>When</th><th>Employee</th><th>Type</th><th>Status</th>
-            <th>Similarity</th><th>Review</th><th>Evidence</th>
+            <th>Similarity</th><th>Liveness</th><th>Review</th><th>Evidence</th>
           </tr>
         </thead>
         <tbody>
@@ -97,6 +119,7 @@ export default function ChecksPage() {
                 {row.errorDetail && <div className="muted" style={{ fontSize: 12 }}>{row.errorDetail}</div>}
               </td>
               <td>{row.similarityScore?.toFixed(1) ?? "—"}</td>
+              <td>{row.livenessConfidence?.toFixed(1) ?? "—"}</td>
               <td>
                 {row.reviewResolution ? (
                   <span className="badge neutral">{row.reviewResolution}</span>
@@ -114,7 +137,7 @@ export default function ChecksPage() {
             </tr>
           ))}
           {visible.length === 0 && (
-            <tr><td colSpan={7} className="muted">No checks match this filter.</td></tr>
+            <tr><td colSpan={8} className="muted">No checks match this filter.</td></tr>
           )}
         </tbody>
       </table>
@@ -124,10 +147,45 @@ export default function ChecksPage() {
           <div className="modal">
             <h3 style={{ marginTop: 0 }}>Review check</h3>
             <p className="muted">
-              {reviewing.employeeName} — {reviewing.status}
-              {reviewing.similarityScore != null && ` (similarity ${reviewing.similarityScore.toFixed(1)})`}.
+              {reviewing.employeeName} — {reviewing.checkType} at {new Date(reviewing.requestedAt).toLocaleString()}.
               A CHECK result is a review request, never proof of misconduct.
             </p>
+
+            <div style={{ display: "flex", gap: 24, marginBottom: 12, flexWrap: "wrap" }}>
+              <div>
+                <div className="muted" style={{ fontSize: 12 }}>Status</div>
+                <span className={badgeClass(reviewing.status)}>{reviewing.status}</span>
+                {reviewing.mismatchFlag && <span className="badge error" style={{ marginLeft: 4 }}>mismatch?</span>}
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 12 }}>Face similarity to reference</div>
+                <strong>{reviewing.similarityScore != null ? `${reviewing.similarityScore.toFixed(1)} / 100` : "not computed"}</strong>
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 12 }}>Live-person confidence</div>
+                <strong>{reviewing.livenessConfidence != null ? `${reviewing.livenessConfidence.toFixed(1)} / 100` : "—"}</strong>
+              </div>
+            </div>
+            {reviewing.errorDetail && (
+              <p className="muted" style={{ marginTop: 0 }}>Why it was flagged: {reviewing.errorDetail}</p>
+            )}
+
+            <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
+              <figure style={{ margin: 0, flex: 1, textAlign: "center" }}>
+                {reviewImages.reference
+                  ? <img src={reviewImages.reference} alt="enrolled reference photo" style={{ maxWidth: "100%", maxHeight: 240 }} />
+                  : <div className="muted" style={{ padding: 24 }}>No reference photo enrolled.</div>}
+                <figcaption className="muted" style={{ fontSize: 12 }}>Enrolled reference</figcaption>
+              </figure>
+              <figure style={{ margin: 0, flex: 1, textAlign: "center" }}>
+                {reviewImages.captured
+                  ? <img src={reviewImages.captured} alt="frame captured during this check" style={{ maxWidth: "100%", maxHeight: 240 }} />
+                  : <div className="muted" style={{ padding: 24 }}>
+                      {reviewing.hasEvidence ? "Loading…" : "No frame was retained for this check."}
+                    </div>}
+                <figcaption className="muted" style={{ fontSize: 12 }}>Captured during this check</figcaption>
+              </figure>
+            </div>
             <label style={{ display: "block", marginBottom: 8 }}>
               Resolution{" "}
               <select value={resolution} onChange={(e) => setResolution(e.target.value as ReviewResolution)}>

@@ -183,6 +183,7 @@ public class AdminController {
 
     public record AdminCheckRow(
             String checkId, String status, boolean mismatchFlag, Double similarityScore,
+            Double livenessConfidence,
             String checkType, String employeeId, String employeeCode, String employeeName,
             String deviceId, boolean hasEvidence, String errorDetail,
             java.time.Instant requestedAt, java.time.Instant completedAt,
@@ -204,6 +205,7 @@ public class AdminController {
             return new AdminCheckRow(
                     c.getId().toString(), c.getStatus().name(), c.isMismatchFlag(),
                     c.getSimilarityScore() == null ? null : c.getSimilarityScore().doubleValue(),
+                    c.getLivenessConfidence() == null ? null : c.getLivenessConfidence().doubleValue(),
                     c.getCheckType().name(), c.getEmployeeId().toString(),
                     emp == null ? null : emp.getEmployeeCode(),
                     emp == null ? null : emp.getFullName(),
@@ -237,6 +239,7 @@ public class AdminController {
         return new AdminCheckRow(
                 check.getId().toString(), check.getStatus().name(), check.isMismatchFlag(),
                 check.getSimilarityScore() == null ? null : check.getSimilarityScore().doubleValue(),
+                check.getLivenessConfidence() == null ? null : check.getLivenessConfidence().doubleValue(),
                 check.getCheckType().name(), check.getEmployeeId().toString(),
                 emp == null ? null : emp.getEmployeeCode(),
                 emp == null ? null : emp.getFullName(),
@@ -244,6 +247,17 @@ public class AdminController {
                 check.getEvidenceS3Key() != null, check.getErrorDetail(),
                 check.getRequestedAt(), check.getCompletedAt(),
                 request.resolution());
+    }
+
+    /** The employee's active reference image, shown next to the evidence when reviewing a check. */
+    @GetMapping("/employees/{employeeId}/reference-image")
+    public org.springframework.http.ResponseEntity<byte[]> referenceImage(@PathVariable UUID employeeId) {
+        var reference = referenceImages.findByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "no active reference image"));
+        audit.record("admin", "REFERENCE_IMAGE_VIEWED", "employee", employeeId.toString(), null);
+        return org.springframework.http.ResponseEntity.ok()
+                .header("Content-Type", "image/jpeg")
+                .body(storage.load(reference.getS3Key()));
     }
 
     /** Evidence image for a flagged check (retained only for non-MATCH outcomes). */

@@ -474,7 +474,10 @@ public partial class MainWindow : Window
                 result = await _flow.RunBrowserCaptureCheckAsync(type, window, CancellationToken.None);
             }
             Log(Describe(type, result));
-            if (result.HasVerdict)
+            // A technical failure (scan did not complete, no reference enrolled) is a
+            // verdict for the record, but not a completed scan: it is retried like a miss.
+            var technicalFailure = result.Result?.Status == CheckStatus.VerificationError;
+            if (result.HasVerdict && !technicalFailure)
             {
                 SetStatus($"Last check: {result.Result!.Status} at {DateTime.Now:HH:mm}.");
                 if (!_sessionStartDone

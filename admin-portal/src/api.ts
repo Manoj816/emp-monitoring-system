@@ -17,6 +17,8 @@ export interface AdminCheckRow {
   status: string;
   mismatchFlag: boolean;
   similarityScore: number | null;
+  /** Live-person confidence (0-100) from the face scan; null for photo-capture checks. */
+  livenessConfidence: number | null;
   checkType: string;
   employeeId: string;
   employeeCode: string | null;
@@ -140,6 +142,15 @@ export const api = {
       headers: await authHeaders(),
     });
     if (!response.ok) throw new Error(`evidence: ${response.status}`);
+    return URL.createObjectURL(await response.blob());
+  },
+
+  /** The employee's enrolled reference photo, for side-by-side review. */
+  loadReferenceImage: async (employeeId: string): Promise<string> => {
+    const response = await fetch(`/api/v1/admin/employees/${employeeId}/reference-image`, {
+      headers: await authHeaders(),
+    });
+    if (!response.ok) throw new Error(`reference image: ${response.status}`);
     return URL.createObjectURL(await response.blob());
   },
 };

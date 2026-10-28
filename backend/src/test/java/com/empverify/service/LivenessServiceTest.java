@@ -81,7 +81,8 @@ class LivenessServiceTest {
     void passingLivenessWithGoodMatchReturnsMatch() {
         var check = pending("sess-1");
         when(checks.findById(check.getId())).thenReturn(Optional.of(check));
-        when(provider.getResult("sess-1")).thenReturn(new LivenessProvider.Result(98.0, new byte[] {9}));
+        when(provider.getResult("sess-1"))
+                .thenReturn(new LivenessProvider.Result(98.0, new byte[] {9}, "SUCCEEDED"));
         stubReference();
         when(verifier.verify(any(), any())).thenReturn(Outcome.similarityOf(95.0));
 
@@ -91,15 +92,39 @@ class LivenessServiceTest {
     }
 
     @Test
-    void lowLivenessConfidenceIsCheckWithoutComparing() {
+    void lowLivenessConfidenceIsCheckWithBothScoresAndEvidenceForReview() {
         var check = pending("sess-1");
         when(checks.findById(check.getId())).thenReturn(Optional.of(check));
-        when(provider.getResult("sess-1")).thenReturn(new LivenessProvider.Result(40.0, null));
+        when(provider.getResult("sess-1"))
+                .thenReturn(new LivenessProvider.Result(76.0, new byte[] {9}, "SUCCEEDED"));
+        stubReference();
+        when(verifier.verify(any(), any())).thenReturn(Outcome.similarityOf(95.0));
 
         var result = service.completeLiveness(check.getId(), "the-nonce");
 
         assertEquals(CheckStatus.CHECK, result.getStatus());
+        // The face comparison still runs and the frame is retained, so the reviewer
+        // sees who it looked like, how live it looked, and the picture itself.
+        org.mockito.Mockito.verify(verificationService).recordOutcome(
+                any(), org.mockito.ArgumentMatchers.eq(CheckStatus.CHECK), anyBoolean(),
+                org.mockito.ArgumentMatchers.eq(95.0), org.mockito.ArgumentMatchers.eq(76.0),
+                org.mockito.ArgumentMatchers.contains("below threshold"),
+                org.mockito.ArgumentMatchers.eq(new byte[] {9}));
+    }
+
+    @Test
+    void sessionThatDidNotSucceedIsTechnicalErrorNotSpoofFlag() {
+        var check = pending("sess-1");
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(provider.getResult("sess-1")).thenReturn(new LivenessProvider.Result(0.0, null, "FAILED"));
+
+        var result = service.completeLiveness(check.getId(), "the-nonce");
+
+        assertEquals(CheckStatus.VERIFICATION_ERROR, result.getStatus());
         org.mockito.Mockito.verifyNoInteractions(verifier);
+        org.mockito.Mockito.verify(verificationService).recordOutcome(
+                any(), org.mockito.ArgumentMatchers.eq(CheckStatus.VERIFICATION_ERROR), anyBoolean(),
+                any(), any(), org.mockito.ArgumentMatchers.contains("session failed"), any());
     }
 
     @Test
@@ -127,7 +152,8 @@ class LivenessServiceTest {
     void missingReferenceAfterPassingLivenessIsError() {
         var check = pending("sess-1");
         when(checks.findById(check.getId())).thenReturn(Optional.of(check));
-        when(provider.getResult("sess-1")).thenReturn(new LivenessProvider.Result(98.0, new byte[] {9}));
+        when(provider.getResult("sess-1"))
+                .thenReturn(new LivenessProvider.Result(98.0, new byte[] {9}, "SUCCEEDED"));
         when(referenceImages.findByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE))
                 .thenReturn(Optional.empty());
 

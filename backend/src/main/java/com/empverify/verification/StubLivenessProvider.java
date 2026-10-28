@@ -22,6 +22,6 @@ public class StubLivenessProvider implements LivenessProvider {
 
     @Override
     public Result getResult(String sessionId) {
-        return new Result(95.0, null);
+        return new Result(95.0, null, "SUCCEEDED");
     }
 }

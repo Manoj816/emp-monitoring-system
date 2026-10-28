@@ -11,6 +11,7 @@ import com.empverify.verification.LivenessProvider;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -96,11 +97,14 @@ public class LivenessService {
 
         var result = provider.getResult(check.getLivenessSessionId());
 
-        // Spoof suspected: live-person confidence below threshold -> review.
-        if (result.confidence() < livenessThreshold) {
+        // The scan itself did not complete (challenge failed, session expired or still
+        // running): a technical outcome the agent retries, not a spoof signal.
+        if (!result.succeeded()) {
             return verificationService.recordOutcome(
-                    check, CheckStatus.CHECK, false, null, result.confidence(),
-                    "liveness confidence below threshold", null);
+                    check, CheckStatus.VERIFICATION_ERROR, false, null, null,
+                    "liveness scan did not complete (session "
+                            + String.valueOf(result.status()).toLowerCase(Locale.ROOT) + ")",
+                    null);
         }
 
         var reference = referenceImages
@@ -112,7 +116,10 @@ public class LivenessService {
                     "no active reference image enrolled", null);
         }
 
-        // Compare the liveness reference frame (or a stub placeholder) to the enrolled image.
+        // Compare the frame captured during the scan (or a stub placeholder) to the
+        // enrolled image. This runs even when the live-person confidence is low, so a
+        // reviewer sees both signals — who it looked like and how live it looked —
+        // instead of a bare flag with nothing to review.
         byte[] captured = result.referenceJpeg() != null ? result.referenceJpeg() : new byte[] {1};
         var outcome = verifier.verify(captured, storage.load(reference.getS3Key()));
         if (outcome.similarity() == null) {
@@ -124,6 +131,17 @@ public class LivenessService {
         var mapped = VerificationService.mapSimilarity(
                 outcome.similarity(), policy.getMatchThreshold().doubleValue(),
                 policy.getReviewThreshold().doubleValue());
+
+        // Spoof suspected: live-person confidence below threshold -> review, whatever
+        // the face match said. The captured frame is retained as evidence.
+        if (result.confidence() < livenessThreshold) {
+            return verificationService.recordOutcome(
+                    check, CheckStatus.CHECK, mapped.mismatchFlag(), outcome.similarity(),
+                    result.confidence(),
+                    String.format(Locale.ROOT, "liveness confidence %.1f below threshold %.0f (face match: %s)",
+                            result.confidence(), livenessThreshold, mapped.status()),
+                    captured);
+        }
         byte[] evidence = mapped.status() == CheckStatus.MATCH ? null : captured;
         return verificationService.recordOutcome(
                 check, mapped.status(), mapped.mismatchFlag(), outcome.similarity(),
