@@ -1,25 +1,36 @@
 import { useState } from "react";
+import { Amplify } from "aws-amplify";
+import { FaceLivenessDetector } from "@aws-amplify/ui-react-liveness";
+import "@aws-amplify/ui-react/styles.css";
 
 /**
- * Face Liveness page, opened by the desktop agent in the default browser:
+ * Face Liveness page, opened by the desktop agent (in its own window):
  *   /?checkId=<id>&token=<nonce>&session=<rekognition session id>
  *
- * Production (Rekognition): render <FaceLivenessDetector sessionId={session} ...>
- * from @aws-amplify/ui-react-liveness (requires the Cognito Identity Pool with
- * unauthenticated access to rekognition:StartFaceLivenessSession). On
- * analysisComplete, POST to the complete endpoint below; the agent polls the
- * backend for the outcome. This page never receives the verdict.
- *
- * Dev (stub): there is no real challenge, so a button finalizes the check so the
- * whole flow can be exercised without AWS.
+ * The AWS component runs the guided full-face scan and streams it to Rekognition
+ * using guest credentials from the Cognito identity pool (scoped to
+ * StartFaceLivenessSession only). When the scan completes, this page tells the
+ * backend, which fetches the live-person confidence plus a reference frame and
+ * compares that frame to the enrolled face. This page never decides the verdict.
  */
+const region = (import.meta.env.VITE_AWS_REGION as string | undefined) ?? "us-east-1";
+const identityPoolId = import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID as string | undefined;
+
+if (identityPoolId) {
+  Amplify.configure({ Auth: { Cognito: { identityPoolId, allowGuestAccess: true } } });
+}
+
+type State = "scan" | "working" | "done" | "error";
+
 export default function App() {
   const params = new URLSearchParams(window.location.search);
   const checkId = params.get("checkId");
   const token = params.get("token");
   const session = params.get("session");
-  const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
+  const [state, setState] = useState<State>("scan");
   const [message, setMessage] = useState("");
+
+  const ready = Boolean(checkId && token && session);
 
   async function complete() {
     if (!checkId || !token) return;
@@ -29,9 +40,13 @@ export default function App() {
         `/api/v1/liveness/${checkId}/complete?token=${encodeURIComponent(token)}`,
         { method: "POST" },
       );
-      if (!res.ok) throw new Error(`${res.status}`);
+      if (!res.ok) throw new Error(`server returned ${res.status}`);
       const body = await res.json();
-      setMessage(`Result: ${body.status}. You can return to the EmpVerify app.`);
+      const conf =
+        body.livenessConfidence != null
+          ? ` (liveness ${Number(body.livenessConfidence).toFixed(1)})`
+          : "";
+      setMessage(`Result: ${body.status}${conf}. You can return to the EmpVerify app.`);
       setState("done");
     } catch (e) {
       setMessage(`Could not complete: ${(e as Error).message}`);
@@ -39,27 +54,40 @@ export default function App() {
     }
   }
 
-  const ready = Boolean(checkId && token);
+  let body;
+  if (!identityPoolId) {
+    body = <p>Liveness is not configured (VITE_COGNITO_IDENTITY_POOL_ID is missing).</p>;
+  } else if (!ready) {
+    body = <p>This page must be opened from the EmpVerify desktop app.</p>;
+  } else if (state === "done" || state === "error") {
+    body = <p style={{ fontSize: 18 }}>{message}</p>;
+  } else if (state === "working") {
+    body = <p style={{ fontSize: 18 }}>Verifying…</p>;
+  } else {
+    body = (
+      <>
+        <p>Follow the on-screen prompts to scan your face.</p>
+        <FaceLivenessDetector
+          sessionId={session!}
+          region={region}
+          onAnalysisComplete={complete}
+          onError={(err) => {
+            setMessage(`Face scan failed: ${err.error?.message ?? String(err.state)}`);
+            setState("error");
+          }}
+          onUserCancel={() => {
+            setMessage("Scan cancelled. Return to the EmpVerify app.");
+            setState("error");
+          }}
+        />
+      </>
+    );
+  }
 
   return (
-    <main style={{ fontFamily: "system-ui", padding: "2rem", maxWidth: 560, margin: "0 auto" }}>
+    <main style={{ fontFamily: "system-ui", padding: "1.5rem", maxWidth: 720, margin: "0 auto" }}>
       <h1>Identity verification</h1>
-      {!ready ? (
-        <p>This page must be opened from the EmpVerify desktop application.</p>
-      ) : state === "done" || state === "error" ? (
-        <p>{message}</p>
-      ) : (
-        <>
-          <p>
-            Development stub: in production this screen runs the AWS Face Liveness
-            challenge (session <code>{session}</code>). Here, confirm to finalize the check.
-          </p>
-          <button onClick={complete} disabled={state === "working"}
-                  style={{ padding: "8px 16px", fontSize: 15 }}>
-            {state === "working" ? "Verifying..." : "Complete liveness check"}
-          </button>
-        </>
-      )}
+      {body}
     </main>
   );
 }

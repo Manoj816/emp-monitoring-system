@@ -39,6 +39,7 @@ public partial class MainWindow : Window
     private DateTimeOffset _lastDemoCheck = DateTimeOffset.MinValue;
     private DateTimeOffset? _demoScheduledAt;
     private bool _checkRunning;
+    private bool _sessionStartDone;
     private bool _exiting;
     private WinForms.NotifyIcon? _trayIcon;
 
@@ -186,6 +187,15 @@ public partial class MainWindow : Window
         {
             Log($"Connection failed: {ex.Message}");
             SetStatus("Connection failed.");
+            return;
+        }
+
+        // First check of the session ("opening the laptop"): a full face scan, once per launch.
+        if (_policy is { LivenessOnSessionStart: true } && !_sessionStartDone)
+        {
+            _sessionStartDone = true;
+            Log("Session start: full face scan required.");
+            await RunCheckAsync(CheckType.SessionStart);
         }
     }
 
@@ -321,15 +331,27 @@ public partial class MainWindow : Window
         try
         {
             await EnsureAuthenticatedAsync(CancellationToken.None);
-            Log($"{type} check: opening the browser capture prompt...");
-            var result = await _flow.RunBrowserCaptureCheckAsync(
-                type, TimeSpan.FromSeconds(_policy.ResponseTimeoutSeconds), CancellationToken.None);
+            var window = TimeSpan.FromSeconds(_policy.ResponseTimeoutSeconds);
+            FlowResult result;
+            if (_settings.UseLivenessForChecks)
+            {
+                // Face Liveness: the guided full-face scan proves a live person, then the
+                // frame it captures is compared to the enrolled reference.
+                Log($"{type} check: opening the face scan...");
+                result = await _flow.RunLivenessCheckAsync(window, CancellationToken.None);
+            }
+            else
+            {
+                Log($"{type} check: opening the photo capture prompt...");
+                result = await _flow.RunBrowserCaptureCheckAsync(type, window, CancellationToken.None);
+            }
             var message = result.Outcome switch
             {
                 FlowOutcome.Completed =>
                     $"{type} check: {result.Result!.Status}" +
-                    (result.Result.SimilarityScore is { } s ? $" (similarity {s:F1})" : ""),
-                FlowOutcome.NotAccepted => $"{type} check missed (no capture within the window).",
+                    (result.Result.SimilarityScore is { } s ? $" (similarity {s:F1})" : "") +
+                    (result.Result.LivenessConfidence is { } c ? $" (liveness {c:F1})" : ""),
+                FlowOutcome.NotAccepted => $"{type} check missed (not completed within the window).",
                 _ => $"{type} check failed.",
             };
             Log(message);

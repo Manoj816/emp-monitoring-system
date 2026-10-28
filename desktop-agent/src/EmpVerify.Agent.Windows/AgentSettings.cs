@@ -18,6 +18,10 @@ public sealed class AgentSettings
     public int DemoIntervalMinutes { get; set; }
     public string? DemoCheckAt { get; set; }
 
+    // Checks run the AWS Face Liveness scan (proves a live person, defeats held-up
+    // photos). Set false to fall back to the plain photo capture + compare.
+    public bool UseLivenessForChecks { get; set; } = true;
+
     public static AgentSettings Load()
     {
         try
