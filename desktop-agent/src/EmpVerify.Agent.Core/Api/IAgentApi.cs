@@ -29,4 +29,11 @@ public interface IAgentApi
     Task<CaptureSession> CreateCaptureSessionAsync(string checkId, CancellationToken ct);
 
     Task<CheckResult> GetResultAsync(string checkId, CancellationToken ct);
+
+    /// <summary>
+    /// Reports that a pending check ended without a scan ("closed" = employee closed
+    /// the window, "timeout" = response window elapsed). The server records it as
+    /// EXPIRED with that reason.
+    /// </summary>
+    Task CancelCheckAsync(string checkId, string reason, CancellationToken ct);
 }

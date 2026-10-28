@@ -1,5 +1,6 @@
 package com.empverify.repo;
 
+import com.empverify.domain.Enums.CheckStatus;
 import com.empverify.domain.VerificationCheck;
 import java.time.Instant;
 import java.util.List;
@@ -13,4 +14,7 @@ public interface VerificationCheckRepository extends JpaRepository<VerificationC
 
     /** Checks whose retained evidence is older than the retention cutoff. */
     List<VerificationCheck> findByEvidenceS3KeyIsNotNullAndCompletedAtBefore(Instant cutoff);
+
+    /** Checks still waiting for a scan past their deadline (the expiry sweep turns them into EXPIRED). */
+    List<VerificationCheck> findByStatusAndExpiresAtBefore(CheckStatus status, Instant cutoff);
 }

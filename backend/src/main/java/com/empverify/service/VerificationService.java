@@ -186,6 +186,103 @@ public class VerificationService {
         return check;
     }
 
+    /**
+     * Why a pending check ended without a scan. Stored as the check's detail so an
+     * administrator sees "missed: window closed" rather than a check that never
+     * finished. A missed check is never, by itself, a finding against the employee.
+     */
+    public enum CancelReason {
+        CANCELLED("cancelled by the employee"),
+        CLOSED("check window closed before the scan finished"),
+        ERROR("face scan could not run"),
+        TIMEOUT("not completed within the response window");
+
+        private final String detail;
+
+        CancelReason(String detail) {
+            this.detail = detail;
+        }
+
+        public String detail() {
+            return detail;
+        }
+
+        /** Lenient parse for the public endpoints; anything unknown counts as CANCELLED. */
+        public static CancelReason parse(String raw) {
+            if (raw == null || raw.isBlank()) {
+                return CANCELLED;
+            }
+            try {
+                return valueOf(raw.trim().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                return CANCELLED;
+            }
+        }
+    }
+
+    /** The agent's poll. A pending check past its deadline is reported (and stored) as EXPIRED. */
+    @Transactional
+    public VerificationCheck result(UUID deviceId, UUID checkId) {
+        return expireIfOverdue(getOwnedCheck(deviceId, checkId));
+    }
+
+    /** Agent-initiated: the employee closed the check window, or the window elapsed. */
+    @Transactional
+    public VerificationCheck cancel(UUID deviceId, UUID checkId, CancelReason reason) {
+        return abandon(getOwnedCheck(deviceId, checkId), reason);
+    }
+
+    /**
+     * Browser-initiated: the employee cancelled inside the page, or the scan could
+     * not run. Public, gated by the one-time nonce like the capture/complete calls.
+     */
+    @Transactional
+    public VerificationCheck cancelFromBrowser(UUID checkId, String nonce, CancelReason reason) {
+        var check = checks.findById(checkId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "check not found"));
+        if (!MessageDigest.isEqual(
+                check.getNonce().getBytes(StandardCharsets.UTF_8),
+                nonce.getBytes(StandardCharsets.UTF_8))) {
+            throw new ApiException(HttpStatus.CONFLICT, "nonce mismatch");
+        }
+        return abandon(check, reason);
+    }
+
+    /**
+     * Sweep (scheduled every minute): every check still PENDING past its deadline
+     * becomes EXPIRED, so a check whose window was closed or whose agent went
+     * offline never lingers as "pending" in the admin view.
+     */
+    @Transactional
+    public int expireOverdueChecks() {
+        var overdue = checks.findByStatusAndExpiresAtBefore(CheckStatus.PENDING, Instant.now());
+        for (var check : overdue) {
+            abandon(check, CancelReason.TIMEOUT);
+        }
+        return overdue.size();
+    }
+
+    private VerificationCheck expireIfOverdue(VerificationCheck check) {
+        if (check.getStatus() == CheckStatus.PENDING && check.getExpiresAt().isBefore(Instant.now())) {
+            return abandon(check, CancelReason.TIMEOUT);
+        }
+        return check;
+    }
+
+    /** Ends a pending check without a verdict. Idempotent: a check that already has an outcome is left alone. */
+    private VerificationCheck abandon(VerificationCheck check, CancelReason reason) {
+        if (check.getStatus() != CheckStatus.PENDING) {
+            return check;
+        }
+        check.setStatus(CheckStatus.EXPIRED);
+        check.setErrorDetail(reason.detail());
+        check.setCompletedAt(Instant.now());
+        var saved = checks.save(check);
+        audit.record("device:" + check.getDeviceId(), "CHECK_ABANDONED", "check",
+                check.getId().toString(), "{\"reason\":\"" + reason.name() + "\"}");
+        return saved;
+    }
+
     public record MappedResult(CheckStatus status, boolean mismatchFlag) {}
 
     /**

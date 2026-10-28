@@ -9,18 +9,26 @@ public enum FlowOutcome
     Completed,
     /// <summary>Employee declined or did not respond within the window (recorded as a missed check).</summary>
     NotAccepted,
+    /// <summary>Employee closed the check window before the scan finished (recorded as missed; the agent may retry).</summary>
+    WindowClosed,
+    /// <summary>Employee cancelled inside the page, or the scan could not run; the server ended the check as EXPIRED.</summary>
+    Cancelled,
     /// <summary>Another app holds the camera; the check is deferred, not failed.</summary>
     CameraBusy,
     /// <summary>No camera, or camera permission denied in OS privacy settings.</summary>
     CameraUnavailable,
 }
 
-public sealed record FlowResult(FlowOutcome Outcome, CheckResult? Result);
+public sealed record FlowResult(FlowOutcome Outcome, CheckResult? Result)
+{
+    /// <summary>True when the server reached a verdict (anything other than a missed/cancelled check).</summary>
+    public bool HasVerdict => Outcome == FlowOutcome.Completed && Result is { Status: not CheckStatus.Expired };
+}
 
 /// <summary>
-/// One passive verification check, end to end: visible prompt -> capture ->
-/// upload -> server verdict. Platform-neutral; the heads supply camera and
-/// prompt implementations. The server is the sole authority on the outcome.
+/// One verification check, end to end: visible prompt -> capture -> upload ->
+/// server verdict. Platform-neutral; the heads supply camera, prompt and window
+/// implementations. The server is the sole authority on the outcome.
 /// </summary>
 public sealed class VerificationFlow
 {
@@ -68,10 +76,10 @@ public sealed class VerificationFlow
     }
 
     /// <summary>
-    /// Interactive capture check: opens a check, launches the browser capture
-    /// page, and polls for the server's verdict until it resolves or the window
-    /// elapses. The employee takes the photo in the browser (the click is the
-    /// consent) — the agent never captures silently and never computes the result.
+    /// Interactive capture check: opens a check, launches the capture page in the
+    /// agent's window, and waits for the server's verdict. The employee takes the
+    /// photo in the page (the click is the consent) — the agent never captures
+    /// silently and never computes the result.
     /// </summary>
     public async Task<FlowResult> RunBrowserCaptureCheckAsync(
         CheckType type, TimeSpan responseWindow, CancellationToken ct,
@@ -81,61 +89,86 @@ public sealed class VerificationFlow
         {
             throw new InvalidOperationException("Interactive capture requires a browser launcher.");
         }
-        poll ??= Task.Delay;
 
         var check = await _api.OpenCheckAsync(type, ct);
         var session = await _api.CreateCaptureSessionAsync(check.CheckId, ct);
         // Disposed on every exit path, so the window closes as soon as the check is over.
         using var window = _browser.Open(session.CaptureUrl);
-
-        var deadline = DateTimeOffset.UtcNow + responseWindow;
-        while (DateTimeOffset.UtcNow < deadline)
-        {
-            var result = await _api.GetResultAsync(check.CheckId, ct);
-            if (result.Status != CheckStatus.Pending)
-            {
-                await poll(ResultDisplayTime, ct); // let the employee read the result first
-                return new FlowResult(FlowOutcome.Completed, result);
-            }
-            await poll(TimeSpan.FromSeconds(2), ct);
-        }
-        return new FlowResult(FlowOutcome.NotAccepted, null);
+        return await AwaitVerdictAsync(check.CheckId, window, responseWindow, ct, poll ?? Task.Delay);
     }
 
     /// <summary>How long the result stays on screen before the check window closes.</summary>
     public static readonly TimeSpan ResultDisplayTime = TimeSpan.FromSeconds(2);
 
     /// <summary>
-    /// Interactive liveness check: opens a liveness check, launches the hosted
-    /// challenge in the browser, and polls for the server's verdict until it
-    /// resolves or the window elapses. The agent never computes the result.
+    /// Interactive liveness check: opens a check of the given type (session start,
+    /// periodic, on-demand), launches the hosted Face Liveness challenge in the
+    /// agent's window, and waits for the server's verdict. The agent never
+    /// computes the result.
     /// </summary>
     public async Task<FlowResult> RunLivenessCheckAsync(
-        TimeSpan responseWindow, CancellationToken ct,
+        CheckType type, TimeSpan responseWindow, CancellationToken ct,
         Func<TimeSpan, CancellationToken, Task>? poll = null)
     {
         if (_browser is null)
         {
             throw new InvalidOperationException("Liveness requires a browser launcher.");
         }
-        poll ??= Task.Delay;
 
-        var check = await _api.OpenCheckAsync(CheckType.Liveness, ct);
+        var check = await _api.OpenCheckAsync(type, ct);
         var session = await _api.CreateLivenessSessionAsync(check.CheckId, ct);
         using var window = _browser.Open(session.LivenessUrl);
+        return await AwaitVerdictAsync(check.CheckId, window, responseWindow, ct, poll ?? Task.Delay);
+    }
 
+    /// <summary>
+    /// Polls the check until the server has an outcome, the employee closes the
+    /// window, or the response window elapses. Every way a check can end without
+    /// a scan is reported to the server with its reason, so an administrator sees
+    /// "missed: window closed" instead of a check that never finishes.
+    /// </summary>
+    private async Task<FlowResult> AwaitVerdictAsync(
+        string checkId, IBrowserSession window, TimeSpan responseWindow,
+        CancellationToken ct, Func<TimeSpan, CancellationToken, Task> poll)
+    {
         var deadline = DateTimeOffset.UtcNow + responseWindow;
         while (DateTimeOffset.UtcNow < deadline)
         {
-            var result = await _api.GetResultAsync(check.CheckId, ct);
+            // The verdict is checked before the window state: a scan that finished
+            // just before the employee closed the window still counts.
+            var result = await _api.GetResultAsync(checkId, ct);
+            if (result.Status == CheckStatus.Expired)
+            {
+                return new FlowResult(FlowOutcome.Cancelled, result);
+            }
             if (result.Status != CheckStatus.Pending)
             {
-                await poll(ResultDisplayTime, ct);
+                if (!window.Closed.IsCompleted)
+                {
+                    await poll(ResultDisplayTime, ct); // let the employee read the result first
+                }
                 return new FlowResult(FlowOutcome.Completed, result);
+            }
+            if (window.Closed.IsCompleted)
+            {
+                await TryCancelAsync(checkId, "closed", ct);
+                return new FlowResult(FlowOutcome.WindowClosed, null);
             }
             await poll(TimeSpan.FromSeconds(2), ct);
         }
-        // Not completed in the browser within the window — recorded as not accepted.
+        await TryCancelAsync(checkId, "timeout", ct);
         return new FlowResult(FlowOutcome.NotAccepted, null);
+    }
+
+    private async Task TryCancelAsync(string checkId, string reason, CancellationToken ct)
+    {
+        try
+        {
+            await _api.CancelCheckAsync(checkId, reason, ct);
+        }
+        catch
+        {
+            // Best effort: the server's own expiry sweep ends the check anyway.
+        }
     }
 }

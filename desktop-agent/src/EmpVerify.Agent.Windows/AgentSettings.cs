@@ -22,6 +22,12 @@ public sealed class AgentSettings
     // photos). Set false to fall back to the plain photo capture + compare.
     public bool UseLivenessForChecks { get; set; } = true;
 
+    // When a scan is not completed (window closed, cancelled, or timed out):
+    //   the required session-start scan reopens every RetryMinutes until it is done;
+    //   a scheduled daily check is offered again MissedCheckRetries times, then recorded as missed.
+    public int RetryMinutes { get; set; } = 2;
+    public int MissedCheckRetries { get; set; } = 1;
+
     public static AgentSettings Load()
     {
         try

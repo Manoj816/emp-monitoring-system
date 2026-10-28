@@ -126,10 +126,24 @@ public class CheckController {
                 session.livenessUrl(), session.expiresAt().atOffset(ZoneOffset.UTC));
     }
 
-    /** Polled by the agent for the outcome of a check. */
+    /** Polled by the agent for the outcome of a check; a check past its deadline comes back EXPIRED. */
     @GetMapping("/checks/{checkId}/result")
     public CheckResultResponse result(@PathVariable UUID checkId, Authentication auth) {
-        return toResult(verificationService.getOwnedCheck(deviceId(auth), checkId));
+        return toResult(verificationService.result(deviceId(auth), checkId));
+    }
+
+    /**
+     * The agent reports that a pending check ended without a scan (the employee
+     * closed the window, or the response window elapsed). Recorded as EXPIRED with
+     * the reason, so administrators see a missed check rather than a stale one.
+     */
+    @PostMapping("/checks/{checkId}/cancel")
+    public CheckResultResponse cancel(
+            @PathVariable UUID checkId,
+            @RequestParam(required = false) String reason,
+            Authentication auth) {
+        return toResult(verificationService.cancel(
+                deviceId(auth), checkId, VerificationService.CancelReason.parse(reason)));
     }
 
     private static UUID deviceId(Authentication auth) {

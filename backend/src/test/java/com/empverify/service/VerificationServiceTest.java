@@ -244,4 +244,76 @@ class VerificationServiceTest {
         assertThrows(ApiException.class, () -> service.getOwnedCheck(UUID.randomUUID(), check.getId()));
         assertEquals(check, service.getOwnedCheck(deviceId, check.getId()));
     }
+
+    // ---- checks that end without a scan (window closed, cancelled, timed out) ----
+
+    @Test
+    void pollPastDeadlineReportsExpiredWithReason() {
+        var check = pendingCheck("n", Instant.now().minusSeconds(1));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        var result = service.result(deviceId, check.getId());
+
+        assertEquals(CheckStatus.EXPIRED, result.getStatus());
+        assertEquals(VerificationService.CancelReason.TIMEOUT.detail(), result.getErrorDetail());
+        verify(audit).record(any(), org.mockito.ArgumentMatchers.eq("CHECK_ABANDONED"), any(), any(), any());
+    }
+
+    @Test
+    void pollBeforeDeadlineLeavesPendingCheckAlone() {
+        var check = pendingCheck("n", Instant.now().plusSeconds(60));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+
+        var result = service.result(deviceId, check.getId());
+
+        assertEquals(CheckStatus.PENDING, result.getStatus());
+        verify(checks, never()).save(any());
+    }
+
+    @Test
+    void cancelRecordsWhyTheCheckEndedAndIsIdempotent() {
+        var check = pendingCheck("n", Instant.now().plusSeconds(60));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        var first = service.cancel(deviceId, check.getId(), VerificationService.CancelReason.CLOSED);
+        var second = service.cancel(deviceId, check.getId(), VerificationService.CancelReason.TIMEOUT);
+
+        assertEquals(CheckStatus.EXPIRED, first.getStatus());
+        assertEquals(VerificationService.CancelReason.CLOSED.detail(), first.getErrorDetail());
+        assertEquals(VerificationService.CancelReason.CLOSED.detail(), second.getErrorDetail()); // first reason wins
+        verify(checks, org.mockito.Mockito.times(1)).save(any());
+    }
+
+    @Test
+    void browserCancelIsNonceGated() {
+        var check = pendingCheck("real", Instant.now().plusSeconds(60));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+
+        assertThrows(ApiException.class, () -> service.cancelFromBrowser(
+                check.getId(), "wrong", VerificationService.CancelReason.CANCELLED));
+        verify(checks, never()).save(any());
+    }
+
+    @Test
+    void sweepExpiresEveryOverduePendingCheck() {
+        var a = pendingCheck("a", Instant.now().minusSeconds(5));
+        var b = pendingCheck("b", Instant.now().minusSeconds(5));
+        when(checks.findByStatusAndExpiresAtBefore(
+                org.mockito.ArgumentMatchers.eq(CheckStatus.PENDING), any()))
+                .thenReturn(java.util.List.of(a, b));
+        when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        assertEquals(2, service.expireOverdueChecks());
+        assertEquals(CheckStatus.EXPIRED, a.getStatus());
+        assertEquals(CheckStatus.EXPIRED, b.getStatus());
+    }
+
+    @Test
+    void cancelReasonParsingIsLenient() {
+        assertEquals(VerificationService.CancelReason.CLOSED, VerificationService.CancelReason.parse("closed"));
+        assertEquals(VerificationService.CancelReason.CANCELLED, VerificationService.CancelReason.parse("whatever"));
+        assertEquals(VerificationService.CancelReason.CANCELLED, VerificationService.CancelReason.parse(null));
+    }
 }

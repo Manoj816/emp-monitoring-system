@@ -32,6 +32,26 @@ export default function App() {
 
   const ready = Boolean(checkId && token && session);
 
+  /**
+   * The scan ended without a result (cancelled, or it could not run). Tell the
+   * backend right away so the check is recorded as missed with the reason and the
+   * agent can offer the scan again, instead of waiting out the response window.
+   */
+  async function abandon(reason: "cancelled" | "error", text: string) {
+    if (checkId && token) {
+      try {
+        await fetch(
+          `/api/v1/liveness/${checkId}/cancel?token=${encodeURIComponent(token)}&reason=${reason}`,
+          { method: "POST" },
+        );
+      } catch {
+        // Best effort: the agent and the server's own expiry handle it.
+      }
+    }
+    setMessage(text);
+    setState("error");
+  }
+
   async function complete() {
     if (!checkId || !token) return;
     setState("working");
@@ -71,14 +91,20 @@ export default function App() {
           sessionId={session!}
           region={region}
           onAnalysisComplete={complete}
-          onError={(err) => {
-            setMessage(`Face scan failed: ${err.error?.message ?? String(err.state)}`);
-            setState("error");
-          }}
-          onUserCancel={() => {
-            setMessage("Scan cancelled. Return to the EmpVerify app.");
-            setState("error");
-          }}
+          onError={(err) =>
+            void abandon(
+              "error",
+              `Face scan failed: ${err.error?.message ?? String(err.state)}. ` +
+                "The EmpVerify app will offer the scan again shortly.",
+            )
+          }
+          onUserCancel={() =>
+            void abandon(
+              "cancelled",
+              "Scan cancelled. The EmpVerify app will offer it again shortly — " +
+                "or click 'Liveness check' in the app to do it now.",
+            )
+          }
         />
       </>
     );

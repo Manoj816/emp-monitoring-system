@@ -269,11 +269,41 @@ paths:
     get:
       tags: [checks]
       summary: Poll the outcome of a check
+      description: >
+        A check still PENDING past its deadline is reported (and stored) as EXPIRED.
+        A server-side sweep also expires overdue checks every minute, so a check
+        never lingers as pending if the agent goes offline mid-check.
       parameters:
         - { name: checkId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
         "200":
           description: Current state of the check.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CheckResult" }
+
+  /api/v1/checks/{checkId}/cancel:
+    post:
+      tags: [checks]
+      summary: Report that a pending check ended without a scan
+      description: >
+        Sent by the agent when the employee closes the check window before the scan
+        finishes (reason=closed) or the response window elapses (reason=timeout).
+        The check becomes EXPIRED with the reason recorded, so administrators see a
+        missed check and why — never a check that silently never finished. A missed
+        check is not, by itself, a finding against the employee. Idempotent: a check
+        that already has an outcome is returned unchanged. The liveness page has an
+        equivalent nonce-gated call (POST /api/v1/liveness/{checkId}/cancel?token=)
+        for reason=cancelled / reason=error.
+      parameters:
+        - { name: checkId, in: path, required: true, schema: { type: string, format: uuid } }
+        - name: reason
+          in: query
+          required: false
+          schema: { type: string, enum: [closed, timeout, cancelled, error] }
+      responses:
+        "200":
+          description: The check's state after recording the reason.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CheckResult" }

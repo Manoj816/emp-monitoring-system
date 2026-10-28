@@ -121,6 +121,13 @@ public sealed class AgentApiClient : IAgentApi
         return (await _http.GetFromJsonAsync<CheckResult>($"/api/v1/checks/{checkId}/result", JsonOptions, ct))!;
     }
 
+    public async Task CancelCheckAsync(string checkId, string reason, CancellationToken ct)
+    {
+        var response = await _http.PostAsync(
+            $"/api/v1/checks/{checkId}/cancel?reason={Uri.EscapeDataString(reason)}", content: null, ct);
+        response.EnsureSuccessStatusCode();
+    }
+
     private sealed record LivenessSessionDto(string LivenessUrl, DateTimeOffset ExpiresAt);
 
     public async Task<LivenessSession> CreateLivenessSessionAsync(string checkId, CancellationToken ct)

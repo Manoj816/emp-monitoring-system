@@ -45,6 +45,10 @@ public partial class MainWindow : Window
     private bool _awaitingAssignment;
     private bool _checkRunning;
     private bool _sessionStartDone;
+    private DateTimeOffset? _sessionStartRetryAt;
+    private int _sessionStartAttempts;
+    private DateTimeOffset? _checkRetryAt;
+    private int _checkRetriesLeft;
     private bool _exiting;
     private WinForms.NotifyIcon? _trayIcon;
 
@@ -264,13 +268,49 @@ public partial class MainWindow : Window
             return;
         }
 
-        // First check of the session ("opening the laptop"): a full face scan, once per launch.
+        // First check of the session ("opening the laptop"): a full face scan. It is
+        // required, so it keeps reopening until a scan completes (see RunSessionStartAsync).
         if (_policy is { LivenessOnSessionStart: true } && !_sessionStartDone)
         {
-            _sessionStartDone = true;
-            Log("Session start: full face scan required.");
-            await RunCheckAsync(CheckType.SessionStart);
+            await RunSessionStartAsync();
         }
+    }
+
+    /// <summary>
+    /// The required session-start scan. If the employee closes the window, cancels,
+    /// or lets it time out, it reopens after RetryMinutes — and keeps doing so until
+    /// a scan completes. A closed window never silently satisfies the requirement.
+    /// </summary>
+    private async Task RunSessionStartAsync()
+    {
+        _sessionStartRetryAt = null;
+        _sessionStartAttempts++;
+        Log(_sessionStartAttempts == 1
+            ? "Session start: full face scan required."
+            : $"Session start: full face scan still required (attempt {_sessionStartAttempts}).");
+        await RunCheckAsync(CheckType.SessionStart);
+        if (_sessionStartDone)
+        {
+            return;
+        }
+        var retryAt = DateTimeOffset.Now.AddMinutes(Math.Max(1, _settings.RetryMinutes));
+        _sessionStartRetryAt = retryAt;
+        Log($"Session-start scan not completed — it reopens at {retryAt:HH:mm}. Click 'Liveness check' to do it now.");
+        SetStatus($"Face scan required — reopens at {retryAt:HH:mm}.");
+    }
+
+    /// <summary>A scheduled check that ended without a scan is offered again, a bounded number of times.</summary>
+    private void ScheduleCheckRetry(CheckType type)
+    {
+        if (_checkRetriesLeft <= 0)
+        {
+            Log($"{type} check recorded as missed.");
+            return;
+        }
+        _checkRetriesLeft--;
+        var retryAt = DateTimeOffset.Now.AddMinutes(Math.Max(1, _settings.RetryMinutes));
+        _checkRetryAt = retryAt;
+        Log($"{type} check will be offered again at {retryAt:HH:mm}.");
     }
 
     /// <summary>Refreshes the short-lived device token before a check so a long-running agent never 403s.</summary>
@@ -312,13 +352,29 @@ public partial class MainWindow : Window
         }
         var now = DateTimeOffset.Now;
 
+        // A missed session-start scan is required: reopen it when its retry time arrives.
+        if (!_sessionStartDone && _sessionStartRetryAt is { } retryAt && now >= retryAt)
+        {
+            await RunSessionStartAsync();
+            return;
+        }
+
+        // A missed scheduled check is offered again (bounded by MissedCheckRetries).
+        if (_checkRetryAt is { } again && now >= again)
+        {
+            _checkRetryAt = null;
+            await RunCheckAsync(CheckType.Periodic, scheduled: true);
+            return;
+        }
+
         // Demo: a fixed interval overrides the daily plan.
         if (_settings.DemoIntervalMinutes > 0)
         {
             if (now - _lastDemoCheck >= TimeSpan.FromMinutes(_settings.DemoIntervalMinutes))
             {
                 _lastDemoCheck = now;
-                await RunCheckAsync(CheckType.Periodic);
+                _checkRetriesLeft = _settings.MissedCheckRetries;
+                await RunCheckAsync(CheckType.Periodic, scheduled: true);
             }
             return;
         }
@@ -328,7 +384,8 @@ public partial class MainWindow : Window
         {
             _demoScheduledAt = null;
             DemoStatusText.Text = "";
-            await RunCheckAsync(CheckType.Periodic);
+            _checkRetriesLeft = _settings.MissedCheckRetries;
+            await RunCheckAsync(CheckType.Periodic, scheduled: true);
             return;
         }
 
@@ -339,7 +396,8 @@ public partial class MainWindow : Window
             return;
         }
         _lastHandled = now;
-        await RunCheckAsync(CheckType.Periodic);
+        _checkRetriesLeft = _settings.MissedCheckRetries;
+        await RunCheckAsync(CheckType.Periodic, scheduled: true);
     }
 
     private async void VerifyNow_Click(object sender, RoutedEventArgs e)
@@ -376,84 +434,59 @@ public partial class MainWindow : Window
 
     // ---- checks -------------------------------------------------------------------
 
+    /// <summary>"Liveness check" button: an on-demand face scan; the click is the consent.</summary>
     private async void Liveness_Click(object sender, RoutedEventArgs e)
     {
-        if (_flow is null || _policy is null || _checkRunning)
-        {
-            return;
-        }
-        _checkRunning = true;
-        await SetCheckButtonsEnabled(false);
-        try
-        {
-            await EnsureAuthenticatedAsync(CancellationToken.None);
-            Log("Liveness check: opening the face scan...");
-            var result = await _flow.RunLivenessCheckAsync(
-                TimeSpan.FromSeconds(_policy.ResponseTimeoutSeconds), CancellationToken.None);
-            if (result.Outcome == FlowOutcome.Completed)
-            {
-                Log($"Liveness check: {result.Result!.Status}" +
-                    (result.Result.LivenessConfidence is { } c ? $" (liveness {c:F1})" : ""));
-                SetStatus($"Last liveness: {result.Result.Status} at {DateTime.Now:HH:mm}.");
-            }
-            else
-            {
-                Log("Liveness check not completed within the window.");
-            }
-        }
-        catch (Exception ex)
-        {
-            Log($"Liveness check error: {ex.Message}");
-        }
-        finally
-        {
-            _checkRunning = false;
-            await SetCheckButtonsEnabled(true);
-        }
+        await RunCheckAsync(CheckType.Liveness, forceLiveness: true);
     }
 
     /// <summary>
     /// One interactive check in the agent's own browser window. By default this is
     /// the AWS Face Liveness scan (a live person, then compared to the enrolled
     /// reference); the photo capture is the opt-in fallback. The token is refreshed
-    /// first so the agent never 403s mid-session.
+    /// first so the agent never 403s mid-session. A check that ends without a scan
+    /// (window closed, cancelled, timed out) is logged with why, and a scheduled
+    /// one is offered again; any completed scan also satisfies the session-start
+    /// requirement.
     /// </summary>
-    private async Task RunCheckAsync(CheckType type)
+    private async Task<FlowResult?> RunCheckAsync(
+        CheckType type, bool scheduled = false, bool forceLiveness = false)
     {
         if (_flow is null || _policy is null || _checkRunning)
         {
-            return;
+            return null;
         }
         _checkRunning = true;
         await SetCheckButtonsEnabled(false);
+        FlowResult? result = null;
         try
         {
             await EnsureAuthenticatedAsync(CancellationToken.None);
             var window = TimeSpan.FromSeconds(_policy.ResponseTimeoutSeconds);
-            FlowResult result;
-            if (_settings.UseLivenessForChecks)
+            if (forceLiveness || _settings.UseLivenessForChecks)
             {
                 Log($"{type} check: opening the face scan...");
-                result = await _flow.RunLivenessCheckAsync(window, CancellationToken.None);
+                result = await _flow.RunLivenessCheckAsync(type, window, CancellationToken.None);
             }
             else
             {
                 Log($"{type} check: opening the photo capture prompt...");
                 result = await _flow.RunBrowserCaptureCheckAsync(type, window, CancellationToken.None);
             }
-            var message = result.Outcome switch
-            {
-                FlowOutcome.Completed =>
-                    $"{type} check: {result.Result!.Status}" +
-                    (result.Result.SimilarityScore is { } s ? $" (similarity {s:F1})" : "") +
-                    (result.Result.LivenessConfidence is { } c ? $" (liveness {c:F1})" : ""),
-                FlowOutcome.NotAccepted => $"{type} check missed (not completed within the window).",
-                _ => $"{type} check failed.",
-            };
-            Log(message);
-            if (result.Outcome == FlowOutcome.Completed)
+            Log(Describe(type, result));
+            if (result.HasVerdict)
             {
                 SetStatus($"Last check: {result.Result!.Status} at {DateTime.Now:HH:mm}.");
+                if (!_sessionStartDone
+                    && (type == CheckType.SessionStart || result.Result.LivenessConfidence is not null))
+                {
+                    _sessionStartDone = true;
+                    _sessionStartRetryAt = null;
+                }
+            }
+            else if (scheduled)
+            {
+                ScheduleCheckRetry(type);
             }
         }
         catch (Exception ex)
@@ -465,7 +498,21 @@ public partial class MainWindow : Window
             _checkRunning = false;
             await SetCheckButtonsEnabled(true);
         }
+        return result;
     }
+
+    private static string Describe(CheckType type, FlowResult result) => result.Outcome switch
+    {
+        FlowOutcome.Completed when result.HasVerdict =>
+            $"{type} check: {result.Result!.Status}" +
+            (result.Result.SimilarityScore is { } s ? $" (similarity {s:F1})" : "") +
+            (result.Result.LivenessConfidence is { } c ? $" (liveness {c:F1})" : ""),
+        FlowOutcome.Completed => $"{type} check expired on the server before a scan was done.",
+        FlowOutcome.WindowClosed => $"{type} check: the scan window was closed before the scan finished.",
+        FlowOutcome.Cancelled => $"{type} check: the scan was cancelled or could not run.",
+        FlowOutcome.NotAccepted => $"{type} check missed (not completed within the response window).",
+        _ => $"{type} check failed.",
+    };
 
     private async Task SetCheckButtonsEnabled(bool enabled)
     {
