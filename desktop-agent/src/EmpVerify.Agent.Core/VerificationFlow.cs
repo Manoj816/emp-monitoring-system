@@ -85,7 +85,8 @@ public sealed class VerificationFlow
 
         var check = await _api.OpenCheckAsync(type, ct);
         var session = await _api.CreateCaptureSessionAsync(check.CheckId, ct);
-        _browser.Open(session.CaptureUrl);
+        // Disposed on every exit path, so the window closes as soon as the check is over.
+        using var window = _browser.Open(session.CaptureUrl);
 
         var deadline = DateTimeOffset.UtcNow + responseWindow;
         while (DateTimeOffset.UtcNow < deadline)
@@ -93,12 +94,16 @@ public sealed class VerificationFlow
             var result = await _api.GetResultAsync(check.CheckId, ct);
             if (result.Status != CheckStatus.Pending)
             {
+                await poll(ResultDisplayTime, ct); // let the employee read the result first
                 return new FlowResult(FlowOutcome.Completed, result);
             }
             await poll(TimeSpan.FromSeconds(2), ct);
         }
         return new FlowResult(FlowOutcome.NotAccepted, null);
     }
+
+    /// <summary>How long the result stays on screen before the check window closes.</summary>
+    public static readonly TimeSpan ResultDisplayTime = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Interactive liveness check: opens a liveness check, launches the hosted
@@ -117,7 +122,7 @@ public sealed class VerificationFlow
 
         var check = await _api.OpenCheckAsync(CheckType.Liveness, ct);
         var session = await _api.CreateLivenessSessionAsync(check.CheckId, ct);
-        _browser.Open(session.LivenessUrl);
+        using var window = _browser.Open(session.LivenessUrl);
 
         var deadline = DateTimeOffset.UtcNow + responseWindow;
         while (DateTimeOffset.UtcNow < deadline)
@@ -125,6 +130,7 @@ public sealed class VerificationFlow
             var result = await _api.GetResultAsync(check.CheckId, ct);
             if (result.Status != CheckStatus.Pending)
             {
+                await poll(ResultDisplayTime, ct);
                 return new FlowResult(FlowOutcome.Completed, result);
             }
             await poll(TimeSpan.FromSeconds(2), ct);

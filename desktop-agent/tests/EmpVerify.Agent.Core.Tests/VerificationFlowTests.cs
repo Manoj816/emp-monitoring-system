@@ -48,6 +48,10 @@ public class VerificationFlowTests
         public Task<LivenessSession> CreateLivenessSessionAsync(string checkId, CancellationToken ct) =>
             Task.FromResult(new LivenessSession("http://localhost:5174/?checkId=c1", DateTimeOffset.UtcNow.AddMinutes(2)));
 
+        public Task<CaptureSession> CreateCaptureSessionAsync(string checkId, CancellationToken ct) =>
+            Task.FromResult(new CaptureSession(
+                "http://localhost:5175/capture?checkId=c1&token=nonce", DateTimeOffset.UtcNow.AddMinutes(2)));
+
         public Task<CheckResult> GetResultAsync(string checkId, CancellationToken ct)
         {
             if (PendingPolls > 0)
@@ -68,11 +72,41 @@ public class VerificationFlowTests
     private sealed class FakeBrowser : EmpVerify.Agent.Core.Abstractions.IBrowserLauncher
     {
         public int Opens;
+        public int Closes;
         public string? LastUrl;
-        public void Open(string url) { Opens++; LastUrl = url; }
+
+        public IDisposable Open(string url)
+        {
+            Opens++;
+            LastUrl = url;
+            return new Session(this);
+        }
+
+        private sealed class Session(FakeBrowser owner) : IDisposable
+        {
+            public void Dispose() => owner.Closes++;
+        }
     }
 
     private static readonly TimeSpan Window = TimeSpan.FromSeconds(120);
+
+    [Fact]
+    public async Task BrowserCaptureOpensPageAndClosesItOnceVerdictArrives()
+    {
+        var api = new FakeApi { PendingPolls = 2 };
+        var browser = new FakeBrowser();
+        var flow = new VerificationFlow(api, new FakeCamera(), new FakeNotifications(), browser);
+
+        var result = await flow.RunBrowserCaptureCheckAsync(
+            CheckType.Periodic, Window, CancellationToken.None, poll: (_, _) => Task.CompletedTask);
+
+        Assert.Equal(FlowOutcome.Completed, result.Outcome);
+        Assert.Equal(CheckStatus.Match, result.Result!.Status);
+        Assert.Equal(1, browser.Opens);
+        Assert.Contains("/capture?checkId=c1", browser.LastUrl);
+        Assert.Equal(1, browser.Closes); // the window closes itself as soon as the check is over
+        Assert.Equal(0, api.Uploads);    // the browser uploads the photo; the agent never captures silently
+    }
 
     [Fact]
     public async Task AcceptedPromptCapturesAndUploads()

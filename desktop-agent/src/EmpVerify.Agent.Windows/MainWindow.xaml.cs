@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Windows;
 using System.Windows.Threading;
 using EmpVerify.Agent.Core;
+using EmpVerify.Agent.Core.Abstractions;
 using EmpVerify.Agent.Core.Api;
 using EmpVerify.Agent.Core.Scheduling;
 using EmpVerify.Agent.Windows.Services;
@@ -22,7 +23,10 @@ public partial class MainWindow : Window
     private readonly DpapiCredentialStore _credentialStore = new();
     private readonly WindowsCameraService _camera = new();
     private readonly WpfPromptNotificationService _notifications = new();
-    private readonly WindowsBrowserLauncher _browser = new();
+    // Agent-owned WebView2 window so checks close themselves; shell browser only if the runtime is missing.
+    private readonly IBrowserLauncher _browser = WebViewCaptureLauncher.IsAvailable()
+        ? new WebViewCaptureLauncher()
+        : new WindowsBrowserLauncher();
     private readonly CheckScheduler _scheduler = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(15) };
 

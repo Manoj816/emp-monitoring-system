@@ -4,6 +4,10 @@
     <ProjectReference Include="..\EmpVerify.Agent.Core\EmpVerify.Agent.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <!-- Windows 10 1809+ TFM: required for MediaCapture / WinRT projections and toast notifications. -->
