@@ -193,6 +193,9 @@ public class DeviceService {
     public Device requireActiveDevice(UUID deviceId) {
         var device = devices.findById(deviceId)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "unknown device"));
+        if (device.getStatus() == DeviceStatus.PENDING) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "device not yet assigned to an employee");
+        }
         if (device.getStatus() != DeviceStatus.ACTIVE) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "device revoked");
         }
