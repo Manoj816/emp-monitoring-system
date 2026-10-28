@@ -19,7 +19,8 @@ resource "aws_cognito_user_pool_client" "admin_portal" {
   name                                 = "${var.project}-admin-portal"
   user_pool_id                         = aws_cognito_user_pool.admin.id
   generate_secret                      = false
-  explicit_auth_flows                  = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+  # USER_PASSWORD_AUTH is for test scripting (curl/CLI); the portal uses SRP. Drop it for production.
+  explicit_auth_flows                  = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_PASSWORD_AUTH"]
   supported_identity_providers         = ["COGNITO"]
   allowed_oauth_flows_user_pool_client = false
 }
