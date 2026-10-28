@@ -1,5 +1,6 @@
-// Client for the admin API (see backend AdminController). Dev auth is the
-// X-Admin-Key header; Cognito JWTs replace it before production.
+// Client for the admin API (see backend AdminController). Every call carries the
+// signed-in admin's Cognito ID token as a Bearer JWT (see auth.ts).
+import { idToken } from "./auth";
 
 export interface Employee {
   id: string;
@@ -46,28 +47,15 @@ export interface DeviceSummary {
   lastSeenAt: string | null;
 }
 
-const KEY_STORAGE = "empverify.adminKey";
-
-export function getAdminKey(): string {
-  try {
-    return localStorage.getItem(KEY_STORAGE) ?? "dev-admin-key";
-  } catch {
-    return "dev-admin-key";
-  }
-}
-
-export function setAdminKey(key: string): void {
-  try {
-    localStorage.setItem(KEY_STORAGE, key);
-  } catch {
-    // storage unavailable: key just lives for this page load
-  }
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await idToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
-    headers: { "X-Admin-Key": getAdminKey(), ...(init?.headers ?? {}) },
+    headers: { ...(await authHeaders()), ...(init?.headers ?? {}) },
   });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -108,13 +96,20 @@ export const api = {
 
   listDevices: () => request<DeviceSummary[]>("/api/v1/admin/devices"),
 
-  revokeDevice: (deviceId: string) =>
-    fetch(`/api/v1/admin/devices/${deviceId}/revoke`, {
+  /** Test env only: wipes all demo data. The server refuses unless DEMO_RESET_ENABLED. */
+  resetDemoData: () =>
+    request<{ employees: number; devices: number; checks: number; imagesDeleted: number }>(
+      "/api/v1/admin/demo/reset",
+      { method: "POST" },
+    ),
+
+  revokeDevice: async (deviceId: string) => {
+    const r = await fetch(`/api/v1/admin/devices/${deviceId}/revoke`, {
       method: "POST",
-      headers: { "X-Admin-Key": getAdminKey() },
-    }).then((r) => {
-      if (!r.ok) throw new Error(`revoke failed: ${r.status}`);
-    }),
+      headers: await authHeaders(),
+    });
+    if (!r.ok) throw new Error(`revoke failed: ${r.status}`);
+  },
 
   offboardEmployee: (employeeId: string) =>
     request<{ employeeId: string; status: string; devicesRevoked: number }>(
@@ -133,7 +128,7 @@ export const api = {
 
   loadEvidence: async (checkId: string): Promise<string> => {
     const response = await fetch(`/api/v1/admin/checks/${checkId}/evidence`, {
-      headers: { "X-Admin-Key": getAdminKey() },
+      headers: await authHeaders(),
     });
     if (!response.ok) throw new Error(`evidence: ${response.status}`);
     return URL.createObjectURL(await response.blob());

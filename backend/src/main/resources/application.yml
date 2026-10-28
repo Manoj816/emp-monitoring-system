@@ -57,9 +57,18 @@ empverify:
   retention:
     evidence-days: ${EVIDENCE_RETENTION_DAYS:90}
 
+  demo:
+    # Enables POST /api/v1/admin/demo/reset, which wipes all demo data. Test env only.
+    reset-enabled: ${DEMO_RESET_ENABLED:false}
+
   security:
     # Dev-only shared secrets; replaced by Cognito + managed secrets at deployment.
     admin-api-key: ${ADMIN_API_KEY:dev-admin-key}
+    # Cognito user pool for admin sign-in (portal sends the ID token as a Bearer JWT).
+    # Empty issuer = JWT auth off; dev falls back to the admin key.
+    cognito:
+      issuer-uri: ${COGNITO_ISSUER_URI:}
+      client-id: ${COGNITO_CLIENT_ID:}
     device-token-secret: ${DEVICE_TOKEN_SECRET:dev-device-token-secret-change-me}
     device-token-ttl-seconds: 3600
     enrollment-token-ttl-hours: 24

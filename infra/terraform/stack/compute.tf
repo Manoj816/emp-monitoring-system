@@ -155,6 +155,11 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "DB_NAME", value = var.db_name },
       { name = "DB_USER", value = var.db_username },
       { name = "LIVENESS_UI_URL", value = var.liveness_ui_url },
+      # Admin sign-in: the portal sends a Cognito ID token as a Bearer JWT.
+      { name = "COGNITO_ISSUER_URI", value = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.admin.id}" },
+      { name = "COGNITO_CLIENT_ID", value = aws_cognito_user_pool_client.admin_portal.id },
+      # Test env only: enables POST /api/v1/admin/demo/reset. Remove for production.
+      { name = "DEMO_RESET_ENABLED", value = "true" },
       { name = "EVIDENCE_RETENTION_DAYS", value = tostring(var.evidence_retention_days) },
     ]
     secrets = [

@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Net;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Threading;
@@ -182,6 +183,19 @@ public partial class MainWindow : Window
             }
             var next = _scheduler.NextCheck(_plan, DateTimeOffset.Now);
             Log(next is null ? "No more checks planned today." : $"Next scheduled check: {next:HH:mm}.");
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode is
+            HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
+        {
+            // The server no longer knows this device (revoked, or the data was reset):
+            // drop the stale credential and go back to registration — silently via the
+            // provisioning token if one is present, otherwise the manual form.
+            await _credentialStore.DeleteAsync(CancellationToken.None);
+            _credentials = null;
+            Log("Device registration is no longer valid on the server — registering again.");
+            SetStatus("Not registered.");
+            await TryConnectAsync();
+            return;
         }
         catch (Exception ex)
         {

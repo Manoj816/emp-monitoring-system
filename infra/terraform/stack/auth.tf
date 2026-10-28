@@ -3,7 +3,7 @@ resource "aws_cognito_user_pool" "admin" {
   name = "${var.project}-admins"
 
   password_policy {
-    minimum_length    = 12
+    minimum_length    = 8 # test env; raise to 12+ for production
     require_lowercase = true
     require_uppercase = true
     require_numbers   = true
