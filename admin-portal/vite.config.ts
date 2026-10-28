@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     proxy: {
       // Local dev: forward API calls to the Spring Boot backend.
-      "/api": "http://localhost:8082",
+      "/api": "http://empverify-alb-95474567.us-east-1.elb.amazonaws.com",
     },
   },
 });
