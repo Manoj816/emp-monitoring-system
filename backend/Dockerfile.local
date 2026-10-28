@@ -1,0 +1,10 @@
+# Runtime-only image for local deploys: build the jar on the host first
+# (./mvnw -DskipTests package), so the Docker build never needs network access to
+# Maven Central. CI builds from source with the multi-stage Dockerfile instead.
+#
+#   docker build -f Dockerfile.local -t <ecr-repo>:latest .
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY target/backend-0.0.1-SNAPSHOT.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
