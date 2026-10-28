@@ -45,7 +45,7 @@ class DeviceServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DeviceService(devices, employees, enrollmentTokens, deviceTokens, audit, 24);
+        service = new DeviceService(devices, employees, enrollmentTokens, deviceTokens, audit, 24, "tenant-token");
     }
 
     private static Employee activeEmployee() {
@@ -187,6 +187,62 @@ class DeviceServiceTest {
         when(devices.findById(device.getId())).thenReturn(Optional.of(device));
 
         assertThrows(ApiException.class, () -> service.requireActiveDevice(device.getId()));
+    }
+
+    @Test
+    void provisionWithTenantTokenCreatesUnassignedPendingDevice() {
+        var saved = new Device[1];
+        when(devices.save(any())).thenAnswer(i -> saved[0] = i.getArgument(0));
+
+        var registration = service.provision("tenant-token", "WINDOWS", "LAPTOP-1", "1.0");
+
+        assertEquals(DeviceStatus.PENDING, saved[0].getStatus());
+        org.junit.jupiter.api.Assertions.assertNull(saved[0].getEmployeeId());
+        org.junit.jupiter.api.Assertions.assertNotNull(registration.deviceSecret());
+        verify(audit).record(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.eq("DEVICE_PROVISIONED"), org.mockito.ArgumentMatchers.eq("device"),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void provisionWithWrongTokenIsRejected() {
+        assertThrows(ApiException.class, () -> service.provision("nope", "WINDOWS", null, null));
+        verify(devices, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    void assignDeviceLinksEmployeeAndActivates() {
+        var device = new Device();
+        device.setPlatform(com.empverify.domain.Enums.DevicePlatform.WINDOWS);
+        device.setStatus(DeviceStatus.PENDING);
+        var employee = activeEmployee();
+        when(devices.findById(device.getId())).thenReturn(Optional.of(device));
+        when(employees.findById(employee.getId())).thenReturn(Optional.of(employee));
+        when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        var assigned = service.assignDevice(device.getId(), employee.getId(), "admin");
+
+        assertEquals(DeviceStatus.ACTIVE, assigned.getStatus());
+        assertEquals(employee.getId(), assigned.getEmployeeId());
+        verify(audit).record(org.mockito.ArgumentMatchers.eq("admin"),
+                org.mockito.ArgumentMatchers.eq("DEVICE_ASSIGNED"), org.mockito.ArgumentMatchers.eq("device"),
+                org.mockito.ArgumentMatchers.eq(device.getId().toString()), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void pendingDeviceCanAuthenticateWhileAwaitingAssignment() {
+        var device = new Device();
+        device.setPlatform(com.empverify.domain.Enums.DevicePlatform.WINDOWS);
+        device.setStatus(DeviceStatus.PENDING);
+        device.setCredentialHash(new BCryptPasswordEncoder().encode("secret"));
+        when(devices.findById(device.getId())).thenReturn(Optional.of(device));
+        when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(deviceTokens.issue(device.getId())).thenReturn("token");
+        when(deviceTokens.ttlSeconds()).thenReturn(3600L);
+
+        var auth = service.authenticate(device.getId(), "secret");
+
+        assertEquals("token", auth.accessToken());
     }
 
     @Test

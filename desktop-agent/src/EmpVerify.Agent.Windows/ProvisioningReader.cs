@@ -3,57 +3,70 @@ using Microsoft.Win32;
 
 namespace EmpVerify.Agent.Windows;
 
-/// <summary>A deploy-time enrollment token (and optional backend URL) for silent registration.</summary>
-public sealed record Provisioning(string EnrollmentToken, string? BackendUrl);
+public enum ProvisioningKind
+{
+    /// <summary>Tenant-wide token: the device registers as unassigned; an admin links it to an employee.</summary>
+    Provisioning,
+    /// <summary>One-time, per-employee token: the device is bound to that employee at registration.</summary>
+    Enrollment,
+}
+
+/// <summary>A deploy-time token (and optional backend URL) so the agent registers itself on first launch.</summary>
+public sealed record Provisioning(ProvisioningKind Kind, string Token, string? BackendUrl);
 
 /// <summary>
-/// Reads an enrollment token supplied at deploy time so the agent self-registers
-/// on first launch — the employee never types anything. IT/MDM sets it in
-/// HKLM\Software\EmpVerify (values EnrollmentToken, optional BackendUrl), or drops
-/// a file at %ProgramData%\EmpVerify\enroll.token ("token" on line 1, optional
-/// backend URL on line 2). Manual entry remains the fallback.
+/// Reads a token the installer/MDM placed on the machine so the agent self-registers
+/// without the employee typing anything. HKLM\Software\EmpVerify values:
+/// ProvisioningToken (tenant, device-first) or EnrollmentToken (per-employee), plus
+/// optional BackendUrl. File fallback: %ProgramData%\EmpVerify\provision.token or
+/// enroll.token (token on line 1, optional backend URL on line 2).
 /// </summary>
 public static class ProvisioningReader
 {
     private const string RegPath = @"SOFTWARE\EmpVerify";
 
-    private static readonly string FilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "EmpVerify", "enroll.token");
+    private static readonly string FileDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "EmpVerify");
 
     public static Provisioning? TryRead()
     {
-        // 1. Registry (HKLM) — what an installer or Intune policy typically sets.
         try
         {
             using var key = Registry.LocalMachine.OpenSubKey(RegPath);
-            if (key?.GetValue("EnrollmentToken") is string token && !string.IsNullOrWhiteSpace(token))
+            if (key is not null)
             {
                 var url = key.GetValue("BackendUrl") as string;
-                return new Provisioning(token.Trim(), string.IsNullOrWhiteSpace(url) ? null : url!.Trim());
+                url = string.IsNullOrWhiteSpace(url) ? null : url!.Trim();
+                if (key.GetValue("ProvisioningToken") is string tenant && !string.IsNullOrWhiteSpace(tenant))
+                    return new Provisioning(ProvisioningKind.Provisioning, tenant.Trim(), url);
+                if (key.GetValue("EnrollmentToken") is string enroll && !string.IsNullOrWhiteSpace(enroll))
+                    return new Provisioning(ProvisioningKind.Enrollment, enroll.Trim(), url);
             }
         }
         catch { /* registry unavailable: fall through */ }
 
-        // 2. ProgramData file.
-        try
-        {
-            if (File.Exists(FilePath))
-            {
-                var lines = File.ReadAllLines(FilePath);
-                if (lines.Length > 0 && !string.IsNullOrWhiteSpace(lines[0]))
-                {
-                    var url = lines.Length > 1 && !string.IsNullOrWhiteSpace(lines[1]) ? lines[1].Trim() : null;
-                    return new Provisioning(lines[0].Trim(), url);
-                }
-            }
-        }
-        catch { /* file unreadable: fall through */ }
-
-        return null;
+        return ReadFile("provision.token", ProvisioningKind.Provisioning)
+            ?? ReadFile("enroll.token", ProvisioningKind.Enrollment);
     }
 
-    /// <summary>Best-effort cleanup after a successful registration (needs admin; ignored if denied).</summary>
+    private static Provisioning? ReadFile(string name, ProvisioningKind kind)
+    {
+        try
+        {
+            var path = Path.Combine(FileDir, name);
+            if (!File.Exists(path)) return null;
+            var lines = File.ReadAllLines(path);
+            if (lines.Length == 0 || string.IsNullOrWhiteSpace(lines[0])) return null;
+            var url = lines.Length > 1 && !string.IsNullOrWhiteSpace(lines[1]) ? lines[1].Trim() : null;
+            return new Provisioning(kind, lines[0].Trim(), url);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Best-effort cleanup of one-time enrollment material after registration (needs admin; ignored if denied).</summary>
     public static void Clear()
     {
         try
@@ -62,6 +75,13 @@ public static class ProvisioningReader
             key?.DeleteValue("EnrollmentToken", throwOnMissingValue: false);
         }
         catch { }
-        try { if (File.Exists(FilePath)) File.Delete(FilePath); } catch { }
+        try
+        {
+            var enroll = Path.Combine(FileDir, "enroll.token");
+            if (File.Exists(enroll)) File.Delete(enroll);
+        }
+        catch { }
+        // The tenant provisioning token is intentionally left in place: it is not
+        // single-use, and a reset/re-image should be able to self-register again.
     }
 }

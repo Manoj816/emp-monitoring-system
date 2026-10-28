@@ -54,6 +54,42 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { description: Enrollment token invalid, expired, or already used. }
 
+  /api/v1/devices/provision:
+    post:
+      tags: [device]
+      summary: Register a new installation as an unassigned system (device-first)
+      description: >
+        Device-first enrollment. The installer/MDM places a tenant-wide provisioning
+        token on the machine; on first launch the agent exchanges it for a device
+        identity with no employee yet (status PENDING). An administrator then links
+        the system to an employee, which activates it. The device may authenticate
+        meanwhile (to poll /devices/me) but cannot run checks until assigned.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provisioningToken, platform]
+              properties:
+                provisioningToken: { type: string }
+                platform: { type: string, enum: [WINDOWS, MACOS] }
+                hostname: { type: string }
+                agentVersion: { type: string }
+      responses:
+        "200":
+          description: System registered (unassigned).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deviceId: { type: string, format: uuid }
+                  deviceSecret: { type: string, description: Shown exactly once. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { description: Provisioning token invalid, or provisioning disabled on this server. }
+
   /api/v1/devices/auth:
     post:
       tags: [device]
@@ -79,7 +115,29 @@ paths:
                 properties:
                   accessToken: { type: string }
                   expiresInSeconds: { type: integer }
-        "401": { description: Unknown device, bad secret, or device revoked. }
+        "401": { description: Unknown device, bad secret, or device revoked. (Unassigned PENDING devices may authenticate.) }
+
+  /api/v1/devices/me:
+    get:
+      tags: [device]
+      summary: The device's own state
+      description: >
+        Works while the device is still unassigned, so a device-first installation
+        can wait for an administrator to link it to an employee before activating.
+      responses:
+        "200":
+          description: Current device state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deviceId: { type: string, format: uuid }
+                  status: { type: string, enum: [PENDING, ACTIVE, REVOKED] }
+                  assigned:
+                    type: boolean
+                    description: True once linked to an employee and ACTIVE; checks require this.
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/policy:
     get:
@@ -163,14 +221,37 @@ paths:
         "409": { description: Nonce already used or check expired. }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+  /api/v1/checks/{checkId}/capture-session:
+    post:
+      tags: [checks]
+      summary: Create an interactive photo-capture session for this check
+      description: >
+        Returns a one-time URL to the capture page (webcam preview, Capture button,
+        2-minute countdown). The agent opens it in its own window and polls the
+        result endpoint; the page uploads the photo via the public, nonce-gated
+        POST /api/v1/capture/{checkId}/submit. The consented alternative to the
+        device-side capture; Face Liveness is the default check.
+      parameters:
+        - { name: checkId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Session created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  captureUrl: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+
   /api/v1/checks/{checkId}/liveness-session:
     post:
       tags: [checks]
-      summary: Create a Face Liveness session for this check (Phase 2)
+      summary: Create a Face Liveness session for this check
       description: >
         Backend creates the Rekognition Face Liveness session and returns a one-time
-        URL to the hosted React liveness page. The agent releases the camera, opens
-        the URL in the default browser, then polls the result endpoint.
+        URL to the liveness page. The agent opens it in its own window, then polls
+        the result endpoint and closes the window once a verdict arrives.
       parameters:
         - { name: checkId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:

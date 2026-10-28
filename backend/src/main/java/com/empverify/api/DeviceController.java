@@ -1,10 +1,13 @@
 package com.empverify.api;
 
+import com.empverify.domain.Enums.DeviceStatus;
 import com.empverify.service.DeviceService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import java.util.UUID;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,16 +33,25 @@ public class DeviceController {
             String hostname,
             String agentVersion) {}
 
+    public record ProvisionRequest(
+            @NotBlank String provisioningToken,
+            @NotBlank @Pattern(regexp = "WINDOWS|MACOS") String platform,
+            String hostname,
+            String agentVersion) {}
+
     public record RegisterResponse(String deviceId, String deviceSecret) {}
 
     public record AuthRequest(@NotBlank String deviceId, @NotBlank String deviceSecret) {}
 
     public record AuthResponse(String accessToken, long expiresInSeconds) {}
 
+    public record MeResponse(String deviceId, String status, boolean assigned) {}
+
     /**
-     * Exchanges a one-time enrollment token (issued by an admin) for a device identity.
-     * The returned secret is shown exactly once; the agent stores it in the OS
-     * credential store and only its hash is kept server-side.
+     * Exchanges a one-time enrollment token (issued by an admin for one employee)
+     * for a device identity bound to that employee. The returned secret is shown
+     * exactly once; the agent stores it in the OS credential store and only its
+     * hash is kept server-side.
      */
     @PostMapping("/register")
     public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
@@ -48,9 +60,28 @@ public class DeviceController {
         return new RegisterResponse(registration.deviceId().toString(), registration.deviceSecret());
     }
 
+    /**
+     * Device-first enrollment with the tenant provisioning token placed by the
+     * installer/MDM. The device starts UNASSIGNED; an admin links it to an employee.
+     */
+    @PostMapping("/provision")
+    public RegisterResponse provision(@Valid @RequestBody ProvisionRequest request) {
+        var registration = deviceService.provision(
+                request.provisioningToken(), request.platform(), request.hostname(), request.agentVersion());
+        return new RegisterResponse(registration.deviceId().toString(), registration.deviceSecret());
+    }
+
     @PostMapping("/auth")
     public AuthResponse auth(@Valid @RequestBody AuthRequest request) {
         var auth = deviceService.authenticate(UUID.fromString(request.deviceId()), request.deviceSecret());
         return new AuthResponse(auth.accessToken(), auth.expiresInSeconds());
+    }
+
+    /** The device's own state; works while PENDING so the agent can wait for assignment. */
+    @GetMapping("/me")
+    public MeResponse me(Authentication auth) {
+        var device = deviceService.getDevice(UUID.fromString(auth.getName()));
+        boolean assigned = device.getEmployeeId() != null && device.getStatus() == DeviceStatus.ACTIVE;
+        return new MeResponse(device.getId().toString(), device.getStatus().name(), assigned);
     }
 }

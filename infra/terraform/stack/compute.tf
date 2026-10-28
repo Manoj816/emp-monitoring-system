@@ -33,6 +33,7 @@ resource "aws_iam_role_policy" "execution_secrets" {
         aws_secretsmanager_secret.db.arn,
         aws_secretsmanager_secret.admin_api_key.arn,
         aws_secretsmanager_secret.device_token_secret.arn,
+        aws_secretsmanager_secret.provisioning_token.arn,
       ]
     }]
   })
@@ -166,6 +167,7 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "DB_PASSWORD", valueFrom = aws_secretsmanager_secret.db.arn },
       { name = "ADMIN_API_KEY", valueFrom = aws_secretsmanager_secret.admin_api_key.arn },
       { name = "DEVICE_TOKEN_SECRET", valueFrom = aws_secretsmanager_secret.device_token_secret.arn },
+      { name = "PROVISIONING_TOKEN", valueFrom = aws_secretsmanager_secret.provisioning_token.arn },
     ]
     logConfiguration = {
       logDriver = "awslogs"

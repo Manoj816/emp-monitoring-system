@@ -20,6 +20,9 @@ public sealed record LivenessSession(string LivenessUrl, DateTimeOffset ExpiresA
 
 public sealed record CaptureSession(string CaptureUrl, DateTimeOffset ExpiresAt);
 
+/// <summary>The device's own server-side state; Assigned is false until an admin links it to an employee.</summary>
+public sealed record DeviceState(string Status, bool Assigned);
+
 public sealed record CheckResult(
     string CheckId,
     CheckStatus Status,

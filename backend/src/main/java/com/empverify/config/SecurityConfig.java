@@ -34,6 +34,7 @@ public class SecurityConfig {
                     "/actuator/health",
                     "/api/v1/devices/register",
                     "/api/v1/devices/auth",
+                    "/api/v1/devices/provision",
                     "/api/v1/liveness/**",
                     "/api/v1/capture/**"
                 ).permitAll()

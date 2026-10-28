@@ -69,6 +69,10 @@ empverify:
     cognito:
       issuer-uri: ${COGNITO_ISSUER_URI:}
       client-id: ${COGNITO_CLIENT_ID:}
+    # Tenant provisioning token: a fresh install registers itself as UNASSIGNED with
+    # it (set by the installer/MDM); an admin then links the device to an employee.
+    # Empty = device-first provisioning disabled.
+    provisioning-token: ${PROVISIONING_TOKEN:}
     device-token-secret: ${DEVICE_TOKEN_SECRET:dev-device-token-secret-change-me}
     device-token-ttl-seconds: 3600
     enrollment-token-ttl-hours: 24

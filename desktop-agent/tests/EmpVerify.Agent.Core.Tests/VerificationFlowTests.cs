@@ -64,6 +64,10 @@ public class VerificationFlowTests
 
         public Task<DeviceCredentials> RegisterAsync(string t, string p, string? h, string? v, CancellationToken ct) =>
             throw new NotImplementedException();
+        public Task<DeviceCredentials> ProvisionAsync(string t, string p, string? h, string? v, CancellationToken ct) =>
+            throw new NotImplementedException();
+        public Task<DeviceState> GetDeviceStateAsync(CancellationToken ct) =>
+            Task.FromResult(new DeviceState("ACTIVE", true));
         public Task<string> AuthenticateAsync(DeviceCredentials c, CancellationToken ct) =>
             throw new NotImplementedException();
         public Task<CheckPolicy> GetPolicyAsync(CancellationToken ct) => throw new NotImplementedException();

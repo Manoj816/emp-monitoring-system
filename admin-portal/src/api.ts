@@ -37,7 +37,8 @@ export type ReviewResolution =
 
 export interface DeviceSummary {
   id: string;
-  employeeId: string;
+  /** Null for a device-first registration that no admin has assigned yet. */
+  employeeId: string | null;
   employeeName: string | null;
   platform: string;
   hostname: string | null;
@@ -110,6 +111,14 @@ export const api = {
     });
     if (!r.ok) throw new Error(`revoke failed: ${r.status}`);
   },
+
+  /** Links a registered (unassigned) system to an employee and activates it. */
+  assignDevice: (deviceId: string, employeeId: string) =>
+    request<DeviceSummary>(`/api/v1/admin/devices/${deviceId}/assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ employeeId }),
+    }),
 
   offboardEmployee: (employeeId: string) =>
     request<{ employeeId: string; status: string; devicesRevoked: number }>(

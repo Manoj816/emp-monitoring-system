@@ -18,7 +18,8 @@ public class Device {
     @Id
     private UUID id = UUID.randomUUID();
 
-    @Column(name = "employee_id", nullable = false)
+    /** Null while a device-first registration is still waiting for an admin to assign it. */
+    @Column(name = "employee_id")
     private UUID employeeId;
 
     @Enumerated(EnumType.STRING)

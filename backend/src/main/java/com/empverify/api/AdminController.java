@@ -109,13 +109,30 @@ public class AdminController {
         var employeesById = new java.util.HashMap<UUID, Employee>();
         employees.findAll().forEach(e -> employeesById.put(e.getId(), e));
         return deviceService.listDevices().stream().map(d -> {
-            var emp = employeesById.get(d.getEmployeeId());
+            var emp = d.getEmployeeId() == null ? null : employeesById.get(d.getEmployeeId());
             return new DeviceSummary(
-                    d.getId().toString(), d.getEmployeeId().toString(),
+                    d.getId().toString(),
+                    d.getEmployeeId() == null ? null : d.getEmployeeId().toString(),
                     emp == null ? null : emp.getFullName(),
                     d.getPlatform().name(), d.getHostname(), d.getStatus().name(),
                     d.getAgentVersion(), d.getRegisteredAt(), d.getLastSeenAt());
         }).toList();
+    }
+
+    public record AssignDeviceRequest(@NotBlank String employeeId) {}
+
+    /** Links a registered (device-first) system to an employee and activates it. */
+    @PostMapping("/devices/{deviceId}/assign")
+    public DeviceSummary assignDevice(
+            @PathVariable UUID deviceId, @Valid @RequestBody AssignDeviceRequest request) {
+        var employeeId = UUID.fromString(request.employeeId());
+        var d = deviceService.assignDevice(deviceId, employeeId, "admin");
+        var emp = employees.findById(employeeId).orElse(null);
+        return new DeviceSummary(
+                d.getId().toString(), employeeId.toString(),
+                emp == null ? null : emp.getFullName(),
+                d.getPlatform().name(), d.getHostname(), d.getStatus().name(),
+                d.getAgentVersion(), d.getRegisteredAt(), d.getLastSeenAt());
     }
 
     /** Revokes a device's authorization (lost/retired machine). */

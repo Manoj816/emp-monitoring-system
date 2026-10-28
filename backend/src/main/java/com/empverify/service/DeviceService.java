@@ -9,6 +9,8 @@ import com.empverify.repo.DeviceRepository;
 import com.empverify.repo.EmployeeRepository;
 import com.empverify.repo.EnrollmentTokenRepository;
 import com.empverify.security.DeviceTokenService;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
@@ -34,6 +36,7 @@ public class DeviceService {
     private final AuditService audit;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
     private final long enrollmentTokenTtlHours;
+    private final byte[] provisioningToken; // null = device-first provisioning disabled
 
     public DeviceService(
             DeviceRepository devices,
@@ -41,13 +44,16 @@ public class DeviceService {
             EnrollmentTokenRepository enrollmentTokens,
             DeviceTokenService deviceTokens,
             AuditService audit,
-            @Value("${empverify.security.enrollment-token-ttl-hours}") long enrollmentTokenTtlHours) {
+            @Value("${empverify.security.enrollment-token-ttl-hours}") long enrollmentTokenTtlHours,
+            @Value("${empverify.security.provisioning-token:}") String provisioningToken) {
         this.devices = devices;
         this.employees = employees;
         this.enrollmentTokens = enrollmentTokens;
         this.deviceTokens = deviceTokens;
         this.audit = audit;
         this.enrollmentTokenTtlHours = enrollmentTokenTtlHours;
+        this.provisioningToken = provisioningToken == null || provisioningToken.isBlank()
+                ? null : provisioningToken.getBytes(StandardCharsets.UTF_8);
     }
 
     public record Registration(UUID deviceId, String deviceSecret) {}
@@ -111,11 +117,71 @@ public class DeviceService {
         return new Registration(device.getId(), secret);
     }
 
+    /**
+     * Device-first enrollment: a fresh install registers itself with the tenant
+     * provisioning token (placed by the installer/MDM) and stays UNASSIGNED until an
+     * admin links it to an employee. It can authenticate meanwhile so the agent can
+     * wait for assignment, but every verification endpoint requires ACTIVE, which
+     * only {@link #assignDevice} grants.
+     */
+    @Transactional
+    public Registration provision(String provisioningToken, String platform, String hostname, String agentVersion) {
+        if (this.provisioningToken == null || !MessageDigest.isEqual(
+                this.provisioningToken, provisioningToken.getBytes(StandardCharsets.UTF_8))) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "invalid provisioning token");
+        }
+        String secret = randomSecret();
+        var device = new Device();
+        device.setPlatform(DevicePlatform.valueOf(platform));
+        device.setHostname(hostname);
+        device.setAgentVersion(agentVersion);
+        device.setStatus(DeviceStatus.PENDING);
+        device.setCredentialHash(encoder.encode(secret));
+        device.setRegisteredAt(Instant.now());
+        devices.save(device);
+
+        audit.record("device:" + device.getId(), "DEVICE_PROVISIONED", "device",
+                device.getId().toString(), "{\"platform\":\"" + platform + "\"}");
+        return new Registration(device.getId(), secret);
+    }
+
+    /** Admin: links a registered system to an employee and activates it. */
+    @Transactional
+    public Device assignDevice(UUID deviceId, UUID employeeId, String actor) {
+        var device = devices.findById(deviceId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "device not found"));
+        if (device.getStatus() == DeviceStatus.REVOKED) {
+            throw new ApiException(HttpStatus.CONFLICT, "device is revoked");
+        }
+        var employee = employees.findById(employeeId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "employee not found"));
+        if (employee.getStatus() != EmployeeStatus.ACTIVE) {
+            throw new ApiException(HttpStatus.CONFLICT, "employee is not active");
+        }
+        UUID previous = device.getEmployeeId();
+        device.setEmployeeId(employeeId);
+        device.setStatus(DeviceStatus.ACTIVE);
+        devices.save(device);
+
+        audit.record(actor, "DEVICE_ASSIGNED", "device", deviceId.toString(),
+                "{\"employeeId\":\"" + employeeId + "\",\"previousEmployeeId\":"
+                        + (previous == null ? "null" : "\"" + previous + "\"") + "}");
+        return device;
+    }
+
+    /** The device's own record regardless of status (used while it waits for assignment). */
+    public Device getDevice(UUID deviceId) {
+        return devices.findById(deviceId)
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "unknown device"));
+    }
+
     @Transactional
     public DeviceAuth authenticate(UUID deviceId, String deviceSecret) {
         var device = devices.findById(deviceId)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "unknown device"));
-        if (device.getStatus() != DeviceStatus.ACTIVE
+        // PENDING (provisioned, not yet assigned) may authenticate so the agent can poll
+        // for assignment; the verification endpoints still require ACTIVE.
+        if (device.getStatus() == DeviceStatus.REVOKED
                 || !encoder.matches(deviceSecret, device.getCredentialHash())) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "device revoked or bad credentials");
         }

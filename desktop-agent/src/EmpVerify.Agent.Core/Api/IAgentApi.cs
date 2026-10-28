@@ -9,6 +9,13 @@ public interface IAgentApi
     Task<DeviceCredentials> RegisterAsync(
         string enrollmentToken, string platform, string? hostname, string? agentVersion, CancellationToken ct);
 
+    /// <summary>Device-first enrollment with the tenant provisioning token; the device starts unassigned.</summary>
+    Task<DeviceCredentials> ProvisionAsync(
+        string provisioningToken, string platform, string? hostname, string? agentVersion, CancellationToken ct);
+
+    /// <summary>The device's own status; works while unassigned so the agent can wait for assignment.</summary>
+    Task<DeviceState> GetDeviceStateAsync(CancellationToken ct);
+
     Task<string> AuthenticateAsync(DeviceCredentials credentials, CancellationToken ct);
 
     Task<CheckPolicy> GetPolicyAsync(CancellationToken ct);

@@ -13,10 +13,13 @@ using WinForms = System.Windows.Forms;
 namespace EmpVerify.Agent.Windows;
 
 /// <summary>
-/// Agent window: registers (manually or from a deploy-time provisioning token),
-/// then runs one randomized interactive check per day plus on-demand/demo checks.
-/// Every check opens a browser capture prompt — nothing is captured silently.
-/// Closing the window hides to the tray; checks keep running.
+/// Agent window. Registration is either device-first (tenant provisioning token:
+/// the device self-registers as unassigned and waits for an admin to link it to an
+/// employee) or per-employee (enrollment token, manual or provisioned). Once
+/// assigned, it runs a full face scan at session start and one randomized
+/// interactive check per working day, plus on-demand/demo checks. Every check
+/// opens the agent's own browser window — nothing is captured silently. Closing
+/// the window hides to the tray; checks keep running.
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -39,6 +42,7 @@ public partial class MainWindow : Window
     private DateTimeOffset _lastHandled = DateTimeOffset.MinValue;
     private DateTimeOffset _lastDemoCheck = DateTimeOffset.MinValue;
     private DateTimeOffset? _demoScheduledAt;
+    private bool _awaitingAssignment;
     private bool _checkRunning;
     private bool _sessionStartDone;
     private bool _exiting;
@@ -80,12 +84,14 @@ public partial class MainWindow : Window
         base.OnClosing(e);
     }
 
+    // ---- registration ------------------------------------------------------------
+
     private async Task TryConnectAsync()
     {
         var credentials = await _credentialStore.LoadAsync(CancellationToken.None);
         if (credentials is null)
         {
-            // Auto-register from a deploy-time provisioning token, if one was supplied.
+            // Self-register from a deploy-time token, if the installer/MDM supplied one.
             var provisioning = ProvisioningReader.TryRead();
             if (provisioning is not null)
             {
@@ -110,14 +116,25 @@ public partial class MainWindow : Window
                 _settings.Save();
                 BackendUrlBox.Text = _settings.BackendUrl;
             }
-            Log("Provisioning token found — registering this device automatically...");
             var api = CreateApi();
-            var credentials = await api.RegisterAsync(
-                provisioning.EnrollmentToken, "WINDOWS", Environment.MachineName,
-                typeof(MainWindow).Assembly.GetName().Version?.ToString(), CancellationToken.None);
+            var version = typeof(MainWindow).Assembly.GetName().Version?.ToString();
+            DeviceCredentials credentials;
+            if (provisioning.Kind == ProvisioningKind.Provisioning)
+            {
+                Log("Provisioning token found — registering this system automatically...");
+                credentials = await api.ProvisionAsync(
+                    provisioning.Token, "WINDOWS", Environment.MachineName, version, CancellationToken.None);
+                Log($"System registered: {credentials.DeviceId} (awaiting assignment to an employee).");
+            }
+            else
+            {
+                Log("Enrollment token found — registering this device automatically...");
+                credentials = await api.RegisterAsync(
+                    provisioning.Token, "WINDOWS", Environment.MachineName, version, CancellationToken.None);
+                Log($"Device registered: {credentials.DeviceId}");
+            }
             await _credentialStore.SaveAsync(credentials, CancellationToken.None);
             ProvisioningReader.Clear();
-            Log($"Device auto-registered: {credentials.DeviceId}");
             return credentials;
         }
         catch (Exception ex)
@@ -154,14 +171,70 @@ public partial class MainWindow : Window
         }
     }
 
+    // ---- connection / activation -------------------------------------------------
+
     private async Task ConnectAsync(DeviceCredentials credentials)
+    {
+        _credentials = credentials;
+        _api = CreateApi();
+        try
+        {
+            await _api.AuthenticateAsync(credentials, CancellationToken.None);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode is
+            HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
+        {
+            // The server no longer knows this device (revoked, or the data was reset):
+            // drop the stale credential and register again — silently via a deploy-time
+            // token when present, otherwise the manual form.
+            await _credentialStore.DeleteAsync(CancellationToken.None);
+            _credentials = null;
+            Log("Device registration is no longer valid on the server — registering again.");
+            SetStatus("Not registered.");
+            await TryConnectAsync();
+            return;
+        }
+        catch (Exception ex)
+        {
+            Log($"Connection failed: {ex.Message}");
+            SetStatus("Connection failed.");
+            return;
+        }
+
+        try
+        {
+            var state = await _api.GetDeviceStateAsync(CancellationToken.None);
+            if (!state.Assigned)
+            {
+                EnterAwaitingAssignment();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Could not read device state: {ex.Message}");
+            SetStatus("Connection failed.");
+            return;
+        }
+
+        await ActivateAsync();
+    }
+
+    /// <summary>Registered but not yet linked to an employee: poll until an admin assigns it.</summary>
+    private void EnterAwaitingAssignment()
+    {
+        _awaitingAssignment = true;
+        SetStatus("Registered — waiting for an administrator to assign this system.");
+        Log("Waiting for an administrator to assign this system to an employee...");
+        _timer.Start();
+    }
+
+    /// <summary>Assigned and active: load the policy, plan the day, and run the session-start scan.</summary>
+    private async Task ActivateAsync()
     {
         try
         {
-            _credentials = credentials;
-            _api = CreateApi();
-            await _api.AuthenticateAsync(credentials, CancellationToken.None);
-            _policy = await _api.GetPolicyAsync(CancellationToken.None);
+            _policy = await _api!.GetPolicyAsync(CancellationToken.None);
             _flow = new VerificationFlow(_api, _camera, _notifications, _browser);
 
             // Agent is active: make sure it starts at login (no-op when MSIX-packaged).
@@ -183,19 +256,6 @@ public partial class MainWindow : Window
             }
             var next = _scheduler.NextCheck(_plan, DateTimeOffset.Now);
             Log(next is null ? "No more checks planned today." : $"Next scheduled check: {next:HH:mm}.");
-        }
-        catch (HttpRequestException ex) when (ex.StatusCode is
-            HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
-        {
-            // The server no longer knows this device (revoked, or the data was reset):
-            // drop the stale credential and go back to registration — silently via the
-            // provisioning token if one is present, otherwise the manual form.
-            await _credentialStore.DeleteAsync(CancellationToken.None);
-            _credentials = null;
-            Log("Device registration is no longer valid on the server — registering again.");
-            SetStatus("Not registered.");
-            await TryConnectAsync();
-            return;
         }
         catch (Exception ex)
         {
@@ -222,8 +282,30 @@ public partial class MainWindow : Window
         }
     }
 
+    // ---- scheduling ---------------------------------------------------------------
+
     private async Task OnScheduleTickAsync()
     {
+        if (_awaitingAssignment)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync(CancellationToken.None);
+                var state = await _api!.GetDeviceStateAsync(CancellationToken.None);
+                if (state.Assigned)
+                {
+                    _awaitingAssignment = false;
+                    Log("This system has been assigned to an employee — activating.");
+                    await ActivateAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"Assignment check failed: {ex.Message}");
+            }
+            return;
+        }
+
         if (_flow is null || _policy is null || _checkRunning)
         {
             return;
@@ -292,6 +374,8 @@ public partial class MainWindow : Window
         Log("Demo: scheduled check cleared.");
     }
 
+    // ---- checks -------------------------------------------------------------------
+
     private async void Liveness_Click(object sender, RoutedEventArgs e)
     {
         if (_flow is null || _policy is null || _checkRunning)
@@ -303,7 +387,7 @@ public partial class MainWindow : Window
         try
         {
             await EnsureAuthenticatedAsync(CancellationToken.None);
-            Log("Liveness check: opening the browser challenge...");
+            Log("Liveness check: opening the face scan...");
             var result = await _flow.RunLivenessCheckAsync(
                 TimeSpan.FromSeconds(_policy.ResponseTimeoutSeconds), CancellationToken.None);
             if (result.Outcome == FlowOutcome.Completed)
@@ -329,10 +413,10 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// One interactive check: opens the browser capture prompt, the employee takes
-    /// the photo there (the click is the consent), and the server returns the
-    /// verdict. No silent capture; the token is refreshed first so the agent never
-    /// 403s mid-session.
+    /// One interactive check in the agent's own browser window. By default this is
+    /// the AWS Face Liveness scan (a live person, then compared to the enrolled
+    /// reference); the photo capture is the opt-in fallback. The token is refreshed
+    /// first so the agent never 403s mid-session.
     /// </summary>
     private async Task RunCheckAsync(CheckType type)
     {
@@ -349,8 +433,6 @@ public partial class MainWindow : Window
             FlowResult result;
             if (_settings.UseLivenessForChecks)
             {
-                // Face Liveness: the guided full-face scan proves a live person, then the
-                // frame it captures is compared to the enrolled reference.
                 Log($"{type} check: opening the face scan...");
                 result = await _flow.RunLivenessCheckAsync(window, CancellationToken.None);
             }

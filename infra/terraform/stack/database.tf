@@ -41,6 +41,22 @@ resource "aws_secretsmanager_secret_version" "device_token_secret" {
   secret_string = random_password.device_token_secret.result
 }
 
+# Tenant provisioning token: the installer/MDM places it on each laptop so the agent
+# self-registers as an unassigned system; an admin then links it to an employee.
+resource "random_password" "provisioning_token" {
+  length  = 48
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "provisioning_token" {
+  name = "${var.project}/provisioning-token"
+}
+
+resource "aws_secretsmanager_secret_version" "provisioning_token" {
+  secret_id     = aws_secretsmanager_secret.provisioning_token.id
+  secret_string = random_password.provisioning_token.result
+}
+
 resource "aws_db_subnet_group" "main" {
   name       = "${var.project}-db"
   subnet_ids = aws_subnet.private[*].id

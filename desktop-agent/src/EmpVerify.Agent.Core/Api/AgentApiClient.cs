@@ -44,6 +44,26 @@ public sealed class AgentApiClient : IAgentApi
         return new DeviceCredentials(body.DeviceId, body.DeviceSecret);
     }
 
+    private sealed record ProvisionRequest(string ProvisioningToken, string Platform, string? Hostname, string? AgentVersion);
+    private sealed record MeResponse(string DeviceId, string Status, bool Assigned);
+
+    public async Task<DeviceCredentials> ProvisionAsync(
+        string provisioningToken, string platform, string? hostname, string? agentVersion, CancellationToken ct)
+    {
+        var response = await _http.PostAsJsonAsync(
+            "/api/v1/devices/provision",
+            new ProvisionRequest(provisioningToken, platform, hostname, agentVersion), ct);
+        response.EnsureSuccessStatusCode();
+        var body = (await response.Content.ReadFromJsonAsync<RegisterResponse>(ct))!;
+        return new DeviceCredentials(body.DeviceId, body.DeviceSecret);
+    }
+
+    public async Task<DeviceState> GetDeviceStateAsync(CancellationToken ct)
+    {
+        var body = (await _http.GetFromJsonAsync<MeResponse>("/api/v1/devices/me", ct))!;
+        return new DeviceState(body.Status, body.Assigned);
+    }
+
     public async Task<string> AuthenticateAsync(DeviceCredentials credentials, CancellationToken ct)
     {
         var response = await _http.PostAsJsonAsync(
