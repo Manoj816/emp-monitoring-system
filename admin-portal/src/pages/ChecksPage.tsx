@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type AdminCheckRow, type ReviewResolution } from "../api";
 
-const FILTERS = ["ALL", "CHECK", "MATCH", "ERRORS"] as const;
+const FILTERS = ["ALL", "CHECK", "MATCH", "MISSED", "ERRORS"] as const;
 type Filter = (typeof FILTERS)[number];
 
 function badgeClass(status: string): string {
@@ -10,6 +10,15 @@ function badgeClass(status: string): string {
   if (status === "PENDING") return "badge neutral";
   return "badge error";
 }
+
+/** A check that ended without a scan is stored as EXPIRED; administrators read it as a miss. */
+function statusLabel(status: string): string {
+  return status === "EXPIRED" ? "MISSED" : status;
+}
+
+const FILTER_LABELS: Record<Filter, string> = {
+  ALL: "all", CHECK: "Needs review", MATCH: "match", MISSED: "missed", ERRORS: "errors",
+};
 
 export default function ChecksPage() {
   const [rows, setRows] = useState<AdminCheckRow[]>([]);
@@ -21,7 +30,7 @@ export default function ChecksPage() {
   const [evidence, setEvidence] = useState<{ checkId: string; url: string } | null>(null);
   // Side-by-side pictures for the review dialog: the enrolled photo and the frame
   // captured during this check (when retained).
-  const [reviewImages, setReviewImages] = useState<{ reference?: string; captured?: string }>({});
+  const [reviewImages, setReviewImages] = useState<{ reference?: string; enrolled?: string; captured?: string }>({});
 
   useEffect(() => {
     if (!reviewing) {
@@ -31,11 +40,12 @@ export default function ChecksPage() {
     let cancelled = false;
     const row = reviewing;
     (async () => {
-      const [reference, captured] = await Promise.all([
+      const [reference, enrolled, captured] = await Promise.all([
         api.loadReferenceImage(row.employeeId).catch(() => undefined),
+        api.loadEnrolledImage(row.employeeId).catch(() => undefined),
         row.hasEvidence ? api.loadEvidence(row.checkId).catch(() => undefined) : Promise.resolve(undefined),
       ]);
-      if (!cancelled) setReviewImages({ reference, captured });
+      if (!cancelled) setReviewImages({ reference, enrolled, captured });
     })();
     return () => {
       cancelled = true;
@@ -59,7 +69,8 @@ export default function ChecksPage() {
 
   const visible = rows.filter((r) => {
     if (filter === "ALL") return true;
-    if (filter === "ERRORS") return r.status === "VERIFICATION_ERROR" || r.status === "EXPIRED" || r.status === "NO_FACE";
+    if (filter === "MISSED") return r.status === "EXPIRED";
+    if (filter === "ERRORS") return r.status === "VERIFICATION_ERROR" || r.status === "NO_FACE";
     if (filter === "CHECK") return r.status === "CHECK" || r.status === "MULTIPLE_FACES";
     return r.status === filter;
   });
@@ -91,7 +102,7 @@ export default function ChecksPage() {
       <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
         {FILTERS.map((f) => (
           <button key={f} className={`action ${filter === f ? "primary" : ""}`} onClick={() => setFilter(f)}>
-            {f === "CHECK" ? "Needs review" : f.toLowerCase()}
+            {FILTER_LABELS[f]}
           </button>
         ))}
         <span className="muted" style={{ marginLeft: "auto" }}>auto-refreshes every 20s</span>
@@ -114,9 +125,9 @@ export default function ChecksPage() {
               <td>{row.employeeName ?? row.employeeId.slice(0, 8)} <span className="muted">{row.employeeCode ?? ""}</span></td>
               <td className="muted">{row.checkType}</td>
               <td>
-                <span className={badgeClass(row.status)}>{row.status}</span>
+                <span className={badgeClass(row.status)}>{statusLabel(row.status)}</span>
                 {row.mismatchFlag && <span className="badge error" style={{ marginLeft: 4 }}>mismatch?</span>}
-                {row.errorDetail && <div className="muted" style={{ fontSize: 12 }}>{row.errorDetail}</div>}
+                {row.errorDetail && <div className="muted" style={{ fontSize: 12, maxWidth: 420 }}>{row.errorDetail}</div>}
               </td>
               <td>{row.similarityScore?.toFixed(1) ?? "—"}</td>
               <td>{row.livenessConfidence?.toFixed(1) ?? "—"}</td>
@@ -154,7 +165,7 @@ export default function ChecksPage() {
             <div style={{ display: "flex", gap: 24, marginBottom: 12, flexWrap: "wrap" }}>
               <div>
                 <div className="muted" style={{ fontSize: 12 }}>Status</div>
-                <span className={badgeClass(reviewing.status)}>{reviewing.status}</span>
+                <span className={badgeClass(reviewing.status)}>{statusLabel(reviewing.status)}</span>
                 {reviewing.mismatchFlag && <span className="badge error" style={{ marginLeft: 4 }}>mismatch?</span>}
               </div>
               <div>
@@ -167,19 +178,27 @@ export default function ChecksPage() {
               </div>
             </div>
             {reviewing.errorDetail && (
-              <p className="muted" style={{ marginTop: 0 }}>Why it was flagged: {reviewing.errorDetail}</p>
+              <p style={{ marginTop: 0, padding: "8px 12px", background: "#fff7e6", borderRadius: 6 }}>
+                <strong>What went wrong:</strong> {reviewing.errorDetail}
+              </p>
             )}
 
-            <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
+            <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
               <figure style={{ margin: 0, flex: 1, textAlign: "center" }}>
                 {reviewImages.reference
-                  ? <img src={reviewImages.reference} alt="enrolled reference photo" style={{ maxWidth: "100%", maxHeight: 240 }} />
-                  : <div className="muted" style={{ padding: 24 }}>No reference photo enrolled.</div>}
-                <figcaption className="muted" style={{ fontSize: 12 }}>Enrolled reference</figcaption>
+                  ? <img src={reviewImages.reference} alt="uploaded ID or photo" style={{ maxWidth: "100%", maxHeight: 220 }} />
+                  : <div className="muted" style={{ padding: 24 }}>No ID/photo uploaded.</div>}
+                <figcaption className="muted" style={{ fontSize: 12 }}>Uploaded ID / photo</figcaption>
+              </figure>
+              <figure style={{ margin: 0, flex: 1, textAlign: "center" }}>
+                {reviewImages.enrolled
+                  ? <img src={reviewImages.enrolled} alt="enrolled live scan" style={{ maxWidth: "100%", maxHeight: 220 }} />
+                  : <div className="muted" style={{ padding: 24 }}>Not enrolled yet (no matching live scan so far).</div>}
+                <figcaption className="muted" style={{ fontSize: 12 }}>Enrolled live scan</figcaption>
               </figure>
               <figure style={{ margin: 0, flex: 1, textAlign: "center" }}>
                 {reviewImages.captured
-                  ? <img src={reviewImages.captured} alt="frame captured during this check" style={{ maxWidth: "100%", maxHeight: 240 }} />
+                  ? <img src={reviewImages.captured} alt="frame captured during this check" style={{ maxWidth: "100%", maxHeight: 220 }} />
                   : <div className="muted" style={{ padding: 24 }}>
                       {reviewing.hasEvidence ? "Loading…" : "No frame was retained for this check."}
                     </div>}

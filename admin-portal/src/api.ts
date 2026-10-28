@@ -9,7 +9,10 @@ export interface Employee {
   email: string;
   department: string | null;
   status: string;
+  /** An administrator has uploaded the ID/photo reference. */
   hasReferenceImage: boolean;
+  /** The employee's first live scan matched it and is now the second reference. */
+  hasLiveEnrollment: boolean;
 }
 
 export interface AdminCheckRow {
@@ -145,12 +148,21 @@ export const api = {
     return URL.createObjectURL(await response.blob());
   },
 
-  /** The employee's enrolled reference photo, for side-by-side review. */
+  /** The uploaded ID/photo reference, for side-by-side review. */
   loadReferenceImage: async (employeeId: string): Promise<string> => {
     const response = await fetch(`/api/v1/admin/employees/${employeeId}/reference-image`, {
       headers: await authHeaders(),
     });
     if (!response.ok) throw new Error(`reference image: ${response.status}`);
+    return URL.createObjectURL(await response.blob());
+  },
+
+  /** The frame from the employee's first matching live scan (the live-enrollment reference). */
+  loadEnrolledImage: async (employeeId: string): Promise<string> => {
+    const response = await fetch(`/api/v1/admin/employees/${employeeId}/enrolled-image`, {
+      headers: await authHeaders(),
+    });
+    if (!response.ok) throw new Error(`enrolled image: ${response.status}`);
     return URL.createObjectURL(await response.blob());
   },
 };

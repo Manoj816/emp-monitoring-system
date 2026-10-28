@@ -11,7 +11,11 @@ import "@aws-amplify/ui-react/styles.css";
  * using guest credentials from the Cognito identity pool (scoped to
  * StartFaceLivenessSession only). When the scan completes, this page tells the
  * backend, which fetches the live-person confidence plus a reference frame and
- * compares that frame to the enrolled face. This page never decides the verdict.
+ * compares that frame to the enrolled references. This page never decides the verdict.
+ *
+ * The check is required: cancelling or a scan error restarts the scan with a
+ * fresh session (a few times) instead of ending the check; the agent's response
+ * window keeps running meanwhile.
  */
 const region = (import.meta.env.VITE_AWS_REGION as string | undefined) ?? "us-east-1";
 const identityPoolId = import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID as string | undefined;
@@ -20,20 +24,24 @@ if (identityPoolId) {
   Amplify.configure({ Auth: { Cognito: { identityPoolId, allowGuestAccess: true } } });
 }
 
+const MAX_RESTARTS = 3;
+
 type State = "scan" | "working" | "done" | "error";
 
 export default function App() {
   const params = new URLSearchParams(window.location.search);
   const checkId = params.get("checkId");
   const token = params.get("token");
-  const session = params.get("session");
+  const [session, setSession] = useState(params.get("session"));
+  const [restarts, setRestarts] = useState(0);
   const [state, setState] = useState<State>("scan");
   const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState("");
 
   const ready = Boolean(checkId && token && session);
 
   /**
-   * The scan ended without a result (cancelled, or it could not run). Tell the
+   * The scan ended without a result and will not be retried here. Tell the
    * backend right away so the check is recorded as missed with the reason and the
    * agent can offer the scan again, instead of waiting out the response window.
    */
@@ -52,6 +60,28 @@ export default function App() {
     setState("error");
   }
 
+  /** Cancel or error: the check is required, so start the scan again with a fresh session. */
+  async function restart(reason: "cancelled" | "error", why: string) {
+    if (!checkId || !token) return;
+    if (restarts >= MAX_RESTARTS) {
+      await abandon(reason, `${why} The scan could not be completed on this device. The EmpVerify app will offer it again.`);
+      return;
+    }
+    setNotice(`${why} This check is required — restarting the scan…`);
+    try {
+      const res = await fetch(
+        `/api/v1/liveness/${checkId}/restart?token=${encodeURIComponent(token)}`,
+        { method: "POST" },
+      );
+      if (!res.ok) throw new Error(`server returned ${res.status}`);
+      const body = (await res.json()) as { sessionId: string };
+      setRestarts(restarts + 1);
+      setSession(body.sessionId); // new key below: the detector remounts with the fresh session
+    } catch (e) {
+      await abandon(reason, `${why} The scan could not be restarted (${(e as Error).message}). The EmpVerify app will offer it again.`);
+    }
+  }
+
   async function complete() {
     if (!checkId || !token) return;
     setState("working");
@@ -66,7 +96,7 @@ export default function App() {
         body.livenessConfidence != null
           ? ` (liveness ${Number(body.livenessConfidence).toFixed(1)})`
           : "";
-      setMessage(`Result: ${body.status}${conf}. You can return to the EmpVerify app.`);
+      setMessage(`Result: ${body.status}${conf}. This window closes by itself.`);
       setState("done");
     } catch (e) {
       setMessage(`Could not complete: ${(e as Error).message}`);
@@ -86,25 +116,20 @@ export default function App() {
   } else {
     body = (
       <>
-        <p>Follow the on-screen prompts to scan your face.</p>
+        <p>
+          This identity check is required. Follow the on-screen prompts to scan your face;
+          the window closes by itself when the check is done.
+        </p>
+        {notice && <p style={{ color: "#8a5a00" }}>{notice}</p>}
         <FaceLivenessDetector
+          key={session!}
           sessionId={session!}
           region={region}
           onAnalysisComplete={complete}
           onError={(err) =>
-            void abandon(
-              "error",
-              `Face scan failed: ${err.error?.message ?? String(err.state)}. ` +
-                "The EmpVerify app will offer the scan again shortly.",
-            )
+            void restart("error", `The face scan hit a problem (${err.error?.message ?? String(err.state)}).`)
           }
-          onUserCancel={() =>
-            void abandon(
-              "cancelled",
-              "Scan cancelled. The EmpVerify app will offer it again shortly — " +
-                "or click 'Liveness check' in the app to do it now.",
-            )
-          }
+          onUserCancel={() => void restart("cancelled", "The scan was cancelled.")}
         />
       </>
     );

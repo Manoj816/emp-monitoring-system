@@ -1,12 +1,13 @@
 package com.empverify.service;
 
 import com.empverify.domain.Enums.CheckStatus;
+import com.empverify.domain.Enums.ReferenceImageSource;
 import com.empverify.domain.Enums.ReferenceImageStatus;
+import com.empverify.domain.ReferenceImage;
 import com.empverify.domain.VerificationCheck;
 import com.empverify.repo.ReferenceImageRepository;
 import com.empverify.repo.VerificationCheckRepository;
 import com.empverify.storage.ImageStorage;
-import com.empverify.verification.FaceVerifier;
 import com.empverify.verification.LivenessProvider;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -19,10 +20,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Interactive Face Liveness: the agent opens a liveness check, the browser runs
- * the challenge, and the browser then calls back here to finalize. Liveness
- * confidence below the threshold is treated as CHECK (possible spoof); a passing
- * check is compared 1:1 against the enrolled reference like any other match.
+ * Interactive Face Liveness: the agent opens a check, the browser runs the
+ * challenge, and the browser then calls back here to finalize.
+ *
+ * Verdict: the frame captured during the scan is compared against every
+ * reference on file (the ID/photo an administrator uploaded and, once enrolled,
+ * the employee's first live scan). Live-person confidence below the threshold is
+ * CHECK (possible spoof) whatever the face said; the first MATCH that passes
+ * liveness stores its frame as the live-enrollment reference. Every flag carries
+ * a reviewer-facing explanation of what went wrong.
  */
 @Service
 public class LivenessService {
@@ -30,10 +36,10 @@ public class LivenessService {
     private final VerificationCheckRepository checks;
     private final ReferenceImageRepository referenceImages;
     private final LivenessProvider provider;
-    private final FaceVerifier verifier;
     private final ImageStorage storage;
     private final PolicyService policyService;
     private final VerificationService verificationService;
+    private final AuditService audit;
     private final String livenessUiUrl;
     private final double livenessThreshold;
 
@@ -41,19 +47,19 @@ public class LivenessService {
             VerificationCheckRepository checks,
             ReferenceImageRepository referenceImages,
             LivenessProvider provider,
-            FaceVerifier verifier,
             ImageStorage storage,
             PolicyService policyService,
             VerificationService verificationService,
+            AuditService audit,
             @Value("${empverify.liveness-ui-url}") String livenessUiUrl,
             @Value("${empverify.liveness-threshold:80}") double livenessThreshold) {
         this.checks = checks;
         this.referenceImages = referenceImages;
         this.provider = provider;
-        this.verifier = verifier;
         this.storage = storage;
         this.policyService = policyService;
         this.verificationService = verificationService;
+        this.audit = audit;
         this.livenessUiUrl = livenessUiUrl;
         this.livenessThreshold = livenessThreshold;
     }
@@ -77,19 +83,27 @@ public class LivenessService {
         return new LivenessSession(url, session.expiresAt());
     }
 
+    /**
+     * Browser-initiated (nonce-gated): a fresh provider session for the same
+     * check, so a scan the employee cancelled or that errored can start again in
+     * place. The check is required; cancelling is not a way out of it.
+     */
+    @Transactional
+    public String restartSession(UUID checkId, String nonce) {
+        var check = pendingCheck(checkId, nonce);
+        if (check.getExpiresAt().isBefore(Instant.now())) {
+            throw new ApiException(HttpStatus.CONFLICT, "check expired");
+        }
+        var session = provider.createSession();
+        check.setLivenessSessionId(session.sessionId());
+        checks.save(check);
+        return session.sessionId();
+    }
+
     /** Browser-initiated callback after the challenge; gated by the one-time nonce. */
     @Transactional
     public VerificationCheck completeLiveness(UUID checkId, String nonce) {
-        var check = checks.findById(checkId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "check not found"));
-        if (check.getStatus() != CheckStatus.PENDING) {
-            throw new ApiException(HttpStatus.CONFLICT, "check already completed");
-        }
-        if (!MessageDigest.isEqual(
-                check.getNonce().getBytes(StandardCharsets.UTF_8),
-                nonce.getBytes(StandardCharsets.UTF_8))) {
-            throw new ApiException(HttpStatus.CONFLICT, "nonce mismatch");
-        }
+        var check = pendingCheck(checkId, nonce);
         if (check.getExpiresAt().isBefore(Instant.now()) || check.getLivenessSessionId() == null) {
             return verificationService.recordOutcome(
                     check, CheckStatus.EXPIRED, false, null, null, "liveness session expired", null);
@@ -102,49 +116,112 @@ public class LivenessService {
         if (!result.succeeded()) {
             return verificationService.recordOutcome(
                     check, CheckStatus.VERIFICATION_ERROR, false, null, null,
-                    "liveness scan did not complete (session "
-                            + String.valueOf(result.status()).toLowerCase(Locale.ROOT) + ")",
+                    "The face scan did not complete (session "
+                            + String.valueOf(result.status()).toLowerCase(Locale.ROOT)
+                            + "): the camera stream ended before the challenge finished. The scan is offered again.",
                     null);
         }
 
-        var reference = referenceImages
-                .findByEmployeeIdAndStatus(check.getEmployeeId(), ReferenceImageStatus.ACTIVE)
-                .orElse(null);
-        if (reference == null) {
+        // Compare the frame captured during the scan (or a stub placeholder) to every
+        // reference on file; the best match decides. This runs even when liveness is
+        // low, so a reviewer sees both signals instead of a bare flag.
+        byte[] captured = result.referenceJpeg() != null ? result.referenceJpeg() : new byte[] {1};
+        var match = verificationService.bestMatch(check.getEmployeeId(), captured);
+        if (match == null) {
             return verificationService.recordOutcome(
                     check, CheckStatus.VERIFICATION_ERROR, false, null, result.confidence(),
-                    "no active reference image enrolled", null);
+                    "No reference image is enrolled for this employee: an administrator must upload "
+                            + "an ID or photo before the face can be verified.",
+                    null);
         }
-
-        // Compare the frame captured during the scan (or a stub placeholder) to the
-        // enrolled image. This runs even when the live-person confidence is low, so a
-        // reviewer sees both signals — who it looked like and how live it looked —
-        // instead of a bare flag with nothing to review.
-        byte[] captured = result.referenceJpeg() != null ? result.referenceJpeg() : new byte[] {1};
-        var outcome = verifier.verify(captured, storage.load(reference.getS3Key()));
+        var outcome = match.outcome();
         if (outcome.similarity() == null) {
             return verificationService.recordOutcome(
                     check, outcome.status(), false, null, result.confidence(), outcome.errorDetail(), captured);
         }
 
         var policy = policyService.effectiveForEmployee(check.getEmployeeId());
-        var mapped = VerificationService.mapSimilarity(
-                outcome.similarity(), policy.getMatchThreshold().doubleValue(),
-                policy.getReviewThreshold().doubleValue());
+        double matchThreshold = policy.getMatchThreshold().doubleValue();
+        double reviewThreshold = policy.getReviewThreshold().doubleValue();
+        var mapped = VerificationService.mapSimilarity(outcome.similarity(), matchThreshold, reviewThreshold);
+        String against = describe(match.reference().getSource());
 
         // Spoof suspected: live-person confidence below threshold -> review, whatever
         // the face match said. The captured frame is retained as evidence.
         if (result.confidence() < livenessThreshold) {
+            String detail = String.format(Locale.ROOT,
+                    "Live-person confidence %.1f is below the required %.0f, so the scan could not confirm "
+                            + "a live person (possible photo or screen replay, poor lighting, or the face not "
+                            + "filling the frame). Face similarity to %s: %.1f (%s).",
+                    result.confidence(), livenessThreshold, against, outcome.similarity(), mapped.status());
             return verificationService.recordOutcome(
                     check, CheckStatus.CHECK, mapped.mismatchFlag(), outcome.similarity(),
-                    result.confidence(),
-                    String.format(Locale.ROOT, "liveness confidence %.1f below threshold %.0f (face match: %s)",
-                            result.confidence(), livenessThreshold, mapped.status()),
-                    captured);
+                    result.confidence(), detail, captured);
         }
-        byte[] evidence = mapped.status() == CheckStatus.MATCH ? null : captured;
+
+        if (mapped.status() == CheckStatus.MATCH) {
+            enrollLiveReferenceIfFirst(check, result, captured);
+            return verificationService.recordOutcome(
+                    check, CheckStatus.MATCH, false, outcome.similarity(), result.confidence(), null, null);
+        }
+
+        String detail = mapped.mismatchFlag()
+                ? String.format(Locale.ROOT,
+                        "Face similarity %.1f to %s is below the review threshold %.0f: the face does not "
+                                + "match the references on file. Live-person confidence %.1f (OK).",
+                        outcome.similarity(), against, reviewThreshold, result.confidence())
+                : String.format(Locale.ROOT,
+                        "Face similarity %.1f to %s is between the review threshold %.0f and the match "
+                                + "threshold %.0f: a borderline match, please compare the pictures. "
+                                + "Live-person confidence %.1f (OK).",
+                        outcome.similarity(), against, reviewThreshold, matchThreshold, result.confidence());
         return verificationService.recordOutcome(
                 check, mapped.status(), mapped.mismatchFlag(), outcome.similarity(),
-                result.confidence(), null, evidence);
+                result.confidence(), detail, captured);
+    }
+
+    /**
+     * The first scan that passes liveness and matches the uploaded ID/photo becomes
+     * the employee's second reference: later checks are compared against both, so
+     * day-to-day matching is against a real frame of the person at their desk and
+     * not only an ID photo.
+     */
+    private void enrollLiveReferenceIfFirst(
+            VerificationCheck check, LivenessProvider.Result result, byte[] captured) {
+        if (result.referenceJpeg() == null) {
+            return; // no real frame (stub provider): nothing to enroll
+        }
+        if (referenceImages.findByEmployeeIdAndStatusAndSource(
+                check.getEmployeeId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT)
+                .isPresent()) {
+            return;
+        }
+        var reference = new ReferenceImage();
+        reference.setEmployeeId(check.getEmployeeId());
+        reference.setSource(ReferenceImageSource.LIVE_ENROLLMENT);
+        reference.setCreatedBy("liveness-check:" + check.getId());
+        reference.setS3Key(storage.store(
+                "reference/" + check.getEmployeeId() + "/live-" + reference.getId() + ".jpg", captured));
+        referenceImages.save(reference);
+        audit.record("device:" + check.getDeviceId(), "LIVE_REFERENCE_ENROLLED", "employee",
+                check.getEmployeeId().toString(), "{\"checkId\":\"" + check.getId() + "\"}");
+    }
+
+    private static String describe(ReferenceImageSource source) {
+        return source == ReferenceImageSource.LIVE_ENROLLMENT ? "the enrolled live scan" : "the uploaded ID/photo";
+    }
+
+    private VerificationCheck pendingCheck(UUID checkId, String nonce) {
+        var check = checks.findById(checkId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "check not found"));
+        if (check.getStatus() != CheckStatus.PENDING) {
+            throw new ApiException(HttpStatus.CONFLICT, "check already completed");
+        }
+        if (!MessageDigest.isEqual(
+                check.getNonce().getBytes(StandardCharsets.UTF_8),
+                nonce.getBytes(StandardCharsets.UTF_8))) {
+            throw new ApiException(HttpStatus.CONFLICT, "nonce mismatch");
+        }
+        return check;
     }
 }

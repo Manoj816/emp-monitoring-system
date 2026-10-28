@@ -1,6 +1,7 @@
 package com.empverify.api;
 
 import com.empverify.domain.Employee;
+import com.empverify.domain.Enums.ReferenceImageSource;
 import com.empverify.domain.Enums.ReferenceImageStatus;
 import com.empverify.domain.ReferenceImage;
 import com.empverify.repo.EmployeeRepository;
@@ -69,7 +70,11 @@ public class AdminController {
 
     public record EmployeeResponse(
             String id, String employeeCode, String fullName, String email,
-            String department, String status, boolean hasReferenceImage) {}
+            String department, String status,
+            /** An administrator has uploaded the ID/photo reference. */
+            boolean hasReferenceImage,
+            /** The employee's first live scan matched it and is now the second reference. */
+            boolean hasLiveEnrollment) {}
 
     public record EnrollmentTokenResponse(String enrollmentToken) {}
 
@@ -161,14 +166,17 @@ public class AdminController {
         var employee = employees.findById(employeeId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "employee not found"));
 
-        referenceImages.findByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE)
-                .ifPresent(previous -> {
+        // A new ID/photo supersedes the previous upload AND the live enrollment that
+        // was matched against it: the employee's next check re-enrolls.
+        referenceImages.findAllByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE)
+                .forEach(previous -> {
                     previous.setStatus(ReferenceImageStatus.REPLACED);
                     referenceImages.save(previous);
                 });
 
         var reference = new ReferenceImage();
         reference.setEmployeeId(employeeId);
+        reference.setSource(ReferenceImageSource.ADMIN_UPLOAD);
         reference.setCreatedBy("admin");
         try {
             reference.setS3Key(storage.store(
@@ -249,12 +257,25 @@ public class AdminController {
                 request.resolution());
     }
 
-    /** The employee's active reference image, shown next to the evidence when reviewing a check. */
+    /** The uploaded ID/photo reference, shown next to the evidence when reviewing a check. */
     @GetMapping("/employees/{employeeId}/reference-image")
     public org.springframework.http.ResponseEntity<byte[]> referenceImage(@PathVariable UUID employeeId) {
-        var reference = referenceImages.findByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "no active reference image"));
-        audit.record("admin", "REFERENCE_IMAGE_VIEWED", "employee", employeeId.toString(), null);
+        return serveReference(employeeId, ReferenceImageSource.ADMIN_UPLOAD);
+    }
+
+    /** The frame from the employee's first matching live scan (the live-enrollment reference). */
+    @GetMapping("/employees/{employeeId}/enrolled-image")
+    public org.springframework.http.ResponseEntity<byte[]> enrolledImage(@PathVariable UUID employeeId) {
+        return serveReference(employeeId, ReferenceImageSource.LIVE_ENROLLMENT);
+    }
+
+    private org.springframework.http.ResponseEntity<byte[]> serveReference(
+            UUID employeeId, ReferenceImageSource source) {
+        var reference = referenceImages
+                .findByEmployeeIdAndStatusAndSource(employeeId, ReferenceImageStatus.ACTIVE, source)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "no active " + source + " reference"));
+        audit.record("admin", "REFERENCE_IMAGE_VIEWED", "employee", employeeId.toString(),
+                "{\"source\":\"" + source + "\"}");
         return org.springframework.http.ResponseEntity.ok()
                 .header("Content-Type", "image/jpeg")
                 .body(storage.load(reference.getS3Key()));
@@ -275,11 +296,12 @@ public class AdminController {
     }
 
     private EmployeeResponse toResponse(Employee employee) {
-        boolean hasImage = referenceImages
-                .findByEmployeeIdAndStatus(employee.getId(), ReferenceImageStatus.ACTIVE)
-                .isPresent();
+        boolean hasImage = referenceImages.findByEmployeeIdAndStatusAndSource(
+                employee.getId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.ADMIN_UPLOAD).isPresent();
+        boolean hasLive = referenceImages.findByEmployeeIdAndStatusAndSource(
+                employee.getId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT).isPresent();
         return new EmployeeResponse(
                 employee.getId().toString(), employee.getEmployeeCode(), employee.getFullName(),
-                employee.getEmail(), employee.getDepartment(), employee.getStatus().name(), hasImage);
+                employee.getEmail(), employee.getDepartment(), employee.getStatus().name(), hasImage, hasLive);
     }
 }

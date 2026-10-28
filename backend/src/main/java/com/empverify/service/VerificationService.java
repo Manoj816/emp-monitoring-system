@@ -3,6 +3,7 @@ package com.empverify.service;
 import com.empverify.domain.Enums.CheckStatus;
 import com.empverify.domain.Enums.CheckType;
 import com.empverify.domain.Enums.ReferenceImageStatus;
+import com.empverify.domain.ReferenceImage;
 import com.empverify.domain.VerificationCheck;
 import com.empverify.repo.ReferenceImageRepository;
 import com.empverify.repo.VerificationCheckRepository;
@@ -149,15 +150,12 @@ public class VerificationService {
      */
     private VerificationCheck runComparison(
             VerificationCheck check, byte[] imageBytes, String cameraDeviceName) {
-        var reference = referenceImages
-                .findByEmployeeIdAndStatus(check.getEmployeeId(), ReferenceImageStatus.ACTIVE)
-                .orElse(null);
-        if (reference == null) {
+        var match = bestMatch(check.getEmployeeId(), imageBytes);
+        if (match == null) {
             return complete(check, CheckStatus.VERIFICATION_ERROR, false, null,
                     "no active reference image enrolled", imageBytes);
         }
-
-        var outcome = verifier.verify(imageBytes, storage.load(reference.getS3Key()));
+        var outcome = match.outcome();
 
         if (outcome.similarity() == null) {
             return complete(check, outcome.status(), false, null, outcome.errorDetail(), imageBytes);
@@ -281,6 +279,33 @@ public class VerificationService {
         audit.record("device:" + check.getDeviceId(), "CHECK_ABANDONED", "check",
                 check.getId().toString(), "{\"reason\":\"" + reason.name() + "\"}");
         return saved;
+    }
+
+    /** The reference a captured frame resembled most, with the verifier's outcome against it. */
+    public record ReferenceMatch(ReferenceImage reference, FaceVerifier.Outcome outcome) {}
+
+    /**
+     * Compares a captured frame against every active reference for the employee —
+     * the uploaded ID/photo and, once enrolled, the frame from their first live
+     * scan — and keeps the best similarity. Null when nothing is enrolled.
+     */
+    public ReferenceMatch bestMatch(UUID employeeId, byte[] captured) {
+        var references = referenceImages.findAllByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE);
+        ReferenceMatch best = null;
+        for (var reference : references) {
+            var outcome = verifier.verify(captured, storage.load(reference.getS3Key()));
+            if (best == null || isBetter(outcome, best.outcome())) {
+                best = new ReferenceMatch(reference, outcome);
+            }
+        }
+        return best;
+    }
+
+    private static boolean isBetter(FaceVerifier.Outcome candidate, FaceVerifier.Outcome current) {
+        if (candidate.similarity() == null) {
+            return false;
+        }
+        return current.similarity() == null || candidate.similarity() > current.similarity();
     }
 
     public record MappedResult(CheckStatus status, boolean mismatchFlag) {}

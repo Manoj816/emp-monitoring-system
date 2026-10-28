@@ -137,6 +137,12 @@ paths:
                   assigned:
                     type: boolean
                     description: True once linked to an employee and ACTIVE; checks require this.
+                  enrolled:
+                    type: boolean
+                    description: >
+                      True once the employee's first live scan has matched the uploaded
+                      ID/photo (its frame then becomes a second reference). Until then the
+                      agent opens the day's check as ENROLLMENT instead of PERIODIC.
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/policy:
@@ -168,14 +174,18 @@ paths:
       summary: Open a verification check
       description: >
         Issues a one-time check ID and nonce with a short expiry (replay protection).
-        The agent then prompts the employee, captures a frame, and uploads it.
+        The agent then opens the scan page for the employee (or, for the device-side
+        capture, prompts, captures a frame and uploads it). ENROLLMENT is the first
+        live scan after assignment, matched against the uploaded ID/photo; a MATCH
+        stores its frame as the employee's second reference. The check is never run
+        at the moment of assignment: it lands at a random time in the work window.
       parameters:
         - name: checkType
           in: query
           required: true
           schema:
             type: string
-            enum: [SESSION_START, PERIODIC, LIVENESS, ESCALATION]
+            enum: [ENROLLMENT, SESSION_START, PERIODIC, LIVENESS, ESCALATION]
       responses:
         "200":
           description: Check opened.
@@ -250,8 +260,14 @@ paths:
       summary: Create a Face Liveness session for this check
       description: >
         Backend creates the Rekognition Face Liveness session and returns a one-time
-        URL to the liveness page. The agent opens it in its own window, then polls
-        the result endpoint and closes the window once a verdict arrives.
+        URL to the liveness page. The agent opens it in its own full-screen window
+        (no close button; the check is required), then polls the result endpoint and
+        closes the window once a verdict arrives. If the employee cancels inside the
+        page or the scan errors, the page asks for a fresh session on the same check
+        (POST /api/v1/liveness/{checkId}/restart?token=, nonce-gated, a few times)
+        rather than ending the check. The frame captured during the scan is compared
+        against every reference on file (uploaded ID/photo and enrolled live scan);
+        a flag's errorDetail explains to a reviewer what went wrong.
       parameters:
         - { name: checkId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:

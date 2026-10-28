@@ -1,6 +1,7 @@
 namespace EmpVerify.Agent.Core;
 
-public enum CheckType { SessionStart, Periodic, Liveness, Escalation }
+/// <summary>Enrollment = the first live scan after assignment, matched against the uploaded ID/photo.</summary>
+public enum CheckType { Enrollment, SessionStart, Periodic, Liveness, Escalation }
 
 public enum CheckStatus { Pending, Match, Check, NoFace, MultipleFaces, VerificationError, Expired }
 
@@ -20,8 +21,12 @@ public sealed record LivenessSession(string LivenessUrl, DateTimeOffset ExpiresA
 
 public sealed record CaptureSession(string CaptureUrl, DateTimeOffset ExpiresAt);
 
-/// <summary>The device's own server-side state; Assigned is false until an admin links it to an employee.</summary>
-public sealed record DeviceState(string Status, bool Assigned);
+/// <summary>
+/// The device's own server-side state. Assigned is false until an admin links it to
+/// an employee; Enrolled is false until the employee's first live scan has matched
+/// the uploaded ID/photo (until then the next check is the enrollment scan).
+/// </summary>
+public sealed record DeviceState(string Status, bool Assigned, bool Enrolled);
 
 public sealed record CheckResult(
     string CheckId,

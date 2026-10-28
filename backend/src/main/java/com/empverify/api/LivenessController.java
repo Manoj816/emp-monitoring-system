@@ -34,10 +34,22 @@ public class LivenessController {
         return CheckController.toResult(livenessService.completeLiveness(checkId, token));
     }
 
+    public record RestartResponse(String sessionId) {}
+
     /**
-     * The employee cancelled inside the page, or the scan errored. Ends the check
-     * as EXPIRED with the reason right away, so the agent (polling the result) can
-     * offer the scan again instead of waiting for the full response window.
+     * A fresh liveness session for the same check, so a scan the employee cancelled
+     * or that errored starts again in place. The check is required: cancelling only
+     * restarts it, and the response window keeps running.
+     */
+    @PostMapping("/{checkId}/restart")
+    public RestartResponse restart(@PathVariable UUID checkId, @RequestParam @NotBlank String token) {
+        return new RestartResponse(livenessService.restartSession(checkId, token));
+    }
+
+    /**
+     * The page gave up (restarts exhausted, or the scan cannot run on this device).
+     * Ends the check as EXPIRED with the reason right away, so the agent (polling
+     * the result) can offer the scan again instead of waiting for the full window.
      */
     @PostMapping("/{checkId}/cancel")
     public CheckController.CheckResultResponse cancel(

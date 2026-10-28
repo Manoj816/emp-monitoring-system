@@ -45,7 +45,7 @@ public sealed class AgentApiClient : IAgentApi
     }
 
     private sealed record ProvisionRequest(string ProvisioningToken, string Platform, string? Hostname, string? AgentVersion);
-    private sealed record MeResponse(string DeviceId, string Status, bool Assigned);
+    private sealed record MeResponse(string DeviceId, string Status, bool Assigned, bool Enrolled);
 
     public async Task<DeviceCredentials> ProvisionAsync(
         string provisioningToken, string platform, string? hostname, string? agentVersion, CancellationToken ct)
@@ -61,7 +61,7 @@ public sealed class AgentApiClient : IAgentApi
     public async Task<DeviceState> GetDeviceStateAsync(CancellationToken ct)
     {
         var body = (await _http.GetFromJsonAsync<MeResponse>("/api/v1/devices/me", ct))!;
-        return new DeviceState(body.Status, body.Assigned);
+        return new DeviceState(body.Status, body.Assigned, body.Enrolled);
     }
 
     public async Task<string> AuthenticateAsync(DeviceCredentials credentials, CancellationToken ct)
@@ -90,6 +90,7 @@ public sealed class AgentApiClient : IAgentApi
     {
         var checkType = type switch
         {
+            CheckType.Enrollment => "ENROLLMENT",
             CheckType.SessionStart => "SESSION_START",
             CheckType.Periodic => "PERIODIC",
             CheckType.Liveness => "LIVENESS",

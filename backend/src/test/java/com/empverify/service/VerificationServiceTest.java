@@ -70,8 +70,8 @@ class VerificationServiceTest {
         var ref = new ReferenceImage();
         ref.setEmployeeId(employeeId);
         ref.setS3Key("reference/key.jpg");
-        when(referenceImages.findByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE))
-                .thenReturn(Optional.of(ref));
+        when(referenceImages.findAllByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE))
+                .thenReturn(java.util.List.of(ref));
         when(storage.load("reference/key.jpg")).thenReturn(new byte[] {1, 2, 3});
         var device = new Device();
         device.setEmployeeId(employeeId);
@@ -127,8 +127,8 @@ class VerificationServiceTest {
         when(checks.findById(check.getId())).thenReturn(Optional.of(check));
         var ref = new ReferenceImage();
         ref.setS3Key("reference/key.jpg");
-        when(referenceImages.findByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE))
-                .thenReturn(Optional.of(ref));
+        when(referenceImages.findAllByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE))
+                .thenReturn(java.util.List.of(ref));
         when(storage.load(any())).thenReturn(new byte[] {1});
         when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
         when(verifier.verify(any(), any()))
@@ -168,8 +168,8 @@ class VerificationServiceTest {
     void missingReferenceImageYieldsVerificationError() {
         var check = pendingCheck("nonce-1", Instant.now().plusSeconds(60));
         when(checks.findById(check.getId())).thenReturn(Optional.of(check));
-        when(referenceImages.findByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE))
-                .thenReturn(Optional.empty());
+        when(referenceImages.findAllByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE))
+                .thenReturn(java.util.List.of());
         when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
 
         var result = service.capture(deviceId, check.getId(), "nonce-1", new byte[] {9}, "Integrated Camera");

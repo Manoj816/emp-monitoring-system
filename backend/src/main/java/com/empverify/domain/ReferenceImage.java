@@ -1,5 +1,6 @@
 package com.empverify.domain;
 
+import com.empverify.domain.Enums.ReferenceImageSource;
 import com.empverify.domain.Enums.ReferenceImageStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -27,6 +28,10 @@ public class ReferenceImage {
     @Column(nullable = false)
     private ReferenceImageStatus status = ReferenceImageStatus.ACTIVE;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ReferenceImageSource source = ReferenceImageSource.ADMIN_UPLOAD;
+
     @Column(name = "created_by", nullable = false)
     private String createdBy;
 
@@ -34,6 +39,9 @@ public class ReferenceImage {
     private Instant createdAt = Instant.now();
 
     public UUID getId() { return id; }
+    public ReferenceImageSource getSource() { return source; }
+    public void setSource(ReferenceImageSource v) { this.source = v; }
+    public Instant getCreatedAt() { return createdAt; }
     public UUID getEmployeeId() { return employeeId; }
     public void setEmployeeId(UUID v) { this.employeeId = v; }
     public String getS3Key() { return s3Key; }

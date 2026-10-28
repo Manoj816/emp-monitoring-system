@@ -1,6 +1,9 @@
 package com.empverify.api;
 
 import com.empverify.domain.Enums.DeviceStatus;
+import com.empverify.domain.Enums.ReferenceImageSource;
+import com.empverify.domain.Enums.ReferenceImageStatus;
+import com.empverify.repo.ReferenceImageRepository;
 import com.empverify.service.DeviceService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -22,9 +25,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class DeviceController {
 
     private final DeviceService deviceService;
+    private final ReferenceImageRepository referenceImages;
 
-    public DeviceController(DeviceService deviceService) {
+    public DeviceController(DeviceService deviceService, ReferenceImageRepository referenceImages) {
         this.deviceService = deviceService;
+        this.referenceImages = referenceImages;
     }
 
     public record RegisterRequest(
@@ -45,7 +50,12 @@ public class DeviceController {
 
     public record AuthResponse(String accessToken, long expiresInSeconds) {}
 
-    public record MeResponse(String deviceId, String status, boolean assigned) {}
+    /**
+     * @param assigned linked to an employee and ACTIVE; checks require this
+     * @param enrolled the employee's first live scan has matched the uploaded ID/photo;
+     *                 until then the next check is the enrollment scan
+     */
+    public record MeResponse(String deviceId, String status, boolean assigned, boolean enrolled) {}
 
     /**
      * Exchanges a one-time enrollment token (issued by an admin for one employee)
@@ -82,6 +92,9 @@ public class DeviceController {
     public MeResponse me(Authentication auth) {
         var device = deviceService.getDevice(UUID.fromString(auth.getName()));
         boolean assigned = device.getEmployeeId() != null && device.getStatus() == DeviceStatus.ACTIVE;
-        return new MeResponse(device.getId().toString(), device.getStatus().name(), assigned);
+        boolean enrolled = assigned && referenceImages.findByEmployeeIdAndStatusAndSource(
+                device.getEmployeeId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT)
+                .isPresent();
+        return new MeResponse(device.getId().toString(), device.getStatus().name(), assigned, enrolled);
     }
 }

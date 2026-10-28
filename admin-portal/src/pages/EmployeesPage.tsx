@@ -126,7 +126,7 @@ export default function EmployeesPage() {
         <thead>
           <tr>
             <th>Code</th><th>Name</th><th>Email</th><th>Department</th><th>Status</th>
-            <th>Reference image</th><th>Actions</th>
+            <th>ID / photo</th><th>Live enrollment</th><th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -139,8 +139,13 @@ export default function EmployeesPage() {
               <td><span className={`badge ${emp.status === "ACTIVE" ? "match" : "neutral"}`}>{emp.status}</span></td>
               <td>
                 {emp.hasReferenceImage
-                  ? <span className="badge match">enrolled</span>
+                  ? <span className="badge match">uploaded</span>
                   : <span className="badge check">missing</span>}
+              </td>
+              <td title="The first live face scan that matches the uploaded ID/photo becomes the second reference.">
+                {emp.hasLiveEnrollment
+                  ? <span className="badge match">done</span>
+                  : <span className="badge neutral">pending first scan</span>}
               </td>
               <td style={{ whiteSpace: "nowrap" }}>
                 <button className="action" disabled={busy} onClick={() => setCameraFor(emp)}>Webcam</button>{" "}
@@ -156,7 +161,7 @@ export default function EmployeesPage() {
             </tr>
           ))}
           {employees.length === 0 && (
-            <tr><td colSpan={7} className="muted">No employees yet — add one above.</td></tr>
+            <tr><td colSpan={8} className="muted">No employees yet — add one above.</td></tr>
           )}
         </tbody>
       </table>

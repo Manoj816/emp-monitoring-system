@@ -48,8 +48,16 @@ public partial class MainWindow : Window
     private DateTimeOffset? _sessionStartRetryAt;
     private int _sessionStartAttempts;
     private DateTimeOffset? _checkRetryAt;
+    private bool _checkRetryIsDemo;
     private int _checkRetriesLeft;
+    private DeviceState? _deviceState;
+    private DateTime _planDate = DateTime.MinValue;
     private bool _exiting;
+
+    /// <summary>A check planned at activation lands at least this far in the future.</summary>
+    private static readonly TimeSpan PlanLead = TimeSpan.FromMinutes(1);
+    /// <summary>A same-day retry after a miss is at least this far from the miss.</summary>
+    private static readonly TimeSpan RetryLead = TimeSpan.FromMinutes(5);
     private WinForms.NotifyIcon? _trayIcon;
 
     public MainWindow()
@@ -208,6 +216,7 @@ public partial class MainWindow : Window
         try
         {
             var state = await _api.GetDeviceStateAsync(CancellationToken.None);
+            _deviceState = state;
             if (!state.Assigned)
             {
                 EnterAwaitingAssignment();
@@ -244,8 +253,14 @@ public partial class MainWindow : Window
             // Agent is active: make sure it starts at login (no-op when MSIX-packaged).
             StartupManager.EnsureEnabled();
 
-            _plan = _scheduler.PlanDay(_policy, DateTimeOffset.Now);
-            _lastHandled = DateTimeOffset.Now;
+            // The day's check lands at a random time in what is left of the work window —
+            // never at the moment of assignment, which may not be when the employee is there.
+            var now = DateTimeOffset.Now;
+            _plan = _scheduler.PlanRemainingDay(_policy, now, PlanLead);
+            _planDate = DateTime.Today;
+            _lastHandled = now;
+            _checkRetriesLeft = _settings.MissedCheckRetries;
+            _checkRetryAt = null;
             _timer.Start();
 
             await SetCheckButtonsEnabled(true);
@@ -258,8 +273,7 @@ public partial class MainWindow : Window
             {
                 Log($"Demo mode: a check every {_settings.DemoIntervalMinutes} min.");
             }
-            var next = _scheduler.NextCheck(_plan, DateTimeOffset.Now);
-            Log(next is null ? "No more checks planned today." : $"Next scheduled check: {next:HH:mm}.");
+            LogNextCheck();
         }
         catch (Exception ex)
         {
@@ -299,19 +313,71 @@ public partial class MainWindow : Window
         SetStatus($"Face scan required — reopens at {retryAt:HH:mm}.");
     }
 
-    /// <summary>A scheduled check that ended without a scan is offered again, a bounded number of times.</summary>
-    private void ScheduleCheckRetry(CheckType type)
+    /// <summary>
+    /// A scheduled check that ended without a scan: the miss is already recorded on
+    /// the server for the administrator; one more attempt is made at a random later
+    /// time today (a fixed delay for demo-driven checks), a bounded number of times.
+    /// </summary>
+    private void ScheduleCheckRetry(CheckType type, bool demo)
     {
         if (_checkRetriesLeft <= 0)
         {
-            Log($"{type} check recorded as missed.");
+            Log($"{Label(type)} missed — recorded for the administrator; no further attempt today.");
+            return;
+        }
+        var retryAt = demo
+            ? DateTimeOffset.Now.AddMinutes(Math.Max(1, _settings.RetryMinutes))
+            : _scheduler.RetryLaterToday(_policy!, DateTimeOffset.Now, RetryLead);
+        if (retryAt is null)
+        {
+            Log($"{Label(type)} missed — recorded for the administrator; no time left in today's work window.");
             return;
         }
         _checkRetriesLeft--;
-        var retryAt = DateTimeOffset.Now.AddMinutes(Math.Max(1, _settings.RetryMinutes));
         _checkRetryAt = retryAt;
-        Log($"{type} check will be offered again at {retryAt:HH:mm}.");
+        _checkRetryIsDemo = demo;
+        Log($"{Label(type)} missed — recorded for the administrator; one more attempt at {retryAt:HH:mm}.");
     }
+
+    private void LogNextCheck()
+    {
+        var next = _scheduler.NextCheck(_plan, DateTimeOffset.Now);
+        if (next is null)
+        {
+            Log("No check planned for the rest of today.");
+            return;
+        }
+        Log(_deviceState is { Enrolled: false }
+            ? $"Next scheduled check: {next:HH:mm} — the enrollment scan, matched against the photo on file."
+            : $"Next scheduled check: {next:HH:mm}.");
+    }
+
+    /// <summary>
+    /// Which check the day's scan is: the enrollment scan until the employee's first
+    /// live scan has matched the uploaded ID/photo, a periodic liveness check after.
+    /// </summary>
+    private async Task<CheckType> ResolveScheduledCheckTypeAsync()
+    {
+        try
+        {
+            await EnsureAuthenticatedAsync(CancellationToken.None);
+            _deviceState = await _api!.GetDeviceStateAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            Log($"Could not read enrollment state: {ex.Message}");
+        }
+        return _deviceState is { Enrolled: false } ? CheckType.Enrollment : CheckType.Periodic;
+    }
+
+    private static string Label(CheckType type) => type switch
+    {
+        CheckType.Enrollment => "Enrollment scan",
+        CheckType.SessionStart => "Session-start scan",
+        CheckType.Periodic => "Daily check",
+        CheckType.Liveness => "Liveness check",
+        _ => $"{type} check",
+    };
 
     /// <summary>Refreshes the short-lived device token before a check so a long-running agent never 403s.</summary>
     private async Task EnsureAuthenticatedAsync(CancellationToken ct)
@@ -352,6 +418,17 @@ public partial class MainWindow : Window
         }
         var now = DateTimeOffset.Now;
 
+        // A new day: plan it afresh (the agent may run for weeks without a restart).
+        if (DateTime.Today != _planDate)
+        {
+            _plan = _scheduler.PlanDay(_policy, now);
+            _planDate = DateTime.Today;
+            _lastHandled = now;
+            _checkRetriesLeft = _settings.MissedCheckRetries;
+            _checkRetryAt = null;
+            LogNextCheck();
+        }
+
         // A missed session-start scan is required: reopen it when its retry time arrives.
         if (!_sessionStartDone && _sessionStartRetryAt is { } retryAt && now >= retryAt)
         {
@@ -359,11 +436,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        // A missed scheduled check is offered again (bounded by MissedCheckRetries).
+        // The one more attempt after a missed check.
         if (_checkRetryAt is { } again && now >= again)
         {
             _checkRetryAt = null;
-            await RunCheckAsync(CheckType.Periodic, scheduled: true);
+            await RunCheckAsync(await ResolveScheduledCheckTypeAsync(), scheduled: true, demo: _checkRetryIsDemo);
             return;
         }
 
@@ -374,7 +451,7 @@ public partial class MainWindow : Window
             {
                 _lastDemoCheck = now;
                 _checkRetriesLeft = _settings.MissedCheckRetries;
-                await RunCheckAsync(CheckType.Periodic, scheduled: true);
+                await RunCheckAsync(await ResolveScheduledCheckTypeAsync(), scheduled: true, demo: true);
             }
             return;
         }
@@ -385,7 +462,7 @@ public partial class MainWindow : Window
             _demoScheduledAt = null;
             DemoStatusText.Text = "";
             _checkRetriesLeft = _settings.MissedCheckRetries;
-            await RunCheckAsync(CheckType.Periodic, scheduled: true);
+            await RunCheckAsync(await ResolveScheduledCheckTypeAsync(), scheduled: true, demo: true);
             return;
         }
 
@@ -397,12 +474,12 @@ public partial class MainWindow : Window
         }
         _lastHandled = now;
         _checkRetriesLeft = _settings.MissedCheckRetries;
-        await RunCheckAsync(CheckType.Periodic, scheduled: true);
+        await RunCheckAsync(await ResolveScheduledCheckTypeAsync(), scheduled: true);
     }
 
     private async void VerifyNow_Click(object sender, RoutedEventArgs e)
     {
-        await RunCheckAsync(CheckType.Periodic);
+        await RunCheckAsync(await ResolveScheduledCheckTypeAsync());
     }
 
     private void DemoSchedule_Click(object sender, RoutedEventArgs e)
@@ -450,7 +527,7 @@ public partial class MainWindow : Window
     /// requirement.
     /// </summary>
     private async Task<FlowResult?> RunCheckAsync(
-        CheckType type, bool scheduled = false, bool forceLiveness = false)
+        CheckType type, bool scheduled = false, bool forceLiveness = false, bool demo = false)
     {
         if (_flow is null || _policy is null || _checkRunning)
         {
@@ -465,12 +542,14 @@ public partial class MainWindow : Window
             var window = TimeSpan.FromSeconds(_policy.ResponseTimeoutSeconds);
             if (forceLiveness || _settings.UseLivenessForChecks)
             {
-                Log($"{type} check: opening the face scan...");
+                Log(type == CheckType.Enrollment
+                    ? "Enrollment scan: opening the face scan — matched against the photo on file."
+                    : $"{Label(type)}: opening the face scan...");
                 result = await _flow.RunLivenessCheckAsync(type, window, CancellationToken.None);
             }
             else
             {
-                Log($"{type} check: opening the photo capture prompt...");
+                Log($"{Label(type)}: opening the photo capture prompt...");
                 result = await _flow.RunBrowserCaptureCheckAsync(type, window, CancellationToken.None);
             }
             Log(Describe(type, result));
@@ -480,6 +559,10 @@ public partial class MainWindow : Window
             if (result.HasVerdict && !technicalFailure)
             {
                 SetStatus($"Last check: {result.Result!.Status} at {DateTime.Now:HH:mm}.");
+                if (type == CheckType.Enrollment && result.Result.Status == CheckStatus.Match)
+                {
+                    Log("Enrollment complete: this scan is now the second reference for daily checks.");
+                }
                 if (!_sessionStartDone
                     && (type == CheckType.SessionStart || result.Result.LivenessConfidence is not null))
                 {
@@ -489,7 +572,7 @@ public partial class MainWindow : Window
             }
             else if (scheduled)
             {
-                ScheduleCheckRetry(type);
+                ScheduleCheckRetry(type, demo);
             }
         }
         catch (Exception ex)
@@ -507,14 +590,14 @@ public partial class MainWindow : Window
     private static string Describe(CheckType type, FlowResult result) => result.Outcome switch
     {
         FlowOutcome.Completed when result.HasVerdict =>
-            $"{type} check: {result.Result!.Status}" +
+            $"{Label(type)}: {result.Result!.Status}" +
             (result.Result.SimilarityScore is { } s ? $" (similarity {s:F1})" : "") +
             (result.Result.LivenessConfidence is { } c ? $" (liveness {c:F1})" : ""),
-        FlowOutcome.Completed => $"{type} check expired on the server before a scan was done.",
-        FlowOutcome.WindowClosed => $"{type} check: the scan window was closed before the scan finished.",
-        FlowOutcome.Cancelled => $"{type} check: the scan was cancelled or could not run.",
-        FlowOutcome.NotAccepted => $"{type} check missed (not completed within the response window).",
-        _ => $"{type} check failed.",
+        FlowOutcome.Completed => $"{Label(type)} expired on the server before a scan was done.",
+        FlowOutcome.WindowClosed => $"{Label(type)}: the scan window was closed before the scan finished.",
+        FlowOutcome.Cancelled => $"{Label(type)}: the scan was cancelled or could not run.",
+        FlowOutcome.NotAccepted => $"{Label(type)} not completed within the response window.",
+        _ => $"{Label(type)} failed.",
     };
 
     private async Task SetCheckButtonsEnabled(bool enabled)

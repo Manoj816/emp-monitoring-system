@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Input;
 using Microsoft.Web.WebView2.Core;
 
 namespace EmpVerify.Agent.Windows;
@@ -7,8 +8,10 @@ namespace EmpVerify.Agent.Windows;
 /// <summary>
 /// Hosts the interactive check page (capture or Face Liveness) in an embedded
 /// WebView2 so the agent owns the window: it opens it for a check and closes it
-/// the moment the server has a verdict. A shell-launched browser tab can't be
-/// closed by us, which is why the page isn't opened in the default browser.
+/// the moment the server has a verdict. The check is required, so the window is
+/// borderless, full-screen and always on top, with no close button and Alt+F4
+/// swallowed — the employee completes the scan, or the response window runs out
+/// and the miss is recorded. Only the agent (and an OS shutdown) can close it.
 /// </summary>
 public partial class CaptureWindow : Window
 {
@@ -23,6 +26,17 @@ public partial class CaptureWindow : Window
         InitializeComponent();
         _url = url;
         Loaded += async (_, _) => await InitializeAsync();
+    }
+
+    protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
+    {
+        // No skipping: Alt+F4 would close the window around the scan.
+        if (e.Key == Key.System && e.SystemKey == Key.F4)
+        {
+            e.Handled = true;
+            return;
+        }
+        base.OnPreviewKeyDown(e);
     }
 
     private async Task InitializeAsync()
