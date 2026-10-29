@@ -1,0 +1,79 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "NoIdentityOrCredentialChanges",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateUser", "iam:DeleteUser", "iam:UpdateUser", "iam:CreateAccessKey", "iam:DeleteAccessKey",
+        "iam:UpdateAccessKey", "iam:CreateLoginProfile", "iam:UpdateLoginProfile", "iam:DeleteLoginProfile",
+        "iam:AttachUserPolicy", "iam:DetachUserPolicy", "iam:PutUserPolicy", "iam:DeleteUserPolicy",
+        "iam:PutUserPermissionsBoundary", "iam:DeleteUserPermissionsBoundary", "iam:AddUserToGroup",
+        "iam:RemoveUserFromGroup", "iam:CreateGroup", "iam:DeleteGroup", "iam:AttachGroupPolicy",
+        "iam:DetachGroupPolicy", "iam:PutGroupPolicy", "iam:DeleteGroupPolicy", "iam:CreateVirtualMFADevice",
+        "iam:DeleteVirtualMFADevice", "iam:EnableMFADevice", "iam:DeactivateMFADevice", "iam:ResyncMFADevice",
+        "iam:CreateSAMLProvider", "iam:UpdateAccountPasswordPolicy", "iam:DeleteAccountPasswordPolicy",
+        "iam:CreateServiceSpecificCredential", "iam:UploadSSHPublicKey", "iam:UploadSigningCertificate"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "GuardrailsCannotBeEdited",
+      "Effect": "Deny",
+      "Action": ["iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:SetDefaultPolicyVersion", "iam:DeletePolicy"],
+      "Resource": "arn:aws:iam::119331772192:policy/EmpVerify*"
+    },
+    {
+      "Sid": "InfraRoleCannotBeLoosened",
+      "Effect": "Deny",
+      "Action": [
+        "iam:UpdateAssumeRolePolicy", "iam:DeleteRole", "iam:AttachRolePolicy", "iam:DetachRolePolicy",
+        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:PutRolePermissionsBoundary",
+        "iam:DeleteRolePermissionsBoundary", "iam:UpdateRole"
+      ],
+      "Resource": "arn:aws:iam::119331772192:role/empverify-infra-admin"
+    },
+    {
+      "Sid": "NoAccountLevelOrAuditTampering",
+      "Effect": "Deny",
+      "Action": [
+        "organizations:*", "account:*", "aws-portal:*", "billing:*", "cur:*", "ce:*", "budgets:*",
+        "purchase-orders:*", "tax:*", "sso:*", "sso-directory:*", "identitystore:*", "controltower:*", "ram:*",
+        "cloudtrail:StopLogging", "cloudtrail:DeleteTrail", "cloudtrail:UpdateTrail", "cloudtrail:PutEventSelectors",
+        "config:Delete*", "config:Stop*", "guardduty:Delete*", "guardduty:Disassociate*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "NoComputeBeyondFargateAndTestDb",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:RunInstances", "ec2:StartInstances", "ec2:CreateFleet", "ec2:RequestSpotInstances",
+        "ec2:RequestSpotFleet", "ec2:CreateLaunchTemplate*", "ec2:CreateVolume", "ec2:CreateSnapshot*",
+        "ec2:CreateImage", "ec2:ImportImage", "ec2:ImportKeyPair", "ec2:CreateKeyPair", "ec2:CreateVpnConnection",
+        "ec2:CreateVpnGateway", "ec2:CreateCustomerGateway", "ec2:CreateTransitGateway*",
+        "ec2:CreateVpcPeeringConnection", "ec2:AcceptVpcPeeringConnection", "ec2:AllocateHosts",
+        "ec2:PurchaseHostReservation", "ec2:PurchaseReservedInstancesOffering", "ec2:CreateCapacityReservation",
+        "ec2:ModifyInstanceAttribute", "rds:CreateDBCluster", "rds:PurchaseReservedDBInstancesOffering",
+        "rds:RestoreDB*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BiometricImagesStayPrivate",
+      "Effect": "Deny",
+      "Action": ["s3:GetObject*", "s3:PutBucketAcl", "s3:PutObjectAcl", "s3:DeletePublicAccessBlock", "s3:PutBucketPolicy"],
+      "Resource": ["arn:aws:s3:::empverify-*", "arn:aws:s3:::empverify-*/*"]
+    },
+    {
+      "Sid": "OnlyProjectRegion",
+      "Effect": "Deny",
+      "NotAction": [
+        "iam:*", "sts:*", "cloudfront:*", "route53:*", "route53domains:*", "support:*", "health:*",
+        "globalaccelerator:*"
+      ],
+      "Resource": "*",
+      "Condition": { "StringNotEquals": { "aws:RequestedRegion": "us-east-1" } }
+    }
+  ]
+}

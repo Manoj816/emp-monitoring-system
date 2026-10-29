@@ -51,8 +51,10 @@ resource "aws_iam_role" "github_deploy" {
   })
 }
 
-# Phase 1 deploy permissions: ECR push + ECS redeploy. Broaden deliberately and
-# minimally as infrastructure modules are added (S3 sync, Amplify, etc.).
+# Deploy permissions: ECR push + a new ECS task-definition revision + service
+# update (what .github/workflows/backend.yml does). Mirrors infra/iam/
+# github-deploy-role-policy.json. Broaden deliberately and minimally as
+# infrastructure modules are added (S3 sync, Amplify, etc.).
 resource "aws_iam_role_policy" "deploy" {
   name = "empverify-deploy"
   role = aws_iam_role.github_deploy.id
@@ -63,7 +65,7 @@ resource "aws_iam_role_policy" "deploy" {
       {
         Sid      = "EcrAuth"
         Effect   = "Allow"
-        Action   = ["ecr:GetAuthorizationToken"]
+        Action   = "ecr:GetAuthorizationToken"
         Resource = "*"
       },
       {
@@ -81,6 +83,12 @@ resource "aws_iam_role_policy" "deploy" {
         Resource = "arn:aws:ecr:${var.aws_region}:*:repository/empverify-*"
       },
       {
+        Sid      = "TaskDefinitions"
+        Effect   = "Allow"
+        Action   = ["ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition"]
+        Resource = "*"
+      },
+      {
         Sid    = "EcsDeploy"
         Effect = "Allow"
         Action = [
@@ -90,6 +98,20 @@ resource "aws_iam_role_policy" "deploy" {
         Resource = "*"
         Condition = {
           ArnLike = { "ecs:cluster" = "arn:aws:ecs:${var.aws_region}:*:cluster/empverify-*" }
+        }
+      },
+      {
+        # The task definition names the execution and task roles; registering it
+        # requires passing them, and only to ECS.
+        Sid    = "PassTaskRolesToEcsOnly"
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        Resource = [
+          "arn:aws:iam::*:role/empverify-ecs-execution",
+          "arn:aws:iam::*:role/empverify-ecs-task",
+        ]
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
         }
       },
     ]

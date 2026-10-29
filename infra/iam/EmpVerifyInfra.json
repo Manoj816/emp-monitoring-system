@@ -1,0 +1,128 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ProjectServicesInRegion",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:*", "elasticloadbalancing:*", "application-autoscaling:*", "acm:*", "cloudwatch:*", "logs:*",
+        "ecs:*", "cognito-idp:*", "cognito-identity:*", "kms:*", "cloudtrail:LookupEvents", "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EcrList",
+      "Effect": "Allow",
+      "Action": ["ecr:GetAuthorizationToken", "ecr:DescribeRepositories", "ecr:ListTagsForResource"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EcrProjectRepos",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": "arn:aws:ecr:us-east-1:119331772192:repository/empverify-*"
+    },
+    {
+      "Sid": "RdsRead",
+      "Effect": "Allow",
+      "Action": ["rds:Describe*", "rds:ListTagsForResource"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RdsProject",
+      "Effect": "Allow",
+      "Action": "rds:*",
+      "Resource": [
+        "arn:aws:rds:us-east-1:119331772192:db:empverify-*",
+        "arn:aws:rds:us-east-1:119331772192:subgrp:empverify-*",
+        "arn:aws:rds:us-east-1:119331772192:snapshot:empverify-*",
+        "arn:aws:rds:us-east-1:119331772192:pg:*",
+        "arn:aws:rds:us-east-1:119331772192:og:*",
+        "arn:aws:rds:us-east-1:119331772192:secgrp:*"
+      ]
+    },
+    {
+      "Sid": "S3List",
+      "Effect": "Allow",
+      "Action": ["s3:ListAllMyBuckets", "s3:GetBucketLocation"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3ProjectBuckets",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::empverify-*", "arn:aws:s3:::empverify-*/*"]
+    },
+    {
+      "Sid": "SecretsList",
+      "Effect": "Allow",
+      "Action": ["secretsmanager:ListSecrets", "secretsmanager:GetRandomPassword"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ProjectSecrets",
+      "Effect": "Allow",
+      "Action": "secretsmanager:*",
+      "Resource": "arn:aws:secretsmanager:us-east-1:119331772192:secret:empverify/*"
+    },
+    {
+      "Sid": "IamRead",
+      "Effect": "Allow",
+      "Action": [
+        "iam:ListRoles", "iam:ListPolicies", "iam:ListOpenIDConnectProviders", "iam:GetOpenIDConnectProvider",
+        "iam:ListRoleTags", "iam:ListPolicyTags"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ProjectRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:UpdateRole", "iam:UpdateRoleDescription",
+        "iam:UpdateAssumeRolePolicy", "iam:TagRole", "iam:UntagRole", "iam:PutRolePolicy", "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies",
+        "iam:ListInstanceProfilesForRole", "iam:PassRole", "iam:DetachRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::119331772192:role/empverify-*"
+    },
+    {
+      "Sid": "AttachOnlyProjectOrEcsManagedPolicies",
+      "Effect": "Allow",
+      "Action": "iam:AttachRolePolicy",
+      "Resource": "arn:aws:iam::119331772192:role/empverify-*",
+      "Condition": {
+        "ArnLike": {
+          "iam:PolicyARN": [
+            "arn:aws:iam::119331772192:policy/empverify-*",
+            "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ProjectPolicies",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreatePolicy", "iam:DeletePolicy", "iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions",
+        "iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:TagPolicy", "iam:UntagPolicy"
+      ],
+      "Resource": "arn:aws:iam::119331772192:policy/empverify-*"
+    },
+    {
+      "Sid": "ServiceLinkedRoles",
+      "Effect": "Allow",
+      "Action": ["iam:CreateServiceLinkedRole", "iam:GetRole"],
+      "Resource": "arn:aws:iam::119331772192:role/aws-service-role/*"
+    },
+    {
+      "Sid": "GithubOidcProvider",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateOpenIDConnectProvider", "iam:DeleteOpenIDConnectProvider", "iam:TagOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProviderThumbprint", "iam:AddClientIDToOpenIDConnectProvider",
+        "iam:RemoveClientIDFromOpenIDConnectProvider"
+      ],
+      "Resource": "arn:aws:iam::119331772192:oidc-provider/token.actions.githubusercontent.com"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DeployerWithMfaOnly",
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::119331772192:user/empverify-deployer" },
+      "Action": "sts:AssumeRole",
+      "Condition": { "Bool": { "aws:MultiFactorAuthPresent": "true" } }
+    }
+  ]
+}
