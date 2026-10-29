@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type AdminCheckRow, type ReviewResolution } from "../api";
+import DataTable from "../components/DataTable";
 
 const FILTERS = ["ALL", "CHECK", "MATCH", "MISSED", "ERRORS"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -56,7 +57,7 @@ export default function ChecksPage() {
 
   async function refresh() {
     try {
-      setRows(await api.listChecks(100));
+      setRows(await api.listChecks(500));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -113,47 +114,60 @@ export default function ChecksPage() {
 
       {error && <p className="error-text">{error}</p>}
 
-      <table>
-        <thead>
-          <tr>
-            <th>When</th><th>Employee</th><th>Type</th><th>Status</th>
-            <th>Similarity</th><th>Liveness</th><th>Review</th><th>Evidence</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visible.map((row) => (
-            <tr key={row.checkId}>
-              <td title={row.checkId}>{new Date(row.requestedAt).toLocaleString()}</td>
-              <td>{row.employeeName ?? row.employeeId.slice(0, 8)} <span className="muted">{row.employeeCode ?? ""}</span></td>
-              <td className="muted">{row.checkType}</td>
-              <td>
+      <DataTable
+        rows={visible}
+        rowKey={(row) => row.checkId}
+        emptyText="No checks match this filter."
+        columns={[
+          {
+            key: "when", header: "When",
+            value: (row) => new Date(row.requestedAt).toLocaleString(),
+            render: (row) => <span title={row.checkId}>{new Date(row.requestedAt).toLocaleString()}</span>,
+          },
+          {
+            key: "employee", header: "Employee",
+            value: (row) => `${row.employeeName ?? row.employeeId.slice(0, 8)} ${row.employeeCode ?? ""}`.trim(),
+            render: (row) => (
+              <>{row.employeeName ?? row.employeeId.slice(0, 8)} <span className="muted">{row.employeeCode ?? ""}</span></>
+            ),
+          },
+          { key: "type", header: "Type", filter: "select", value: (row) => row.checkType, cellStyle: { color: "var(--muted)" } },
+          {
+            key: "status", header: "Status", filter: "select",
+            value: (row) => statusLabel(row.status),
+            render: (row) => (
+              <>
                 <span className={badgeClass(row.status)}>{statusLabel(row.status)}</span>
                 {row.mismatchFlag && <span className="badge error" style={{ marginLeft: 4 }}>mismatch?</span>}
                 {row.errorDetail && <div className="muted" style={{ fontSize: 12, maxWidth: 420 }}>{row.errorDetail}</div>}
-              </td>
-              <td>{row.similarityScore?.toFixed(1) ?? "—"}</td>
-              <td>{row.livenessConfidence?.toFixed(1) ?? "—"}</td>
-              <td>
-                {row.reviewResolution ? (
-                  <span className="badge neutral">{row.reviewResolution}</span>
-                ) : row.status === "CHECK" || row.status === "MULTIPLE_FACES" ? (
-                  <button className="action" onClick={() => setReviewing(row)}>Review</button>
-                ) : (
-                  <span className="muted">—</span>
-                )}
-              </td>
-              <td>
-                {row.hasEvidence
-                  ? <button className="action" onClick={() => void showEvidence(row)}>View</button>
-                  : <span className="muted">not retained</span>}
-              </td>
-            </tr>
-          ))}
-          {visible.length === 0 && (
-            <tr><td colSpan={8} className="muted">No checks match this filter.</td></tr>
-          )}
-        </tbody>
-      </table>
+              </>
+            ),
+          },
+          { key: "similarity", header: "Similarity", value: (row) => row.similarityScore?.toFixed(1) ?? "—" },
+          { key: "liveness", header: "Liveness", value: (row) => row.livenessConfidence?.toFixed(1) ?? "—" },
+          {
+            key: "review", header: "Review", filter: "select",
+            value: (row) =>
+              row.reviewResolution ?? (row.status === "CHECK" || row.status === "MULTIPLE_FACES" ? "needs review" : "—"),
+            render: (row) =>
+              row.reviewResolution ? (
+                <span className="badge neutral">{row.reviewResolution}</span>
+              ) : row.status === "CHECK" || row.status === "MULTIPLE_FACES" ? (
+                <button className="action" onClick={() => setReviewing(row)}>Review</button>
+              ) : (
+                <span className="muted">—</span>
+              ),
+          },
+          {
+            key: "evidence", header: "Evidence", filter: "select",
+            value: (row) => (row.hasEvidence ? "retained" : "not retained"),
+            render: (row) =>
+              row.hasEvidence
+                ? <button className="action" onClick={() => void showEvidence(row)}>View</button>
+                : <span className="muted">not retained</span>,
+          },
+        ]}
+      />
 
       {reviewing && (
         <div className="overlay">

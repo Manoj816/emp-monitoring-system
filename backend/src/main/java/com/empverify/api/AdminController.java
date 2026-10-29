@@ -258,7 +258,7 @@ public class AdminController {
     /** Recent checks across the fleet, newest first, with employee context (dashboard feed). */
     @GetMapping("/checks")
     public List<AdminCheckRow> recentChecks(@RequestParam(defaultValue = "50") int limit) {
-        var rows = checks.findAllByOrderByRequestedAtDesc(PageRequest.of(0, Math.min(limit, 200)));
+        var rows = checks.findAllByOrderByRequestedAtDesc(PageRequest.of(0, Math.min(limit, 1000)));
         var employeesById = new java.util.HashMap<UUID, Employee>();
         employees.findAllById(rows.stream().map(c -> c.getEmployeeId()).distinct().toList())
                 .forEach(e -> employeesById.put(e.getId(), e));

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
+import DataTable from "../components/DataTable";
 
 function statusBadge(status: string): string {
   if (status === "ACTIVE") return "badge match";
@@ -104,29 +105,41 @@ export default function DevicesPage() {
       </p>
       {error && <p className="error-text">{error}</p>}
 
-      <table>
-        <thead>
-          <tr>
-            <th>Employee</th><th>Hostname</th><th>Status</th>
-            <th>Agent</th><th>Registered</th><th>Last seen</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {devices.map((d) => (
-            <tr key={d.id}>
-              <td>
-                {d.employeeId === null ? (
-                  <span className="badge check">Unassigned</span>
-                ) : (
-                  d.employeeName ?? d.employeeId.slice(0, 8)
-                )}
-              </td>
-              <td>{d.hostname ?? "—"}</td>
-              <td><span className={statusBadge(d.status)}>{d.status}</span></td>
-              <td className="muted">{d.agentVersion ?? "—"}</td>
-              <td className="muted">{d.registeredAt ? new Date(d.registeredAt).toLocaleDateString() : "—"}</td>
-              <td className="muted">{d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : "never"}</td>
-              <td style={{ whiteSpace: "nowrap" }}>
+      <DataTable
+        rows={devices}
+        rowKey={(d) => d.id}
+        emptyText="No systems registered yet."
+        columns={[
+          {
+            key: "employee", header: "Employee",
+            value: (d) => (d.employeeId === null ? "Unassigned" : (d.employeeName ?? d.employeeId.slice(0, 8))),
+            render: (d) =>
+              d.employeeId === null
+                ? <span className="badge check">Unassigned</span>
+                : (d.employeeName ?? d.employeeId.slice(0, 8)),
+          },
+          { key: "hostname", header: "Hostname", value: (d) => d.hostname ?? "—" },
+          {
+            key: "status", header: "Status", filter: "select",
+            value: (d) => d.status,
+            render: (d) => <span className={statusBadge(d.status)}>{d.status}</span>,
+          },
+          { key: "agent", header: "Agent", value: (d) => d.agentVersion ?? "—", cellStyle: { color: "var(--muted)" } },
+          {
+            key: "registered", header: "Registered",
+            value: (d) => (d.registeredAt ? new Date(d.registeredAt).toLocaleDateString() : "—"),
+            cellStyle: { color: "var(--muted)" },
+          },
+          {
+            key: "lastSeen", header: "Last seen",
+            value: (d) => (d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : "never"),
+            cellStyle: { color: "var(--muted)" },
+          },
+          {
+            key: "actions", header: "Actions", filter: "none", value: () => "",
+            cellStyle: { whiteSpace: "nowrap" },
+            render: (d) => (
+              <>
                 {d.status !== "REVOKED" && d.employeeId === null && picker(d)}
                 {d.status !== "REVOKED" && d.employeeId !== null && (
                   reassigning === d.id ? (
@@ -152,14 +165,11 @@ export default function DevicesPage() {
                 <button className="action" disabled={busy || d.status === "REVOKED"} onClick={() => revoke(d)}>
                   Revoke
                 </button>
-              </td>
-            </tr>
-          ))}
-          {devices.length === 0 && (
-            <tr><td colSpan={7} className="muted">No systems registered yet.</td></tr>
-          )}
-        </tbody>
-      </table>
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   );
 }

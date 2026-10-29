@@ -151,6 +151,21 @@ input, select, textarea {
 }
 .photo-actions { display: flex; flex-direction: column; gap: 8px; }
 
+.data-table .filter-row th { padding: 4px 6px 8px; }
+.data-table .filter-row input, .data-table .filter-row select {
+  width: 100%; min-width: 70px; font-size: 12px; padding: 3px 6px; border-radius: 5px;
+}
+.table-footer {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  flex-wrap: wrap; margin-top: 10px; font-size: 13px;
+}
+.table-footer .pager { display: flex; align-items: center; gap: 8px; }
+.table-footer .pager select { padding: 3px 6px; font-size: 12px; }
+button.link {
+  background: none; border: none; color: var(--accent); cursor: pointer; font: inherit; font-size: 13px; padding: 0;
+  text-decoration: underline;
+}
+
 .details-grid { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0 0 14px; }
 .details-grid dt { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 .details-grid dd { margin: 0; }

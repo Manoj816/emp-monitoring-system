@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type Employee } from "../api";
 import AddEmployeeDialog from "../components/AddEmployeeDialog";
 import CameraCapture from "../components/CameraCapture";
+import DataTable from "../components/DataTable";
 import EmployeeDetailsDialog from "../components/EmployeeDetailsDialog";
 
 export default function EmployeesPage() {
@@ -78,32 +79,44 @@ export default function EmployeesPage() {
 
       {error && <p className="error-text">{error}</p>}
 
-      <table>
-        <thead>
-          <tr>
-            <th>Code</th><th>Name</th><th>Email</th><th>Department</th><th>Status</th>
-            <th>ID / photo</th><th>Live enrollment</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {employees.map((emp) => (
-            <tr key={emp.id}>
-              <td>{emp.employeeCode}</td>
-              <td>{emp.fullName}</td>
-              <td>{emp.email}</td>
-              <td>{emp.department ?? "—"}</td>
-              <td><span className={`badge ${emp.status === "ACTIVE" ? "match" : "neutral"}`}>{emp.status}</span></td>
-              <td>
-                {emp.hasReferenceImage
-                  ? <span className="badge match">uploaded</span>
-                  : <span className="badge check">missing</span>}
-              </td>
-              <td title="The first live face scan that matches the uploaded ID/photo becomes the second reference.">
+      <DataTable
+        rows={employees}
+        rowKey={(emp) => emp.id}
+        emptyText="No employees yet — click “Add employee” to create the first one."
+        columns={[
+          { key: "code", header: "Code", value: (emp) => emp.employeeCode },
+          { key: "name", header: "Name", value: (emp) => emp.fullName },
+          { key: "email", header: "Email", value: (emp) => emp.email },
+          { key: "department", header: "Department", value: (emp) => emp.department ?? "—" },
+          {
+            key: "status", header: "Status", filter: "select",
+            value: (emp) => emp.status,
+            render: (emp) => <span className={`badge ${emp.status === "ACTIVE" ? "match" : "neutral"}`}>{emp.status}</span>,
+          },
+          {
+            key: "photo", header: "ID / photo", filter: "select",
+            value: (emp) => (emp.hasReferenceImage ? "uploaded" : "missing"),
+            render: (emp) =>
+              emp.hasReferenceImage
+                ? <span className="badge match">uploaded</span>
+                : <span className="badge check">missing</span>,
+          },
+          {
+            key: "enrollment", header: "Live enrollment", filter: "select",
+            value: (emp) => (emp.hasLiveEnrollment ? "done" : "pending first scan"),
+            render: (emp) => (
+              <span title="The first live face scan that matches the uploaded ID/photo becomes the second reference.">
                 {emp.hasLiveEnrollment
                   ? <span className="badge match">done</span>
                   : <span className="badge neutral">pending first scan</span>}
-              </td>
-              <td style={{ whiteSpace: "nowrap" }}>
+              </span>
+            ),
+          },
+          {
+            key: "actions", header: "Actions", filter: "none", value: () => "",
+            cellStyle: { whiteSpace: "nowrap" },
+            render: (emp) => (
+              <>
                 <button className="action" disabled={busy} onClick={() => setDetails(emp)}
                         title="Record, uploaded ID/photo, enrolled live scan and assigned systems">
                   Details
@@ -114,14 +127,11 @@ export default function EmployeesPage() {
                         title="Marks the employee OFFBOARDED and deregisters their systems">
                   Offboard
                 </button>
-              </td>
-            </tr>
-          ))}
-          {employees.length === 0 && (
-            <tr><td colSpan={8} className="muted">No employees yet — click “Add employee” to create the first one.</td></tr>
-          )}
-        </tbody>
-      </table>
+              </>
+            ),
+          },
+        ]}
+      />
 
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={onFileChosen} />
 
