@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type Employee } from "../api";
 import AddEmployeeDialog from "../components/AddEmployeeDialog";
 import CameraCapture from "../components/CameraCapture";
+import EmployeeDetailsDialog from "../components/EmployeeDetailsDialog";
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -9,6 +10,7 @@ export default function EmployeesPage() {
   const [busy, setBusy] = useState(false);
   const [cameraFor, setCameraFor] = useState<Employee | null>(null);
   const [adding, setAdding] = useState(false);
+  const [details, setDetails] = useState<Employee | null>(null);
   const fileTargetRef = useRef<Employee | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -102,6 +104,10 @@ export default function EmployeesPage() {
                   : <span className="badge neutral">pending first scan</span>}
               </td>
               <td style={{ whiteSpace: "nowrap" }}>
+                <button className="action" disabled={busy} onClick={() => setDetails(emp)}
+                        title="Record, uploaded ID/photo, enrolled live scan and assigned systems">
+                  Details
+                </button>{" "}
                 <button className="action" disabled={busy} onClick={() => setCameraFor(emp)}>Webcam</button>{" "}
                 <button className="action" disabled={busy} onClick={() => pickFile(emp)}>Upload photo</button>{" "}
                 <button className="action" disabled={busy || emp.status === "OFFBOARDED"} onClick={() => offboard(emp)}
@@ -118,6 +124,8 @@ export default function EmployeesPage() {
       </table>
 
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={onFileChosen} />
+
+      {details && <EmployeeDetailsDialog employee={details} onClose={() => setDetails(null)} />}
 
       {adding && (
         <AddEmployeeDialog

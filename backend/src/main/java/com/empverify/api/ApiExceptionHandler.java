@@ -13,6 +13,8 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ApiExceptionHandler.class);
+
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Map<String, String>> handleApi(ApiException e) {
         return ResponseEntity.status(e.getStatus()).body(Map.of("error", e.getMessage()));
@@ -35,10 +37,22 @@ public class ApiExceptionHandler {
                 .body(Map.of("error", "The image is too large (maximum 10 MB)"));
     }
 
-    /** Safety net for unique constraints (employee code / email) racing the explicit checks. */
+    /**
+     * A unique-constraint race (employee code / email) is a 409 for the caller.
+     * Any other integrity violation is a server-side schema problem, reported
+     * (and logged) as such rather than disguised as a client conflict.
+     */
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<Map<String, String>> handleConflict(DataIntegrityViolationException e) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(Map.of("error", "A record with the same unique value (employee code or email) already exists"));
+    public ResponseEntity<Map<String, String>> handleIntegrity(DataIntegrityViolationException e) {
+        var root = e.getMostSpecificCause();
+        var detail = root == null ? e.getMessage() : root.getMessage();
+        if (detail != null && detail.contains("duplicate key") && detail.contains("employees")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "A record with the same unique value (employee code or email) already exists"));
+        }
+        log.error("Data integrity violation: {}", detail);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "The server could not store this record (database constraint): "
+                        + (detail == null ? "unknown" : detail.lines().findFirst().orElse(detail))));
     }
 }
