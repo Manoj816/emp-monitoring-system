@@ -160,9 +160,14 @@ export default function ChecksPage() {
               <>
                 <span className={badgeClass(row.status)}>{statusLabel(row.status)}</span>
                 {row.mismatchFlag && <span className="badge error" style={{ marginLeft: 4 }}>mismatch?</span>}
-                {row.errorDetail && <div className="muted" style={{ fontSize: 12, maxWidth: 420 }}>{row.errorDetail}</div>}
+                {row.errorDetail && (
+                  <div className="muted truncate" style={{ fontSize: 12 }} title={row.errorDetail}>
+                    {row.errorDetail}
+                  </div>
+                )}
               </>
             ),
+            cellStyle: { maxWidth: 340 },
           },
           { key: "similarity", header: "Similarity", value: (row) => row.similarityScore?.toFixed(1) ?? "—" },
           { key: "liveness", header: "Liveness", value: (row) => row.livenessConfidence?.toFixed(1) ?? "—" },

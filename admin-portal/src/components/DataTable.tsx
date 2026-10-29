@@ -67,6 +67,7 @@ export default function DataTable<T>(props: {
 
   return (
     <>
+      <div className="table-wrap">
       <table className="data-table">
         <thead>
           <tr>
@@ -105,7 +106,16 @@ export default function DataTable<T>(props: {
           {visible.map((row) => (
             <tr key={rowKey(row)}>
               {columns.map((c) => (
-                <td key={c.key} style={c.cellStyle}>{c.render ? c.render(row) : c.value(row)}</td>
+                // Every cell is one line; overflow is cut with an ellipsis and the full
+                // text is the tooltip, so all rows stay the same height.
+                <td
+                  key={c.key}
+                  style={c.cellStyle}
+                  className={c.filter === "none" ? "no-truncate" : undefined}
+                  title={c.filter === "none" ? undefined : c.value(row)}
+                >
+                  {c.render ? c.render(row) : c.value(row)}
+                </td>
               ))}
             </tr>
           ))}
@@ -118,6 +128,7 @@ export default function DataTable<T>(props: {
           )}
         </tbody>
       </table>
+      </div>
 
       <div className="table-footer">
         <span className="muted">
