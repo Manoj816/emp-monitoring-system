@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
 import DataTable from "../components/DataTable";
+import Stats from "../components/Stats";
 
 function statusBadge(status: string): string {
   if (status === "ACTIVE") return "badge match";
@@ -96,8 +97,17 @@ export default function DevicesPage() {
 
   return (
     <>
-      <h2 style={{ marginTop: 0 }}>Registered systems</h2>
-      <p className="muted">
+      <div className="toolbar">
+        <Stats
+          items={[
+            { label: "Systems", value: devices.length },
+            { label: "Assigned", value: devices.filter((d) => d.employeeId !== null && d.status === "ACTIVE").length, tone: "ok" },
+            { label: "Unassigned", value: devices.filter((d) => d.employeeId === null && d.status !== "REVOKED").length, tone: "warn" },
+            { label: "Revoked", value: devices.filter((d) => d.status === "REVOKED").length, tone: "bad" },
+          ]}
+        />
+      </div>
+      <p className="help">
         A system that registered itself on install shows as <em>Unassigned</em> until you link it to
         an employee — that activates verification on it. <em>Reassign</em> hands a system to a different
         employee; offboarding an employee deregisters their systems back to Unassigned. Revoking

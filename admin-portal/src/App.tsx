@@ -8,11 +8,12 @@ import ChecksPage from "./pages/ChecksPage";
 
 type Section = "employees" | "devices" | "checks";
 
-const SECTIONS: { id: Section; label: string; hint: string; icon: ReactNode }[] = [
+const SECTIONS: { id: Section; label: string; hint: string; description: string; icon: ReactNode }[] = [
   {
     id: "employees",
     label: "Employees",
-    hint: "People enrolled for verification",
+    hint: "People and their photos",
+    description: "Everyone enrolled for verification, their ID/photo and whether their first live scan has been matched.",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="8" r="4" />
@@ -23,7 +24,8 @@ const SECTIONS: { id: Section; label: string; hint: string; icon: ReactNode }[] 
   {
     id: "devices",
     label: "Devices",
-    hint: "Registered systems and assignments",
+    hint: "Registered systems",
+    description: "Systems that registered themselves on install. Assign one to an employee to start verification on it.",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="5" width="18" height="12" rx="2" />
@@ -34,7 +36,8 @@ const SECTIONS: { id: Section; label: string; hint: string; icon: ReactNode }[] 
   {
     id: "checks",
     label: "Verification checks",
-    hint: "Scan results, reviews and evidence",
+    hint: "Results and reviews",
+    description: "Every scan with its live-person confidence, face match, review state and retained evidence.",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" />
@@ -94,8 +97,11 @@ export default function App() {
   const initial = user.trim().charAt(0).toUpperCase() || "A";
 
   return (
-    <div className={`shell ${navOpen ? "nav-open" : ""}`}>
-      <aside className="sidenav">
+    <div className={`app ${navOpen ? "nav-open" : ""}`}>
+      <header className="appbar">
+        <button className="action nav-toggle" onClick={() => setNavOpen(!navOpen)} aria-label="Toggle navigation">
+          ☰
+        </button>
         <div className="brand">
           <span className="brand-mark">EV</span>
           <span>
@@ -103,61 +109,64 @@ export default function App() {
             <span className="brand-sub">Admin console</span>
           </span>
         </div>
-
-        <nav className="sidenav-items" aria-label="Sections">
-          {SECTIONS.map((s) => (
-            <button
-              key={s.id}
-              className={`sidenav-item ${section === s.id ? "active" : ""}`}
-              onClick={() => {
-                setSection(s.id);
-                setNavOpen(false);
-              }}
-              aria-current={section === s.id ? "page" : undefined}
-            >
-              <span className="sidenav-icon">{s.icon}</span>
-              <span>
-                <span className="sidenav-label">{s.label}</span>
-                <span className="sidenav-hint">{s.hint}</span>
-              </span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidenav-footer">
-          <div className="user-chip" title={user}>
-            <span className="avatar">{initial}</span>
-            <span className="user-email">{user}</span>
-          </div>
-          <button className="action ghost" onClick={handleSignOut}>Sign out</button>
+        <div className="spacer" />
+        <span className="env-pill" title="Test environment: demo data can be wiped">Test environment</span>
+        <button className="action danger" onClick={resetDemo}>Reset demo data</button>
+        <span className="appbar-divider" />
+        <div className="user-chip" title={user}>
+          <span className="avatar">{initial}</span>
+          <span className="user-email">{user}</span>
         </div>
-      </aside>
+        <button className="action" onClick={handleSignOut}>Sign out</button>
+      </header>
 
-      <div className="content">
-        <header className="topbar">
-          <button className="action nav-toggle" onClick={() => setNavOpen(!navOpen)} aria-label="Toggle navigation">
-            ☰
-          </button>
-          <div>
-            <div className="crumbs">EmpVerify · {current.label}</div>
-            <h1>{current.label}</h1>
+      <div className="body">
+        <aside className="sidenav">
+          <div className="sidenav-title">Navigation</div>
+          <nav className="sidenav-items" aria-label="Sections">
+            {SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                className={`sidenav-item ${section === s.id ? "active" : ""}`}
+                onClick={() => {
+                  setSection(s.id);
+                  setNavOpen(false);
+                }}
+                aria-current={section === s.id ? "page" : undefined}
+              >
+                <span className="sidenav-icon">{s.icon}</span>
+                <span>
+                  <span className="sidenav-label">{s.label}</span>
+                  <span className="sidenav-hint">{s.hint}</span>
+                </span>
+              </button>
+            ))}
+          </nav>
+          <div className="sidenav-footer">
+            <span className="muted">EmpVerify · remote workforce identity verification</span>
           </div>
-          <div className="spacer" />
-          <span className="env-pill" title="Test environment: demo data can be wiped">Test environment</span>
-          <button className="action danger" onClick={resetDemo}>Reset demo data</button>
-        </header>
+        </aside>
 
-        {notice && (
-          <p className="notice" style={{ margin: "0 0 16px" }}>
-            {notice}
-          </p>
-        )}
+        <div className="content">
+          <div className="page-header">
+            <div>
+              <h1>{current.label}</h1>
+              <p className="muted">{current.description}</p>
+            </div>
+          </div>
 
-        <main className="card" key={resetCount}>
-          {section === "employees" && <EmployeesPage />}
-          {section === "devices" && <DevicesPage />}
-          {section === "checks" && <ChecksPage />}
-        </main>
+          {notice && (
+            <p className="notice" style={{ margin: "0 0 16px" }}>
+              {notice}
+            </p>
+          )}
+
+          <main className="card" key={resetCount}>
+            {section === "employees" && <EmployeesPage />}
+            {section === "devices" && <DevicesPage />}
+            {section === "checks" && <ChecksPage />}
+          </main>
+        </div>
       </div>
     </div>
   );

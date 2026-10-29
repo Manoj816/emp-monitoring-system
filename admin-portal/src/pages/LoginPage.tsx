@@ -23,7 +23,7 @@ export default function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
 
   return (
     <div className="login-wrap">
-      <main className="card login-card">
+      <section className="login-hero" aria-label="About EmpVerify">
         <div className="brand">
           <span className="brand-mark">EV</span>
           <span>
@@ -31,6 +31,22 @@ export default function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
             <span className="brand-sub">Admin console</span>
           </span>
         </div>
+        <div>
+          <h2>Know who is at the keyboard.</h2>
+          <p>
+            Remote workforce identity verification: a live face scan at a random time each working day,
+            matched against the employee's ID photo and their enrolled scan.
+          </p>
+          <ul>
+            <li>Every check is a consented, visible scan — nothing is captured silently.</li>
+            <li>Live-person detection defeats held-up photos and screen replays.</li>
+            <li>Flags go to a human review with the pictures side by side, never an automatic verdict.</li>
+          </ul>
+        </div>
+        <p className="fine">Verification decisions are made server-side; the agent on the laptop never sees the result.</p>
+      </section>
+      <div className="login-side">
+      <main className="card login-card">
         <h1>Sign in</h1>
         <p className="muted" style={{ margin: 0 }}>Use your administrator account.</p>
         <form onSubmit={submit}>
@@ -59,6 +75,7 @@ export default function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
           </button>
         </form>
       </main>
+      </div>
     </div>
   );
 }

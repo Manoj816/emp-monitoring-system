@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type AdminCheckRow, type ReviewResolution } from "../api";
 import DataTable from "../components/DataTable";
+import Stats from "../components/Stats";
 
 const FILTERS = ["ALL", "CHECK", "MATCH", "MISSED", "ERRORS"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -18,7 +19,7 @@ function statusLabel(status: string): string {
 }
 
 const FILTER_LABELS: Record<Filter, string> = {
-  ALL: "all", CHECK: "Needs review", MATCH: "match", MISSED: "missed", ERRORS: "errors",
+  ALL: "All", CHECK: "Needs review", MATCH: "Match", MISSED: "Missed", ERRORS: "Errors",
 };
 
 export default function ChecksPage() {
@@ -100,16 +101,36 @@ export default function ChecksPage() {
 
   return (
     <>
-      <h2 style={{ marginTop: 0 }}>Verification checks</h2>
+      <div className="toolbar">
+        <Stats
+          items={[
+            { label: "Checks", value: rows.length },
+            { label: "Needs review", value: rows.filter((r) => (r.status === "CHECK" || r.status === "MULTIPLE_FACES") && !r.reviewResolution).length, tone: "warn" },
+            { label: "Matches", value: rows.filter((r) => r.status === "MATCH").length, tone: "ok" },
+            { label: "Missed", value: rows.filter((r) => r.status === "EXPIRED").length, tone: "bad" },
+            { label: "Errors", value: rows.filter((r) => r.status === "VERIFICATION_ERROR" || r.status === "NO_FACE").length, tone: "bad" },
+          ]}
+        />
+      </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
-        {FILTERS.map((f) => (
-          <button key={f} className={`action ${filter === f ? "primary" : ""}`} onClick={() => setFilter(f)}>
-            {FILTER_LABELS[f]}
-          </button>
-        ))}
-        <span className="muted" style={{ marginLeft: "auto" }}>auto-refreshes every 20s</span>
-        <button className="action" onClick={() => void refresh()}>Refresh</button>
+      <div className="toolbar">
+        <div className="chips" role="tablist" aria-label="Quick filter">
+          {FILTERS.map((f) => (
+            <button
+              key={f}
+              role="tab"
+              aria-selected={filter === f}
+              className={`chip ${filter === f ? "active" : ""}`}
+              onClick={() => setFilter(f)}
+            >
+              {FILTER_LABELS[f]}
+            </button>
+          ))}
+        </div>
+        <span className="toolbar-right">
+          <span className="muted">Auto-refreshes every 20s</span>
+          <button className="action" onClick={() => void refresh()}>Refresh</button>
+        </span>
       </div>
 
       {error && <p className="error-text">{error}</p>}
