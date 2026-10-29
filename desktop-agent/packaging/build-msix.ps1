@@ -3,8 +3,10 @@
   Builds the EmpVerify agent MSIX package.
 
 .DESCRIPTION
-  Publishes the WPF agent (self-contained win-x64), stages it with the MSIX
-  manifest and logos, packs an .msix with makeappx, and signs it.
+  Publishes the WPF agent (self-contained win-x64, so the target PC needs no
+  .NET), stages it with the MSIX manifest and logos, packs an .msix with
+  makeappx, signs it, and assembles an install bundle (out\ and a Setup zip)
+  with the install scripts for the employee's PC.
 
   Dev (default): creates/uses a self-signed certificate whose subject matches the
   manifest Publisher, signs the package, and exports the .cer so a machine can
@@ -58,13 +60,13 @@ Write-Host "makeappx: $makeappx"
 Write-Host "signtool: $signtool"
 
 # 1. Publish the agent (self-contained so target machines need no .NET runtime).
-Write-Host "`n[1/4] Publishing agent..."
+Write-Host "`n[1/5] Publishing agent..."
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 & $DotnetExe publish $proj -c $Configuration -r win-x64 --self-contained -o $stage --nologo
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 
 # 2. Stage the manifest + logos alongside the published binaries.
-Write-Host "[2/4] Staging manifest and assets..."
+Write-Host "[2/5] Staging manifest and assets..."
 $manifestDst = Join-Path $stage "AppxManifest.xml"
 Copy-Item $manifestSrc $manifestDst -Force
 Copy-Item (Join-Path $PSScriptRoot "Images") (Join-Path $stage "Images") -Recurse -Force
@@ -80,7 +82,7 @@ $publisher = $manifest.Package.Identity.Publisher
 $pkgVersion = $manifest.Package.Identity.Version
 
 # 3. Pack.
-Write-Host "[3/4] Packing MSIX..."
+Write-Host "[3/5] Packing MSIX..."
 New-Item -ItemType Directory -Force $outDir | Out-Null
 $msix = Join-Path $outDir "EmpVerify.Agent_${pkgVersion}_x64.msix"
 if (Test-Path $msix) { Remove-Item $msix -Force }
@@ -88,7 +90,7 @@ if (Test-Path $msix) { Remove-Item $msix -Force }
 if ($LASTEXITCODE -ne 0) { throw "makeappx pack failed" }
 
 # 4. Sign.
-Write-Host "[4/4] Signing..."
+Write-Host "[4/5] Signing..."
 if ($PfxPath) {
     $pw = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
         [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($PfxPassword))
@@ -114,5 +116,22 @@ if ($PfxPath) {
     if ($LASTEXITCODE -ne 0) { throw "signtool (dev) failed" }
     Write-Host "  exported trust cert: $cer (import to LocalMachine\TrustedPeople to install)"
 }
+
+# 5. Install bundle: everything an operator needs on the target PC, in out\ and
+#    zipped. Copy the zip to the employee's system and double-click
+#    Install-EmpVerify.cmd (after adding provisioning.json — see INSTALL.md).
+Write-Host "[5/5] Assembling install bundle..."
+$bundleFiles = @($msix)
+if (-not $PfxPath) { $bundleFiles += (Join-Path $outDir "empverify-dev.cer") }
+foreach ($name in @("Install-PerMachine.ps1", "Install-EmpVerify.cmd", "Uninstall.ps1", "Uninstall-EmpVerify.cmd",
+                    "provisioning.sample.json", "INSTALL.md")) {
+    $dst = Join-Path $outDir $name
+    Copy-Item (Join-Path $PSScriptRoot $name) $dst -Force
+    $bundleFiles += $dst
+}
+$zip = Join-Path $outDir "EmpVerify-Agent-Setup_${pkgVersion}.zip"
+if (Test-Path $zip) { Remove-Item $zip -Force }
+Compress-Archive -Path $bundleFiles -DestinationPath $zip
+Write-Host "  bundle: $zip"
 
 Write-Host "`nDONE: $msix"

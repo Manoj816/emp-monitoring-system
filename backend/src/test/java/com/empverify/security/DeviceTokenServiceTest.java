@@ -28,9 +28,14 @@ class DeviceTokenServiceTest {
         var service = new DeviceTokenService(SECRET, 3600);
         var token = service.issue(UUID.randomUUID());
 
-        // Flip the last character of the signature segment.
-        var tampered = token.substring(0, token.length() - 1)
-                + (token.endsWith("A") ? "B" : "A");
+        // Flip the first character of the signature segment. (Not the last one: in
+        // unpadded base64url it carries only a few data bits plus padding bits, so a
+        // flip there can decode to the very same signature and the test turns flaky.)
+        var signatureStart = token.lastIndexOf('.') + 1;
+        var original = token.charAt(signatureStart);
+        var tampered = token.substring(0, signatureStart)
+                + (original == 'A' ? 'B' : 'A')
+                + token.substring(signatureStart + 1);
 
         assertFalse(service.validate(tampered).isPresent());
     }

@@ -1,0 +1,4 @@
+{
+  "backendUrl": "http://empverify-alb-95474567.us-east-1.elb.amazonaws.com",
+  "provisioningToken": "<paste the tenant provisioning token here>"
+}

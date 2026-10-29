@@ -12,7 +12,6 @@ import com.empverify.service.AuditService;
 import com.empverify.service.DeviceService;
 import com.empverify.storage.ImageStorage;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -20,6 +19,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -62,12 +62,6 @@ public class AdminController {
         this.audit = audit;
     }
 
-    public record CreateEmployeeRequest(
-            @NotBlank String employeeCode,
-            @NotBlank String fullName,
-            @NotBlank @Email String email,
-            String department) {}
-
     public record EmployeeResponse(
             String id, String employeeCode, String fullName, String email,
             String department, String status,
@@ -78,16 +72,85 @@ public class AdminController {
 
     public record EnrollmentTokenResponse(String enrollmentToken) {}
 
-    @PostMapping("/employees")
-    public EmployeeResponse createEmployee(@Valid @RequestBody CreateEmployeeRequest request) {
+    private static final java.util.regex.Pattern EMAIL =
+            java.util.regex.Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+
+    /**
+     * Creates an employee together with their ID/photo reference in one step
+     * (multipart form). The image is mandatory: an employee without a reference
+     * can never be verified, so the record is not created without one. Either
+     * everything is stored or nothing is.
+     */
+    @PostMapping(value = "/employees", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Transactional
+    public EmployeeResponse createEmployee(
+            @RequestParam(value = "employeeCode", required = false) String employeeCode,
+            @RequestParam(value = "fullName", required = false) String fullName,
+            @RequestParam(value = "email", required = false) String email,
+            @RequestParam(value = "department", required = false) String department,
+            @RequestParam(value = "image", required = false) MultipartFile image) {
+        employeeCode = required(employeeCode, "Employee code is required");
+        fullName = required(fullName, "Full name is required");
+        email = required(email, "Email is required");
+        if (!EMAIL.matcher(email).matches()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Email address is not valid");
+        }
+        if (image == null || image.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "A photo or ID image is required to create an employee");
+        }
+        requireImage(image);
+        if (employees.existsByEmployeeCodeIgnoreCase(employeeCode)) {
+            throw new ApiException(HttpStatus.CONFLICT, "An employee with code " + employeeCode + " already exists");
+        }
+        if (employees.existsByEmailIgnoreCase(email)) {
+            throw new ApiException(HttpStatus.CONFLICT, "An employee with email " + email + " already exists");
+        }
+
         var employee = new Employee();
-        employee.setEmployeeCode(request.employeeCode());
-        employee.setFullName(request.fullName());
-        employee.setEmail(request.email());
-        employee.setDepartment(request.department());
+        employee.setEmployeeCode(employeeCode);
+        employee.setFullName(fullName);
+        employee.setEmail(email);
+        employee.setDepartment(department == null || department.isBlank() ? null : department.trim());
         employees.save(employee);
+
+        saveAdminUpload(employee.getId(), image);
         audit.record("admin", "EMPLOYEE_CREATED", "employee", employee.getId().toString(), null);
+        audit.record("admin", "REFERENCE_IMAGE_UPLOADED", "employee", employee.getId().toString(), null);
         return toResponse(employee);
+    }
+
+    private static String required(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, message);
+        }
+        return value.trim();
+    }
+
+    /** Only JPEG/PNG uploads are accepted; anything else cannot be a usable reference. */
+    private static void requireImage(MultipartFile image) {
+        var type = image.getContentType() == null ? "" : image.getContentType().toLowerCase();
+        var name = image.getOriginalFilename() == null ? "" : image.getOriginalFilename().toLowerCase();
+        boolean typed = type.equals("image/jpeg") || type.equals("image/png") || type.equals("image/jpg");
+        boolean named = name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
+        if (!typed && !named) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "The ID/photo must be a JPEG or PNG image");
+        }
+    }
+
+    /** Stores the upload and records it as the employee's ACTIVE ADMIN_UPLOAD reference. */
+    private void saveAdminUpload(UUID employeeId, MultipartFile image) {
+        var reference = new ReferenceImage();
+        reference.setEmployeeId(employeeId);
+        reference.setSource(ReferenceImageSource.ADMIN_UPLOAD);
+        reference.setCreatedBy("admin");
+        try {
+            reference.setS3Key(storage.store(
+                    "reference/" + employeeId + "/" + reference.getId() + ".jpg", image.getBytes()));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        referenceImages.save(reference);
     }
 
     @GetMapping("/employees")
@@ -161,10 +224,15 @@ public class AdminController {
 
     /** Uploads/replaces the employee's reference image; the previous one is marked REPLACED. */
     @PostMapping("/employees/{employeeId}/reference-image")
+    @Transactional
     public EmployeeResponse uploadReferenceImage(
-            @PathVariable UUID employeeId, @RequestParam("image") MultipartFile image) {
+            @PathVariable UUID employeeId, @RequestParam(value = "image", required = false) MultipartFile image) {
         var employee = employees.findById(employeeId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "employee not found"));
+        if (image == null || image.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "A photo or ID image is required");
+        }
+        requireImage(image);
 
         // A new ID/photo supersedes the previous upload AND the live enrollment that
         // was matched against it: the employee's next check re-enrolls.
@@ -174,17 +242,7 @@ public class AdminController {
                     referenceImages.save(previous);
                 });
 
-        var reference = new ReferenceImage();
-        reference.setEmployeeId(employeeId);
-        reference.setSource(ReferenceImageSource.ADMIN_UPLOAD);
-        reference.setCreatedBy("admin");
-        try {
-            reference.setS3Key(storage.store(
-                    "reference/" + employeeId + "/" + reference.getId() + ".jpg", image.getBytes()));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        referenceImages.save(reference);
+        saveAdminUpload(employeeId, image);
         audit.record("admin", "REFERENCE_IMAGE_UPLOADED", "employee", employeeId.toString(), null);
         return toResponse(employee);
     }

@@ -21,9 +21,12 @@ Per-machine MSIX installer for the Windows desktop agent.
 |---|---|
 | `AppxManifest.xml` | Package manifest (identity, webcam + runFullTrust capabilities, entry point) |
 | `Images/` | Tile/logo PNGs (regenerate with `generate-logos.ps1`) |
-| `build-msix.ps1` | Publish → stage → pack → sign; produces `out/*.msix` |
-| `Install-PerMachine.ps1` | Elevated: provisions the package for all users |
-| `Uninstall.ps1` | Elevated: removes provisioned + installed package |
+| `build-msix.ps1` | Publish → stage → pack → sign → bundle; produces `out/*.msix` and `out/EmpVerify-Agent-Setup_<version>.zip` |
+| `Install-PerMachine.ps1` | Self-elevating installer for the target PC: preflight, cert trust, WebView2, provisioning token, per-machine install, launch |
+| `Install-EmpVerify.cmd` | Double-click wrapper for the installer (bypasses the script execution policy) |
+| `Uninstall.ps1` / `Uninstall-EmpVerify.cmd` | Self-elevating removal of the provisioned + installed package |
+| `provisioning.sample.json` | Template for `provisioning.json` (backend URL + tenant provisioning token; never committed) |
+| `INSTALL.md` | Operator instructions shipped inside the bundle |
 
 ## Build
 
@@ -41,11 +44,33 @@ the NuGet package `Microsoft.Windows.SDK.BuildTools` carries both (this is how
 CI builds the package — see `.github/workflows/agent.yml`). Building and signing
 do **not** require admin; installing per-machine does.
 
-## Install (per-machine, elevated)
+## Install on the employee's PC
+
+`build-msix.ps1` leaves a complete bundle in `out/` and zips it as
+`EmpVerify-Agent-Setup_<version>.zip`. Copy the zip to the target PC, add
+`provisioning.json` (from `provisioning.sample.json`), and double-click
+`Install-EmpVerify.cmd`. Full operator instructions: [INSTALL.md](INSTALL.md).
+
+What the installer takes care of so the package runs on a PC that has nothing
+else installed:
+
+- **Self-contained .NET** — the package ships the runtime; no .NET install needed.
+- **WebView2 runtime** — detected, downloaded and installed silently when missing
+  (the locked check window needs it; the agent falls back to the default browser
+  without it).
+- **Signing certificate** — the dev package's test certificate is imported into
+  `LocalMachine\TrustedPeople`; production packages signed by a public CA skip this.
+- **Preflight** — refuses 32-bit Windows, Windows 10 older than 1809, and ARM64 on
+  Windows 10; enables sideloading of trusted apps if a policy turned it off.
+- **Provisioning** — writes the tenant token and backend URL to
+  `HKLM\SOFTWARE\EmpVerify` so the agent self-registers as Unassigned.
+- **Elevation and execution policy** — the `.cmd` wrapper bypasses the script
+  policy and the script requests UAC elevation itself.
 
 ```powershell
-# Dev package: trust the self-signed cert, then provision for all users.
-./Install-PerMachine.ps1 -MsixPath .\out\EmpVerify.Agent_0.1.0.0_x64.msix -TrustCert .\out\empverify-dev.cer
+# Explicit form (also works from the repo checkout):
+./Install-PerMachine.ps1 -MsixPath .\out\EmpVerify.Agent_<version>_x64.msix -TrustCert .\out\empverify-dev.cer `
+    -ProvisioningToken (Read-Host) -BackendUrl http://<server>
 
 # Production package (publicly-trusted cert): no -TrustCert needed.
 ./Install-PerMachine.ps1 -MsixPath .\out\EmpVerify.Agent_<version>_x64.msix

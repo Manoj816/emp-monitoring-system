@@ -79,12 +79,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   listEmployees: () => request<Employee[]>("/api/v1/admin/employees"),
 
-  createEmployee: (input: { employeeCode: string; fullName: string; email: string; department?: string }) =>
-    request<Employee>("/api/v1/admin/employees", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    }),
+  /** Creates the employee together with the mandatory ID/photo reference (one multipart request). */
+  createEmployee: (
+    input: { employeeCode: string; fullName: string; email: string; department?: string },
+    image: Blob,
+  ) => {
+    const form = new FormData();
+    form.append("employeeCode", input.employeeCode);
+    form.append("fullName", input.fullName);
+    form.append("email", input.email);
+    if (input.department) form.append("department", input.department);
+    form.append("image", image, "reference.jpg");
+    return request<Employee>("/api/v1/admin/employees", { method: "POST", body: form });
+  },
 
   uploadReferenceImage: (employeeId: string, image: Blob) => {
     const form = new FormData();

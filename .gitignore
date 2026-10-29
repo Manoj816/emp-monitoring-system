@@ -11,6 +11,8 @@ desktop-agent/**/obj/
 desktop-agent/publish/
 desktop-agent/packaging/stage/
 desktop-agent/packaging/out/
+# Per-tenant install config (contains the provisioning token) — never commit
+desktop-agent/packaging/provisioning.json
 *.user
 
 # Node

@@ -48,11 +48,13 @@ $h = @{ "X-Admin-Key" = "dev-admin-key" }
 # List employees
 $emps = Invoke-RestMethod "http://localhost:8082/api/v1/admin/employees" -Headers $h
 
-# Create an employee
-$body = @{ employeeCode="E-0002"; fullName="Full Name"; email="person@example.com"; department="IT" } | ConvertTo-Json
-$emp = Invoke-RestMethod -Method Post "http://localhost:8082/api/v1/admin/employees" -Headers $h -ContentType "application/json" -Body $body
+# Create an employee — the ID/photo is mandatory, so it is one multipart request
+# (multipart needs curl.exe on PS 5.1)
+$emp = curl.exe -s -X POST "http://localhost:8082/api/v1/admin/employees" -H "X-Admin-Key: dev-admin-key" `
+  -F "employeeCode=E-0002" -F "fullName=Full Name" -F "email=person@example.com" -F "department=IT" `
+  -F "image=@C:\path\to\photo.jpg;type=image/jpeg" | ConvertFrom-Json
 
-# Upload a reference photo (multipart needs curl.exe on PS 5.1)
+# Replace the reference photo later (resets the live enrollment)
 curl.exe -X POST "http://localhost:8082/api/v1/admin/employees/$($emp.id)/reference-image" -H "X-Admin-Key: dev-admin-key" -F "image=@C:\path\to\photo.jpg;type=image/jpeg"
 
 # Issue a one-time enrollment token (single use, 24h expiry)

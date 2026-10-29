@@ -41,21 +41,33 @@ public partial class CaptureWindow : Window
 
     private async Task InitializeAsync()
     {
-        // Explicit user-data folder: the install location (Program Files / MSIX) is read-only.
-        var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: UserDataFolder);
-        await Browser.EnsureCoreWebView2Async(environment);
-
-        var core = Browser.CoreWebView2;
-        core.Settings.AreDefaultContextMenusEnabled = false;
-        core.Settings.AreDevToolsEnabled = false;
-        // The page is our own; clicking Capture is the consent, so don't add a second prompt.
-        core.PermissionRequested += (_, e) =>
+        try
         {
-            if (e.PermissionKind is CoreWebView2PermissionKind.Camera or CoreWebView2PermissionKind.Microphone)
+            // Explicit user-data folder: the install location (Program Files / MSIX) is read-only.
+            var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: UserDataFolder);
+            await Browser.EnsureCoreWebView2Async(environment);
+
+            var core = Browser.CoreWebView2;
+            core.Settings.AreDefaultContextMenusEnabled = false;
+            core.Settings.AreDevToolsEnabled = false;
+            // The page is our own; clicking Capture is the consent, so don't add a second prompt.
+            core.PermissionRequested += (_, e) =>
             {
-                e.State = CoreWebView2PermissionState.Allow;
-            }
-        };
-        core.Navigate(_url);
+                if (e.PermissionKind is CoreWebView2PermissionKind.Camera or CoreWebView2PermissionKind.Microphone)
+                {
+                    e.State = CoreWebView2PermissionState.Allow;
+                }
+            };
+            core.Navigate(_url);
+        }
+        catch (Exception ex)
+        {
+            // The WebView2 runtime was removed or cannot start on this PC (an
+            // unhandled exception here would take the whole agent down). Closing
+            // the window lets the flow record the check as missed with a reason;
+            // the installer puts the runtime back on the next install/repair.
+            System.Diagnostics.Trace.TraceError("Check window could not start WebView2: {0}", ex);
+            Close();
+        }
     }
 }

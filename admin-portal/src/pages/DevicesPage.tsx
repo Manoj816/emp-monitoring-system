@@ -69,7 +69,7 @@ export default function DevicesPage() {
       <table>
         <thead>
           <tr>
-            <th>Employee</th><th>Platform</th><th>Hostname</th><th>Status</th>
+            <th>Employee</th><th>Hostname</th><th>Status</th>
             <th>Agent</th><th>Registered</th><th>Last seen</th><th>Actions</th>
           </tr>
         </thead>
@@ -83,7 +83,6 @@ export default function DevicesPage() {
                   d.employeeName ?? d.employeeId.slice(0, 8)
                 )}
               </td>
-              <td>{d.platform}</td>
               <td>{d.hostname ?? "—"}</td>
               <td><span className={statusBadge(d.status)}>{d.status}</span></td>
               <td className="muted">{d.agentVersion ?? "—"}</td>
@@ -116,7 +115,7 @@ export default function DevicesPage() {
             </tr>
           ))}
           {devices.length === 0 && (
-            <tr><td colSpan={8} className="muted">No systems registered yet.</td></tr>
+            <tr><td colSpan={7} className="muted">No systems registered yet.</td></tr>
           )}
         </tbody>
       </table>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Employee } from "../api";
+import AddEmployeeDialog from "../components/AddEmployeeDialog";
 import CameraCapture from "../components/CameraCapture";
 
 export default function EmployeesPage() {
@@ -8,10 +9,9 @@ export default function EmployeesPage() {
   const [busy, setBusy] = useState(false);
   const [token, setToken] = useState<{ employee: string; value: string } | null>(null);
   const [cameraFor, setCameraFor] = useState<Employee | null>(null);
+  const [adding, setAdding] = useState(false);
   const fileTargetRef = useRef<Employee | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [form, setForm] = useState({ employeeCode: "", fullName: "", email: "", department: "" });
 
   async function refresh() {
     try {
@@ -37,19 +37,6 @@ export default function EmployeesPage() {
     } finally {
       setBusy(false);
     }
-  }
-
-  function createEmployee(e: React.FormEvent) {
-    e.preventDefault();
-    void run(async () => {
-      await api.createEmployee({
-        employeeCode: form.employeeCode.trim(),
-        fullName: form.fullName.trim(),
-        email: form.email.trim(),
-        department: form.department.trim() || undefined,
-      });
-      setForm({ employeeCode: "", fullName: "", email: "", department: "" });
-    });
   }
 
   function issueToken(employee: Employee) {
@@ -86,27 +73,10 @@ export default function EmployeesPage() {
 
   return (
     <>
-      <h2 style={{ marginTop: 0 }}>Employees</h2>
-
-      <form className="inline" onSubmit={createEmployee}>
-        <label>
-          Employee code
-          <input required value={form.employeeCode} onChange={(e) => setForm({ ...form, employeeCode: e.target.value })} />
-        </label>
-        <label>
-          Full name
-          <input required value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
-        </label>
-        <label>
-          Email
-          <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-        </label>
-        <label>
-          Department
-          <input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
-        </label>
-        <button className="primary" type="submit" disabled={busy}>Add employee</button>
-      </form>
+      <div className="page-head">
+        <h2>Employees</h2>
+        <button className="primary" disabled={busy} onClick={() => setAdding(true)}>+ Add employee</button>
+      </div>
 
       {error && <p className="error-text">{error}</p>}
 
@@ -161,12 +131,22 @@ export default function EmployeesPage() {
             </tr>
           ))}
           {employees.length === 0 && (
-            <tr><td colSpan={8} className="muted">No employees yet — add one above.</td></tr>
+            <tr><td colSpan={8} className="muted">No employees yet — click “Add employee” to create the first one.</td></tr>
           )}
         </tbody>
       </table>
 
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={onFileChosen} />
+
+      {adding && (
+        <AddEmployeeDialog
+          onClose={() => setAdding(false)}
+          onCreated={() => {
+            setAdding(false);
+            void refresh();
+          }}
+        />
+      )}
 
       {cameraFor && (
         <CameraCapture
