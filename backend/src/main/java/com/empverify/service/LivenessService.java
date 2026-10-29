@@ -122,10 +122,30 @@ public class LivenessService {
                     null);
         }
 
-        // Compare the frame captured during the scan (or a stub placeholder) to every
-        // reference on file; the best match decides. This runs even when liveness is
-        // low, so a reviewer sees both signals instead of a bare flag.
-        byte[] captured = result.referenceJpeg() != null ? result.referenceJpeg() : new byte[] {1};
+        // No usable frame came back from the liveness service: nothing to compare and
+        // nothing to retain (an empty "evidence" would only show as a broken picture).
+        byte[] captured = result.referenceJpeg();
+        if (captured == null || captured.length == 0) {
+            if (result.confidence() < livenessThreshold) {
+                String detail = String.format(Locale.ROOT,
+                        "Live-person confidence %.1f is below the required %.0f and the liveness service "
+                                + "returned no usable frame of a face, so there is nothing to compare: the "
+                                + "camera most likely did not show a live person (photo or screen replay, "
+                                + "face not in view, or the lens covered). Please follow up with the employee.",
+                        result.confidence(), livenessThreshold);
+                return verificationService.recordOutcome(
+                        check, CheckStatus.CHECK, false, null, result.confidence(), detail, null);
+            }
+            return verificationService.recordOutcome(
+                    check, CheckStatus.VERIFICATION_ERROR, false, null, result.confidence(),
+                    "The scan passed the live-person check but the liveness service returned no frame "
+                            + "to compare against the references. The scan is offered again.",
+                    null);
+        }
+
+        // Compare the frame captured during the scan to every reference on file; the
+        // best match decides. This runs even when liveness is low, so a reviewer sees
+        // both signals instead of a bare flag.
         var match = verificationService.bestMatch(check.getEmployeeId(), captured);
         if (match == null) {
             return verificationService.recordOutcome(
@@ -188,9 +208,6 @@ public class LivenessService {
      */
     private void enrollLiveReferenceIfFirst(
             VerificationCheck check, LivenessProvider.Result result, byte[] captured) {
-        if (result.referenceJpeg() == null) {
-            return; // no real frame (stub provider): nothing to enroll
-        }
         if (referenceImages.findByEmployeeIdAndStatusAndSource(
                 check.getEmployeeId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT)
                 .isPresent()) {

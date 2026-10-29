@@ -347,10 +347,26 @@ public class AdminController {
         if (check.getEvidenceS3Key() == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, "no evidence retained for this check");
         }
+        var bytes = storage.load(check.getEvidenceS3Key());
+        if (!looksLikeImage(bytes)) {
+            // Defensive: a retained frame that is not a picture (e.g. an empty frame
+            // from the liveness service) is reported, not served as a broken image.
+            throw new ApiException(HttpStatus.NOT_FOUND, "the retained frame for this check is not a readable image");
+        }
         audit.record("admin", "EVIDENCE_VIEWED", "check", checkId.toString(), null);
         return org.springframework.http.ResponseEntity.ok()
                 .header("Content-Type", "image/jpeg")
-                .body(storage.load(check.getEvidenceS3Key()));
+                .body(bytes);
+    }
+
+    /** JPEG (FF D8 FF) or PNG (89 50 4E 47) magic bytes; anything else is not a picture a browser can show. */
+    private static boolean looksLikeImage(byte[] bytes) {
+        if (bytes == null || bytes.length < 8) {
+            return false;
+        }
+        boolean jpeg = (bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xD8 && (bytes[2] & 0xFF) == 0xFF;
+        boolean png = (bytes[0] & 0xFF) == 0x89 && bytes[1] == 'P' && bytes[2] == 'N' && bytes[3] == 'G';
+        return jpeg || png;
     }
 
     private EmployeeResponse toResponse(Employee employee) {

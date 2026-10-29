@@ -30,7 +30,9 @@ export default function ChecksPage() {
   const [evidence, setEvidence] = useState<{ checkId: string; url: string } | null>(null);
   // Side-by-side pictures for the review dialog: the enrolled photo and the frame
   // captured during this check (when retained).
-  const [reviewImages, setReviewImages] = useState<{ reference?: string; enrolled?: string; captured?: string }>({});
+  const [reviewImages, setReviewImages] = useState<{
+    reference?: string; enrolled?: string; captured?: string; loaded?: boolean;
+  }>({});
 
   useEffect(() => {
     if (!reviewing) {
@@ -45,7 +47,7 @@ export default function ChecksPage() {
         api.loadEnrolledImage(row.employeeId).catch(() => undefined),
         row.hasEvidence ? api.loadEvidence(row.checkId).catch(() => undefined) : Promise.resolve(undefined),
       ]);
-      if (!cancelled) setReviewImages({ reference, enrolled, captured });
+      if (!cancelled) setReviewImages({ reference, enrolled, captured, loaded: true });
     })();
     return () => {
       cancelled = true;
@@ -200,7 +202,13 @@ export default function ChecksPage() {
                 {reviewImages.captured
                   ? <img src={reviewImages.captured} alt="frame captured during this check" style={{ maxWidth: "100%", maxHeight: 220 }} />
                   : <div className="muted" style={{ padding: 24 }}>
-                      {reviewing.hasEvidence ? "Loading…" : "No frame was retained for this check."}
+                      {reviewing.hasEvidence
+                        ? (reviewImages.loaded
+                            ? "The retained frame could not be loaded (it is not a readable image)."
+                            : "Loading…")
+                        : reviewing.errorDetail?.includes("no usable frame")
+                          ? "The liveness service returned no picture for this scan — the camera most likely did not show a live face."
+                          : "No frame was retained for this check."}
                     </div>}
                 <figcaption className="muted" style={{ fontSize: 12 }}>Captured during this check</figcaption>
               </figure>

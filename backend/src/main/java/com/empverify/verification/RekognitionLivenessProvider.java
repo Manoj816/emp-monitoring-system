@@ -8,7 +8,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.rekognition.RekognitionClient;
+import software.amazon.awssdk.services.rekognition.model.AuditImage;
 import software.amazon.awssdk.services.rekognition.model.CreateFaceLivenessSessionRequest;
+import software.amazon.awssdk.services.rekognition.model.CreateFaceLivenessSessionRequestSettings;
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsRequest;
 import software.amazon.awssdk.services.rekognition.model.GetFaceLivenessSessionResultsResponse;
 
@@ -31,10 +33,17 @@ public class RekognitionLivenessProvider implements LivenessProvider {
         this.client = RekognitionClient.builder().region(Region.of(region)).build();
     }
 
+    /** Audit frames requested per session: the fallback picture for a reviewer when no reference frame comes back. */
+    private static final int AUDIT_IMAGES = 2;
+
     @Override
     public Session createSession() {
         var response = client.createFaceLivenessSession(
-                CreateFaceLivenessSessionRequest.builder().build());
+                CreateFaceLivenessSessionRequest.builder()
+                        .settings(CreateFaceLivenessSessionRequestSettings.builder()
+                                .auditImagesLimit(AUDIT_IMAGES)
+                                .build())
+                        .build());
         return new Session(response.sessionId(), Instant.now().plusSeconds(300));
     }
 
@@ -42,15 +51,32 @@ public class RekognitionLivenessProvider implements LivenessProvider {
     public Result getResult(String sessionId) {
         GetFaceLivenessSessionResultsResponse response = client.getFaceLivenessSessionResults(
                 GetFaceLivenessSessionResultsRequest.builder().sessionId(sessionId).build());
-        byte[] reference = null;
+        // The reference frame is the high-quality face picture meant for comparison. A
+        // low-confidence session may come back without one; then the first audit
+        // frame stands in, so a reviewer still gets to see what the camera saw.
+        byte[] frame = null;
+        String frameSource = "none";
         if (response.referenceImage() != null && response.referenceImage().bytes() != null) {
-            reference = response.referenceImage().bytes().asByteArray();
+            frame = response.referenceImage().bytes().asByteArray();
+            frameSource = "reference";
+        } else if (response.hasAuditImages()) {
+            for (AuditImage audit : response.auditImages()) {
+                if (audit.bytes() != null && audit.bytes().asByteArray().length > 0) {
+                    frame = audit.bytes().asByteArray();
+                    frameSource = "audit";
+                    break;
+                }
+            }
+        }
+        if (frame != null && frame.length == 0) {
+            frame = null;
+            frameSource = "none";
         }
         double confidence = response.confidence() == null ? 0.0 : response.confidence();
         String status = response.statusAsString();
-        // Operational visibility for tuning the threshold: status, score and whether a frame came back.
-        log.info("Face Liveness session {}: status={} confidence={} referenceFrame={}",
-                sessionId, status, confidence, reference != null);
-        return new Result(confidence, reference, status);
+        // Operational visibility for tuning the threshold: status, score and which frame came back.
+        log.info("Face Liveness session {}: status={} confidence={} frame={}",
+                sessionId, status, confidence, frameSource);
+        return new Result(confidence, frame, status);
     }
 }

@@ -177,6 +177,38 @@ class LivenessServiceTest {
     }
 
     @Test
+    void lowConfidenceWithoutAnyFrameIsCheckWithNoComparisonAndNoEvidence() {
+        // Rekognition judged "not a live person" and sent back no frame at all.
+        var check = pending("sess-1");
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(provider.getResult("sess-1")).thenReturn(new LivenessProvider.Result(0.0001, null, "SUCCEEDED"));
+
+        var result = service.completeLiveness(check.getId(), "the-nonce");
+
+        assertEquals(CheckStatus.CHECK, result.getStatus());
+        // Nothing is sent to CompareFaces and no empty "evidence" is stored.
+        verify(verificationService, never()).bestMatch(any(), any());
+        verify(verificationService).recordOutcome(
+                any(), eq(CheckStatus.CHECK), eq(false), eq(null), eq(0.0001),
+                contains("returned no usable frame"), eq(null));
+    }
+
+    @Test
+    void passingConfidenceWithoutAFrameIsATechnicalErrorToRetry() {
+        var check = pending("sess-1");
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(provider.getResult("sess-1")).thenReturn(new LivenessProvider.Result(96.0, new byte[0], "SUCCEEDED"));
+
+        var result = service.completeLiveness(check.getId(), "the-nonce");
+
+        assertEquals(CheckStatus.VERIFICATION_ERROR, result.getStatus());
+        verify(verificationService, never()).bestMatch(any(), any());
+        verify(verificationService).recordOutcome(
+                any(), eq(CheckStatus.VERIFICATION_ERROR), eq(false), eq(null), eq(96.0),
+                contains("no frame to compare"), eq(null));
+    }
+
+    @Test
     void missingReferenceAfterPassingLivenessIsError() {
         var check = pending("sess-1");
         when(checks.findById(check.getId())).thenReturn(Optional.of(check));
