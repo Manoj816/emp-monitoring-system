@@ -184,8 +184,13 @@ public class DeviceService {
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "unknown device"));
     }
 
-    @Transactional
     public DeviceAuth authenticate(UUID deviceId, String deviceSecret) {
+        return authenticate(deviceId, deviceSecret, null);
+    }
+
+    /** @param agentVersion when given, recorded so the fleet view shows the version actually running */
+    @Transactional
+    public DeviceAuth authenticate(UUID deviceId, String deviceSecret, String agentVersion) {
         var device = devices.findById(deviceId)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "unknown device"));
         // PENDING (provisioned, not yet assigned) may authenticate so the agent can poll
@@ -195,6 +200,9 @@ public class DeviceService {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "device revoked or bad credentials");
         }
         device.setLastSeenAt(Instant.now());
+        if (agentVersion != null && !agentVersion.isBlank()) {
+            device.setAgentVersion(agentVersion.trim());
+        }
         devices.save(device);
         return new DeviceAuth(deviceTokens.issue(deviceId), deviceTokens.ttlSeconds());
     }

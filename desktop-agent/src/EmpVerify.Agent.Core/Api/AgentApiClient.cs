@@ -27,7 +27,11 @@ public sealed class AgentApiClient : IAgentApi
 
     private sealed record RegisterRequest(string EnrollmentToken, string Platform, string? Hostname, string? AgentVersion);
     private sealed record RegisterResponse(string DeviceId, string DeviceSecret);
-    private sealed record AuthRequest(string DeviceId, string DeviceSecret);
+    private sealed record AuthRequest(string DeviceId, string DeviceSecret, string? AgentVersion);
+
+    /// <summary>The build's version, reported on every sign-in so the fleet view tracks upgrades.</summary>
+    private static readonly string? AgentVersion =
+        typeof(AgentApiClient).Assembly.GetName().Version?.ToString();
     private sealed record AuthResponse(string AccessToken, long ExpiresInSeconds);
     private sealed record PolicyResponse(
         string WorkWindowStart, string WorkWindowEnd, string Timezone,
@@ -67,7 +71,7 @@ public sealed class AgentApiClient : IAgentApi
     public async Task<string> AuthenticateAsync(DeviceCredentials credentials, CancellationToken ct)
     {
         var response = await _http.PostAsJsonAsync(
-            "/api/v1/devices/auth", new AuthRequest(credentials.DeviceId, credentials.DeviceSecret), ct);
+            "/api/v1/devices/auth", new AuthRequest(credentials.DeviceId, credentials.DeviceSecret, AgentVersion), ct);
         response.EnsureSuccessStatusCode();
         var body = (await response.Content.ReadFromJsonAsync<AuthResponse>(ct))!;
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", body.AccessToken);

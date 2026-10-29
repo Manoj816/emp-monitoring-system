@@ -105,6 +105,9 @@ paths:
               properties:
                 deviceId: { type: string, format: uuid }
                 deviceSecret: { type: string }
+                agentVersion:
+                  type: string
+                  description: Optional; recorded on every sign-in so an upgraded agent shows its real version.
       responses:
         "200":
           description: Token issued.

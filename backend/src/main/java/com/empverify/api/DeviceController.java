@@ -46,7 +46,8 @@ public class DeviceController {
 
     public record RegisterResponse(String deviceId, String deviceSecret) {}
 
-    public record AuthRequest(@NotBlank String deviceId, @NotBlank String deviceSecret) {}
+    /** @param agentVersion optional; reported on every sign-in so an upgraded agent shows its real version */
+    public record AuthRequest(@NotBlank String deviceId, @NotBlank String deviceSecret, String agentVersion) {}
 
     public record AuthResponse(String accessToken, long expiresInSeconds) {}
 
@@ -86,7 +87,8 @@ public class DeviceController {
 
     @PostMapping("/auth")
     public AuthResponse auth(@Valid @RequestBody AuthRequest request) {
-        var auth = deviceService.authenticate(UUID.fromString(request.deviceId()), request.deviceSecret());
+        var auth = deviceService.authenticate(
+                UUID.fromString(request.deviceId()), request.deviceSecret(), request.agentVersion());
         return new AuthResponse(auth.accessToken(), auth.expiresInSeconds());
     }
 
