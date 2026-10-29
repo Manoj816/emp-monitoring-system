@@ -143,6 +143,15 @@ paths:
                       True once the employee's first live scan has matched the uploaded
                       ID/photo (its frame then becomes a second reference). Until then the
                       agent opens the day's check as ENROLLMENT instead of PERIODIC.
+                  employeeId:
+                    type: string
+                    format: uuid
+                    nullable: true
+                    description: >
+                      The linked employee, null while unassigned. An active agent re-reads
+                      this state periodically: assigned=false means the system was
+                      deregistered (employee offboarded) and checks stop; a different
+                      employeeId means the system was reassigned and the day is re-planned.
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/policy:

@@ -11,6 +11,7 @@ export default function DevicesPage() {
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [choice, setChoice] = useState<Record<string, string>>({}); // deviceId -> employeeId
+  const [reassigning, setReassigning] = useState<string | null>(null); // deviceId with the picker open
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -51,9 +52,45 @@ export default function DevicesPage() {
   function assign(device: DeviceSummary) {
     const employeeId = choice[device.id];
     if (!employeeId) return;
+    const target = employees.find((e) => e.id === employeeId);
+    if (
+      device.employeeId !== null &&
+      !confirm(
+        `Reassign ${device.hostname ?? device.id} from ${device.employeeName ?? "its employee"} to ` +
+          `${target?.fullName ?? "the selected employee"}? The agent switches on its next poll; if the new ` +
+          `employee has no live enrollment yet, their first check is the enrollment scan.`,
+      )
+    ) {
+      return;
+    }
     void run(async () => {
       await api.assignDevice(device.id, employeeId);
+      setReassigning(null);
+      setChoice({ ...choice, [device.id]: "" });
     });
+  }
+
+  function picker(device: DeviceSummary) {
+    const candidates = employees.filter((e) => e.id !== device.employeeId);
+    return (
+      <>
+        <select
+          value={choice[device.id] ?? ""}
+          onChange={(e) => setChoice({ ...choice, [device.id]: e.target.value })}
+          disabled={busy}
+        >
+          <option value="">Select employee…</option>
+          {candidates.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.fullName} ({e.employeeCode})
+            </option>
+          ))}
+        </select>{" "}
+        <button className="action" disabled={busy || !choice[device.id]} onClick={() => assign(device)}>
+          {device.employeeId === null ? "Assign" : "Confirm reassign"}
+        </button>{" "}
+      </>
+    );
   }
 
   return (
@@ -61,8 +98,9 @@ export default function DevicesPage() {
       <h2 style={{ marginTop: 0 }}>Registered systems</h2>
       <p className="muted">
         A system that registered itself on install shows as <em>Unassigned</em> until you link it to
-        an employee — that activates verification on it. Revoking immediately blocks a device from
-        verifying and from re-authenticating (lost, retired, or reassigned machine).
+        an employee — that activates verification on it. <em>Reassign</em> hands a system to a different
+        employee; offboarding an employee deregisters their systems back to Unassigned. Revoking
+        immediately blocks a device from verifying and from re-authenticating (lost or retired machine).
       </p>
       {error && <p className="error-text">{error}</p>}
 
@@ -88,25 +126,28 @@ export default function DevicesPage() {
               <td className="muted">{d.agentVersion ?? "—"}</td>
               <td className="muted">{d.registeredAt ? new Date(d.registeredAt).toLocaleDateString() : "—"}</td>
               <td className="muted">{d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : "never"}</td>
-              <td>
-                {d.employeeId === null && d.status !== "REVOKED" && (
-                  <>
-                    <select
-                      value={choice[d.id] ?? ""}
-                      onChange={(e) => setChoice({ ...choice, [d.id]: e.target.value })}
-                      disabled={busy}
-                    >
-                      <option value="">Select employee…</option>
-                      {employees.map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.fullName} ({e.employeeCode})
-                        </option>
-                      ))}
-                    </select>{" "}
-                    <button className="action" disabled={busy || !choice[d.id]} onClick={() => assign(d)}>
-                      Assign
-                    </button>{" "}
-                  </>
+              <td style={{ whiteSpace: "nowrap" }}>
+                {d.status !== "REVOKED" && d.employeeId === null && picker(d)}
+                {d.status !== "REVOKED" && d.employeeId !== null && (
+                  reassigning === d.id ? (
+                    <>
+                      {picker(d)}
+                      <button className="action" disabled={busy} onClick={() => setReassigning(null)}>
+                        Cancel
+                      </button>{" "}
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="action"
+                        disabled={busy}
+                        onClick={() => setReassigning(d.id)}
+                        title="Hand this system to a different employee"
+                      >
+                        Reassign
+                      </button>{" "}
+                    </>
+                  )
                 )}
                 <button className="action" disabled={busy || d.status === "REVOKED"} onClick={() => revoke(d)}>
                   Revoke

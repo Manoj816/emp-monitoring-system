@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -259,21 +260,59 @@ class DeviceServiceTest {
     }
 
     @Test
-    void offboardEmployeeMarksOffboardedAndRevokesActiveDevices() {
+    void offboardEmployeeMarksOffboardedAndDeregistersTheirSystems() {
         var employee = activeEmployee();
         var active = new Device();
+        active.setEmployeeId(employee.getId());
         active.setStatus(DeviceStatus.ACTIVE);
         var alreadyRevoked = new Device();
+        alreadyRevoked.setEmployeeId(employee.getId());
         alreadyRevoked.setStatus(DeviceStatus.REVOKED);
         when(employees.findById(employee.getId())).thenReturn(Optional.of(employee));
         when(employees.save(any())).thenAnswer(i -> i.getArgument(0));
         when(devices.findByEmployeeId(employee.getId())).thenReturn(List.of(active, alreadyRevoked));
         lenient().when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        int revoked = service.offboardEmployee(employee.getId(), "admin");
+        int deregistered = service.offboardEmployee(employee.getId(), "admin");
 
-        assertEquals(1, revoked, "only the active device is newly revoked");
+        assertEquals(1, deregistered, "the active system is deregistered; the revoked one stays revoked");
         assertEquals(EmployeeStatus.OFFBOARDED, employee.getStatus());
-        assertEquals(DeviceStatus.REVOKED, active.getStatus());
+        // The system is unlinked and back to Unassigned, ready for the next employee.
+        assertEquals(null, active.getEmployeeId());
+        assertEquals(DeviceStatus.PENDING, active.getStatus());
+        assertEquals(null, alreadyRevoked.getEmployeeId());
+        assertEquals(DeviceStatus.REVOKED, alreadyRevoked.getStatus());
+        verify(audit).record(eq("admin"), eq("DEVICE_UNASSIGNED"), eq("device"), eq(active.getId().toString()), any());
+        verify(audit).record(eq("admin"), eq("EMPLOYEE_OFFBOARDED"), eq("employee"), eq(employee.getId().toString()), any());
+    }
+
+    @Test
+    void assigningAnAssignedSystemToAnotherEmployeeIsAReassignment() {
+        var first = activeEmployee();
+        var second = activeEmployee();
+        var device = new Device();
+        device.setEmployeeId(first.getId());
+        device.setStatus(DeviceStatus.ACTIVE);
+        when(devices.findById(device.getId())).thenReturn(Optional.of(device));
+        when(employees.findById(second.getId())).thenReturn(Optional.of(second));
+        when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service.assignDevice(device.getId(), second.getId(), "admin");
+
+        assertEquals(second.getId(), device.getEmployeeId());
+        assertEquals(DeviceStatus.ACTIVE, device.getStatus());
+        verify(audit).record(eq("admin"), eq("DEVICE_REASSIGNED"), eq("device"), eq(device.getId().toString()), any());
+    }
+
+    @Test
+    void reassigningToTheSameEmployeeIsRefused() {
+        var employee = activeEmployee();
+        var device = new Device();
+        device.setEmployeeId(employee.getId());
+        device.setStatus(DeviceStatus.ACTIVE);
+        when(devices.findById(device.getId())).thenReturn(Optional.of(device));
+        when(employees.findById(employee.getId())).thenReturn(Optional.of(employee));
+
+        assertThrows(ApiException.class, () -> service.assignDevice(device.getId(), employee.getId(), "admin"));
     }
 }

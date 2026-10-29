@@ -14,10 +14,20 @@ public partial class App : System.Windows.Application
 {
     private WinForms.NotifyIcon? _trayIcon;
     private MainWindow? _window;
+    private Mutex? _instanceLock;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // One agent per user session: the login startup task, the installer's
+        // run-at-logon entry and a manual launch must not run side by side.
+        _instanceLock = new Mutex(initiallyOwned: true, @"Local\EmpVerify.Agent", out var firstInstance);
+        if (!firstInstance)
+        {
+            Shutdown();
+            return;
+        }
 
         _window = new MainWindow();
 
@@ -73,6 +83,7 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _trayIcon?.Dispose();
+        _instanceLock?.Dispose();
         base.OnExit(e);
     }
 }

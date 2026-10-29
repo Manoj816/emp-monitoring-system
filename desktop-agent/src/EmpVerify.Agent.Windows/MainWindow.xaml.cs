@@ -52,7 +52,11 @@ public partial class MainWindow : Window
     private int _checkRetriesLeft;
     private DeviceState? _deviceState;
     private DateTime _planDate = DateTime.MinValue;
+    private DateTimeOffset _lastStateRefresh = DateTimeOffset.MinValue;
     private bool _exiting;
+
+    /// <summary>How often an active agent re-reads its assignment (offboarding / reassignment).</summary>
+    private static readonly TimeSpan StateRefreshInterval = TimeSpan.FromSeconds(60);
 
     /// <summary>A check planned at activation lands at least this far in the future.</summary>
     private static readonly TimeSpan PlanLead = TimeSpan.FromMinutes(1);
@@ -259,6 +263,7 @@ public partial class MainWindow : Window
             _plan = _scheduler.PlanRemainingDay(_policy, now, PlanLead);
             _planDate = DateTime.Today;
             _lastHandled = now;
+            _lastStateRefresh = now;
             _checkRetriesLeft = _settings.MissedCheckRetries;
             _checkRetryAt = null;
             _timer.Start();
@@ -398,6 +403,7 @@ public partial class MainWindow : Window
             {
                 await EnsureAuthenticatedAsync(CancellationToken.None);
                 var state = await _api!.GetDeviceStateAsync(CancellationToken.None);
+                _deviceState = state;
                 if (state.Assigned)
                 {
                     _awaitingAssignment = false;
@@ -417,6 +423,18 @@ public partial class MainWindow : Window
             return;
         }
         var now = DateTimeOffset.Now;
+
+        // Assignment can change under a running agent: the employee is offboarded
+        // (system deregistered -> back to waiting) or the system is handed to another
+        // employee (re-plan; the enrollment scan runs first if they have none).
+        if (now - _lastStateRefresh >= StateRefreshInterval)
+        {
+            _lastStateRefresh = now;
+            if (await RefreshAssignmentAsync())
+            {
+                return;
+            }
+        }
 
         // A new day: plan it afresh (the agent may run for weeks without a restart).
         if (DateTime.Today != _planDate)
@@ -475,6 +493,58 @@ public partial class MainWindow : Window
         _lastHandled = now;
         _checkRetriesLeft = _settings.MissedCheckRetries;
         await RunCheckAsync(await ResolveScheduledCheckTypeAsync(), scheduled: true);
+    }
+
+    /// <summary>
+    /// Re-reads the device state while active. Returns true when the assignment
+    /// changed and the agent was deactivated or re-planned, so the caller's tick
+    /// should stop here.
+    /// </summary>
+    private async Task<bool> RefreshAssignmentAsync()
+    {
+        DeviceState state;
+        try
+        {
+            await EnsureAuthenticatedAsync(CancellationToken.None);
+            state = await _api!.GetDeviceStateAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            Log($"Could not refresh device state: {ex.Message}");
+            return false;
+        }
+
+        var previous = _deviceState;
+        _deviceState = state;
+        if (!state.Assigned)
+        {
+            Deactivate();
+            Log("This system was deregistered from its employee — checks stop until an administrator assigns it again.");
+            EnterAwaitingAssignment();
+            return true;
+        }
+        if (previous?.EmployeeId is not null && state.EmployeeId != previous.EmployeeId)
+        {
+            Log("This system was assigned to a different employee — re-planning today's check.");
+            Deactivate();
+            await ActivateAsync();
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Stops scheduled checks; the connection and credentials are kept.</summary>
+    private void Deactivate()
+    {
+        _flow = null;
+        _plan = Array.Empty<DateTimeOffset>();
+        _planDate = DateTime.MinValue;
+        _checkRetryAt = null;
+        _demoScheduledAt = null;
+        _sessionStartRetryAt = null;
+        _ = SetCheckButtonsEnabled(false);
+        DemoScheduleButton.IsEnabled = false;
+        DemoClearButton.IsEnabled = false;
     }
 
     private async void VerifyNow_Click(object sender, RoutedEventArgs e)

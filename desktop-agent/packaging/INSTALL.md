@@ -30,8 +30,11 @@ present on Windows 11 and most Windows 10 PCs) when it is missing.
    to the employee. From then on the agent runs the daily check at a random time
    inside the work window; the first check is the enrollment scan.
 
-The agent auto-starts at every sign-in (Settings > Apps > Startup shows it). A
-standard user cannot uninstall a per-machine (provisioned) package.
+The agent runs in the background every day and comes back after every restart:
+it starts at sign-in through the package's startup task (Settings > Apps > Startup
+shows it) and through a machine-wide run entry the installer adds, which a standard
+user cannot switch off. Only one copy runs at a time. A standard user cannot
+uninstall a per-machine (provisioned) package.
 
 ## Command-line use (PowerShell, elevated or not — it elevates itself)
 

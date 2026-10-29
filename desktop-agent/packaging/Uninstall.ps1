@@ -29,6 +29,7 @@ if (-not $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Adm
 }
 
 Get-Process -Name "EmpVerify.Agent.Windows" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "EmpVerifyAgent" -ErrorAction SilentlyContinue
 
 $prov = Get-AppxProvisionedPackage -Online | Where-Object DisplayName -eq $PackageName
 if ($prov) {

@@ -145,7 +145,12 @@ public class DeviceService {
         return new Registration(device.getId(), secret);
     }
 
-    /** Admin: links a registered system to an employee and activates it. */
+    /**
+     * Admin: links a registered system to an employee and activates it. Also the
+     * way to hand a system to a different employee (reassign): the agent notices
+     * the new employee on its next state poll and, if that employee has no live
+     * enrollment yet, runs the enrollment scan first.
+     */
     @Transactional
     public Device assignDevice(UUID deviceId, UUID employeeId, String actor) {
         var device = devices.findById(deviceId)
@@ -159,11 +164,15 @@ public class DeviceService {
             throw new ApiException(HttpStatus.CONFLICT, "employee is not active");
         }
         UUID previous = device.getEmployeeId();
+        if (employeeId.equals(previous) && device.getStatus() == DeviceStatus.ACTIVE) {
+            throw new ApiException(HttpStatus.CONFLICT, "device is already assigned to this employee");
+        }
         device.setEmployeeId(employeeId);
         device.setStatus(DeviceStatus.ACTIVE);
         devices.save(device);
 
-        audit.record(actor, "DEVICE_ASSIGNED", "device", deviceId.toString(),
+        audit.record(actor, previous == null ? "DEVICE_ASSIGNED" : "DEVICE_REASSIGNED", "device",
+                deviceId.toString(),
                 "{\"employeeId\":\"" + employeeId + "\",\"previousEmployeeId\":"
                         + (previous == null ? "null" : "\"" + previous + "\"") + "}");
         return device;
@@ -227,11 +236,15 @@ public class DeviceService {
     }
 
     /**
-     * Offboards an employee: marks them OFFBOARDED and revokes all their devices
-     * so none can continue verifying (PRD Requirement 7 offboarding). Biometric
-     * reference deletion is handled under the retention policy separately.
+     * Offboards an employee: marks them OFFBOARDED and, in the same step,
+     * deregisters every system linked to them — the link is removed and the
+     * system goes back to Unassigned (PENDING), so it can no longer verify anyone
+     * and is ready to be handed to the next employee (PRD Requirement 7
+     * offboarding). A system that was already revoked stays revoked. The agent
+     * on the machine sees "unassigned" on its next state poll and stops checks.
+     * Biometric reference deletion is handled under the retention policy separately.
      *
-     * @return the number of devices revoked
+     * @return the number of systems deregistered
      */
     @Transactional
     public int offboardEmployee(UUID employeeId, String actor) {
@@ -240,17 +253,20 @@ public class DeviceService {
         employee.setStatus(EmployeeStatus.OFFBOARDED);
         employees.save(employee);
 
-        int revoked = 0;
+        int deregistered = 0;
         for (var device : devices.findByEmployeeId(employeeId)) {
+            device.setEmployeeId(null);
             if (device.getStatus() != DeviceStatus.REVOKED) {
-                device.setStatus(DeviceStatus.REVOKED);
-                devices.save(device);
-                revoked++;
+                device.setStatus(DeviceStatus.PENDING);
+                deregistered++;
             }
+            devices.save(device);
+            audit.record(actor, "DEVICE_UNASSIGNED", "device", device.getId().toString(),
+                    "{\"previousEmployeeId\":\"" + employeeId + "\",\"reason\":\"EMPLOYEE_OFFBOARDED\"}");
         }
         audit.record(actor, "EMPLOYEE_OFFBOARDED", "employee", employeeId.toString(),
-                "{\"devicesRevoked\":" + revoked + "}");
-        return revoked;
+                "{\"devicesDeregistered\":" + deregistered + "}");
+        return deregistered;
     }
 
     private static String randomSecret() {

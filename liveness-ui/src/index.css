@@ -1,0 +1,36 @@
+/* The check pages are shown in the agent's own window: everything must fit the
+   viewport with no scrolling, whatever its size, so the scan is visible at once. */
+html, body, #root { height: 100%; margin: 0; }
+body {
+  overflow: hidden;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #1c2733;
+  background: #fff;
+}
+
+.check-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 16px;
+  box-sizing: border-box;
+  gap: 6px;
+}
+.check-page h1 { font-size: 22px; margin: 0; }
+.check-page .lead { margin: 0; text-align: center; color: #40505f; }
+.check-page .warning { margin: 0; font-size: 13px; color: #6b5a00; text-align: center; }
+.check-page .notice { margin: 0; color: #8a5a00; text-align: center; }
+.check-page .message { font-size: 20px; text-align: center; margin: auto 0; }
+
+/* The scan fills what is left. Its width is capped so a 4:3 camera frame never
+   grows taller than the remaining height (no scrolling on any screen). */
+.check-page .scan {
+  flex: 1;
+  min-height: 0;
+  width: min(100%, calc((100vh - 120px) * 4 / 3), 960px);
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+.check-page .scan > * { width: 100%; }

@@ -106,37 +106,45 @@ export default function App() {
 
   let body;
   if (!identityPoolId) {
-    body = <p>Liveness is not configured (VITE_COGNITO_IDENTITY_POOL_ID is missing).</p>;
+    body = <p className="message">Liveness is not configured (VITE_COGNITO_IDENTITY_POOL_ID is missing).</p>;
   } else if (!ready) {
-    body = <p>This page must be opened from the EmpVerify desktop app.</p>;
+    body = <p className="message">This page must be opened from the EmpVerify desktop app.</p>;
   } else if (state === "done" || state === "error") {
-    body = <p style={{ fontSize: 18 }}>{message}</p>;
+    body = <p className="message">{message}</p>;
   } else if (state === "working") {
-    body = <p style={{ fontSize: 18 }}>Verifying…</p>;
+    body = <p className="message">Verifying…</p>;
   } else {
     body = (
       <>
-        <p>
-          This identity check is required. Follow the on-screen prompts to scan your face;
+        <p className="lead">
+          This identity check is required. Center your face in the oval and follow the prompts;
           the window closes by itself when the check is done.
         </p>
-        {notice && <p style={{ color: "#8a5a00" }}>{notice}</p>}
-        <FaceLivenessDetector
-          key={session!}
-          sessionId={session!}
-          region={region}
-          onAnalysisComplete={complete}
-          onError={(err) =>
-            void restart("error", `The face scan hit a problem (${err.error?.message ?? String(err.state)}).`)
-          }
-          onUserCancel={() => void restart("cancelled", "The scan was cancelled.")}
-        />
+        <p className="warning">
+          Photosensitivity warning: the screen flashes different colors during the scan.
+        </p>
+        {notice && <p className="notice">{notice}</p>}
+        <div className="scan">
+          {/* The camera opens straight away (no start screen to scroll to): the
+              agent's window is the consent surface and the text above is the briefing. */}
+          <FaceLivenessDetector
+            key={session!}
+            sessionId={session!}
+            region={region}
+            disableStartScreen
+            onAnalysisComplete={complete}
+            onError={(err) =>
+              void restart("error", `The face scan hit a problem (${err.error?.message ?? String(err.state)}).`)
+            }
+            onUserCancel={() => void restart("cancelled", "The scan was cancelled.")}
+          />
+        </div>
       </>
     );
   }
 
   return (
-    <main style={{ fontFamily: "system-ui", padding: "1.5rem", maxWidth: 720, margin: "0 auto" }}>
+    <main className="check-page">
       <h1>Identity verification</h1>
       {body}
     </main>

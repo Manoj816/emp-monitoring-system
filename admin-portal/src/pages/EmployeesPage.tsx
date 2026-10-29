@@ -7,7 +7,6 @@ export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [token, setToken] = useState<{ employee: string; value: string } | null>(null);
   const [cameraFor, setCameraFor] = useState<Employee | null>(null);
   const [adding, setAdding] = useState(false);
   const fileTargetRef = useRef<Employee | null>(null);
@@ -39,21 +38,18 @@ export default function EmployeesPage() {
     }
   }
 
-  function issueToken(employee: Employee) {
-    void run(async () => {
-      const result = await api.issueEnrollmentToken(employee.id);
-      setToken({ employee: `${employee.fullName} (${employee.employeeCode})`, value: result.enrollmentToken });
-    });
-  }
-
   function offboard(employee: Employee) {
-    if (!confirm(`Offboard ${employee.fullName}? This revokes all their devices and marks them OFFBOARDED.`)) {
+    if (
+      !confirm(
+        `Offboard ${employee.fullName}? They are marked OFFBOARDED and every system assigned to them is ` +
+          `deregistered in the same step (back to Unassigned, so it can be handed to the next employee).`,
+      )
+    ) {
       return;
     }
     void run(async () => {
       const result = await api.offboardEmployee(employee.id);
-      setToken(null);
-      alert(`${employee.fullName} offboarded. Devices revoked: ${result.devicesRevoked}.`);
+      alert(`${employee.fullName} offboarded. Systems deregistered: ${result.devicesDeregistered}.`);
     });
   }
 
@@ -79,18 +75,6 @@ export default function EmployeesPage() {
       </div>
 
       {error && <p className="error-text">{error}</p>}
-
-      {token && (
-        <div className="notice">
-          Enrollment token for <strong>{token.employee}</strong> (single use, 24h) — paste into the agent:
-          <br />
-          <code>{token.value}</code>
-          <div style={{ marginTop: 8 }}>
-            <button className="action" onClick={() => void navigator.clipboard.writeText(token.value)}>Copy</button>{" "}
-            <button className="action" onClick={() => setToken(null)}>Dismiss</button>
-          </div>
-        </div>
-      )}
 
       <table>
         <thead>
@@ -120,11 +104,8 @@ export default function EmployeesPage() {
               <td style={{ whiteSpace: "nowrap" }}>
                 <button className="action" disabled={busy} onClick={() => setCameraFor(emp)}>Webcam</button>{" "}
                 <button className="action" disabled={busy} onClick={() => pickFile(emp)}>Upload photo</button>{" "}
-                <button className="action" disabled={busy || !emp.hasReferenceImage} onClick={() => issueToken(emp)}
-                        title={emp.hasReferenceImage ? "" : "Enroll a reference image first"}>
-                  Issue token
-                </button>{" "}
-                <button className="action" disabled={busy || emp.status === "OFFBOARDED"} onClick={() => offboard(emp)}>
+                <button className="action" disabled={busy || emp.status === "OFFBOARDED"} onClick={() => offboard(emp)}
+                        title="Marks the employee OFFBOARDED and deregisters their systems">
                   Offboard
                 </button>
               </td>

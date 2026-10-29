@@ -169,7 +169,7 @@ public class AdminController {
             String hostname, String status, String agentVersion,
             java.time.Instant registeredAt, java.time.Instant lastSeenAt) {}
 
-    public record OffboardResponse(String employeeId, String status, int devicesRevoked) {}
+    public record OffboardResponse(String employeeId, String status, int devicesDeregistered) {}
 
     /** All registered devices with employee context (device-management view). */
     @GetMapping("/devices")
@@ -215,11 +215,11 @@ public class AdminController {
         return java.util.Map.of("intact", audit.verifyChain());
     }
 
-    /** Offboards an employee: marks OFFBOARDED and revokes all their devices. */
+    /** Offboards an employee: marks OFFBOARDED and deregisters their systems (back to Unassigned). */
     @PostMapping("/employees/{employeeId}/offboard")
     public OffboardResponse offboard(@PathVariable UUID employeeId) {
-        int revoked = deviceService.offboardEmployee(employeeId, "admin");
-        return new OffboardResponse(employeeId.toString(), "OFFBOARDED", revoked);
+        int deregistered = deviceService.offboardEmployee(employeeId, "admin");
+        return new OffboardResponse(employeeId.toString(), "OFFBOARDED", deregistered);
     }
 
     /** Uploads/replaces the employee's reference image; the previous one is marked REPLACED. */

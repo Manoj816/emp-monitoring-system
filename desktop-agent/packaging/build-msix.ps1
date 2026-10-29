@@ -62,7 +62,12 @@ Write-Host "signtool: $signtool"
 # 1. Publish the agent (self-contained so target machines need no .NET runtime).
 Write-Host "`n[1/5] Publishing agent..."
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
-& $DotnetExe publish $proj -c $Configuration -r win-x64 --self-contained -o $stage --nologo
+$versionProps = @()
+if ($Version) {
+    # The agent reports its assembly version to the server: keep it equal to the package version.
+    $versionProps = @("-p:AssemblyVersion=$Version", "-p:FileVersion=$Version", "-p:InformationalVersion=$Version")
+}
+& $DotnetExe publish $proj -c $Configuration -r win-x64 --self-contained -o $stage --nologo @versionProps
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 
 # 2. Stage the manifest + logos alongside the published binaries.

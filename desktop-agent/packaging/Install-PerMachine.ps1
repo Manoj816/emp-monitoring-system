@@ -17,8 +17,9 @@
     4. Write the provisioning token + backend URL (HKLM\SOFTWARE\EmpVerify) so the
        agent registers this system by itself on first launch.
     5. Provision the MSIX for every user on the PC (a standard user cannot remove
-       a provisioned package) and install it for the current user.
-    6. Start the agent as the signed-in user. It also auto-starts at every login.
+       a provisioned package), install it for the current user, and add a
+       machine-wide run-at-sign-in entry so it comes back after every restart.
+    6. Start the agent as the signed-in user.
 
   Defaults are picked up from the folder this script is in, so the bundle that
   build-msix.ps1 produces (out\ or the Setup zip) installs by double-clicking
@@ -202,13 +203,22 @@ Add-AppxPackage -Path $MsixPath -ForceApplicationShutdown -ForceUpdateFromAnyVer
 $pkg = Get-AppxPackage -Name $PackageName
 Write-Host "  installed for this user: $($pkg.PackageFullName)"
 
+# Run at every sign-in, for every user, after every restart. The package already
+# declares a startup task (Settings > Apps > Startup); this machine-wide entry is
+# the belt-and-braces a standard user cannot switch off. The agent is single
+# instance, so the two never run side by side.
+$launch = "shell:AppsFolder\$($pkg.PackageFamilyName)!$AppId"
+$runKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+Set-ItemProperty -Path $runKey -Name "EmpVerifyAgent" -Value "explorer.exe $launch"
+Write-Host "  run-at-sign-in entry set (HKLM Run: EmpVerifyAgent)"
+
 # ---------------------------------------------------------------- 6. launch
 Write-Host "[6/6] Starting the agent..."
 if ($NoLaunch) {
     Write-Host "  skipped (-NoLaunch); it starts automatically at the next sign-in"
 } else {
     # Via the shell so it runs as the signed-in user, not elevated.
-    Start-Process explorer.exe "shell:AppsFolder\$($pkg.PackageFamilyName)!$AppId"
+    Start-Process explorer.exe $launch
     Write-Host "  started (tray icon); it also starts automatically at every sign-in"
 }
 

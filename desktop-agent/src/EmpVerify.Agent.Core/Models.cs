@@ -26,7 +26,8 @@ public sealed record CaptureSession(string CaptureUrl, DateTimeOffset ExpiresAt)
 /// an employee; Enrolled is false until the employee's first live scan has matched
 /// the uploaded ID/photo (until then the next check is the enrollment scan).
 /// </summary>
-public sealed record DeviceState(string Status, bool Assigned, bool Enrolled);
+/// <param name="EmployeeId">The linked employee (null while unassigned); a change means the system was reassigned.</param>
+public sealed record DeviceState(string Status, bool Assigned, bool Enrolled, string? EmployeeId = null);
 
 public sealed record CheckResult(
     string CheckId,

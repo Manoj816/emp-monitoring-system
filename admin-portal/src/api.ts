@@ -132,8 +132,9 @@ export const api = {
       body: JSON.stringify({ employeeId }),
     }),
 
+  /** Marks the employee OFFBOARDED and deregisters their systems (back to Unassigned) in the same step. */
   offboardEmployee: (employeeId: string) =>
-    request<{ employeeId: string; status: string; devicesRevoked: number }>(
+    request<{ employeeId: string; status: string; devicesDeregistered: number }>(
       `/api/v1/admin/employees/${employeeId}/offboard`,
       { method: "POST" },
     ),
