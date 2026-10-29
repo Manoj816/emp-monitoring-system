@@ -126,7 +126,11 @@ export default function CapturePage() {
     >
       <h1>Identity check</h1>
       {state === "done" || state === "error" || state === "expired" ? (
-        <p style={{ fontSize: 18 }}>{message}</p>
+        <>
+          <p style={{ fontSize: 18 }}>{message}</p>
+          {/* The agent honours window.close() once the check has ended. */}
+          <button className="close-button" onClick={() => window.close()}>Close</button>
+        </>
       ) : (
         <>
           <p>

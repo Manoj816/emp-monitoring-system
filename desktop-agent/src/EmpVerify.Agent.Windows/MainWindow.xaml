@@ -11,16 +11,9 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <GroupBox Grid.Row="0" Header="Registration" Padding="8">
-            <StackPanel>
-                <TextBlock Text="Backend URL"/>
-                <TextBox x:Name="BackendUrlBox"/>
-                <TextBlock Text="Enrollment token (from your administrator)" Margin="0,8,0,0"/>
-                <TextBox x:Name="EnrollmentTokenBox"/>
-                <Button x:Name="RegisterButton" Content="Register this device" Margin="0,10,0,0"
-                        HorizontalAlignment="Left" Padding="10,4" Click="Register_Click"/>
-            </StackPanel>
-        </GroupBox>
+        <!-- Systems register themselves from the provisioning token the installer
+             placed on the machine; there is nothing for the employee to enter. -->
+        <TextBlock Grid.Row="0" FontSize="16" FontWeight="SemiBold" Text="EmpVerify identity checks"/>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,0">
             <Button x:Name="VerifyNowButton" Content="Verify now" Padding="10,4"

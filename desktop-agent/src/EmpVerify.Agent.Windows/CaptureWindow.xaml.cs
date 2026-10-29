@@ -50,6 +50,9 @@ public partial class CaptureWindow : Window
             var core = Browser.CoreWebView2;
             core.Settings.AreDefaultContextMenusEnabled = false;
             core.Settings.AreDevToolsEnabled = false;
+            // The page offers a Close button once the scan has ended (result shown or
+            // error); window.close() there is the only employee-driven way out.
+            core.WindowCloseRequested += (_, _) => Close();
             // The page is our own; clicking Capture is the consent, so don't add a second prompt.
             core.PermissionRequested += (_, e) =>
             {

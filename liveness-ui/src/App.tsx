@@ -99,9 +99,15 @@ export default function App() {
       setMessage(`Result: ${body.status}${conf}. This window closes by itself.`);
       setState("done");
     } catch (e) {
-      setMessage(`Could not complete: ${(e as Error).message}`);
-      setState("error");
+      // The scan ran but the server could not record it: tell it so the check is
+      // closed out as an error (not left pending), then let the employee close.
+      await abandon("error", `Could not complete the check: ${(e as Error).message}. The EmpVerify app will offer it again.`);
     }
+  }
+
+  /** Done or failed: the page may now be closed (the agent honours window.close()). */
+  function closeWindow() {
+    window.close();
   }
 
   let body;
@@ -110,7 +116,12 @@ export default function App() {
   } else if (!ready) {
     body = <p className="message">This page must be opened from the EmpVerify desktop app.</p>;
   } else if (state === "done" || state === "error") {
-    body = <p className="message">{message}</p>;
+    body = (
+      <div className="ended">
+        <p className="message">{message}</p>
+        <button className="close-button" onClick={closeWindow}>Close</button>
+      </div>
+    );
   } else if (state === "working") {
     body = <p className="message">Verifying…</p>;
   } else {

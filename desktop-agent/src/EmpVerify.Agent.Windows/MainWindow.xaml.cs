@@ -67,7 +67,6 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        BackendUrlBox.Text = _settings.BackendUrl;
         if (!string.IsNullOrWhiteSpace(_settings.DemoCheckAt))
         {
             DemoTimeBox.Text = _settings.DemoCheckAt;
@@ -116,7 +115,10 @@ public partial class MainWindow : Window
         }
         if (credentials is null)
         {
-            Log("No device registration found — enter an enrollment token to register.");
+            // No stored identity and no deploy-time token: the installer did not
+            // configure this machine. Nothing the employee can type fixes that.
+            Log("This system is not set up for EmpVerify (no provisioning token found). Contact your administrator.");
+            SetStatus("Not set up — contact your administrator.");
             return;
         }
         await ConnectAsync(credentials);
@@ -130,7 +132,6 @@ public partial class MainWindow : Window
             {
                 _settings.BackendUrl = provisioning.BackendUrl!;
                 _settings.Save();
-                BackendUrlBox.Text = _settings.BackendUrl;
             }
             var api = CreateApi();
             var version = typeof(MainWindow).Assembly.GetName().Version?.ToString();
@@ -157,33 +158,6 @@ public partial class MainWindow : Window
         {
             Log($"Auto-registration failed: {ex.Message}");
             return null;
-        }
-    }
-
-    private async void Register_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            RegisterButton.IsEnabled = false;
-            _settings.BackendUrl = BackendUrlBox.Text.Trim();
-            _settings.Save();
-
-            var api = CreateApi();
-            var credentials = await api.RegisterAsync(
-                EnrollmentTokenBox.Text.Trim(), "WINDOWS", Environment.MachineName,
-                typeof(MainWindow).Assembly.GetName().Version?.ToString(), CancellationToken.None);
-            await _credentialStore.SaveAsync(credentials, CancellationToken.None);
-            EnrollmentTokenBox.Clear();
-            Log($"Device registered: {credentials.DeviceId}");
-            await ConnectAsync(credentials);
-        }
-        catch (Exception ex)
-        {
-            Log($"Registration failed: {ex.Message}");
-        }
-        finally
-        {
-            RegisterButton.IsEnabled = true;
         }
     }
 
