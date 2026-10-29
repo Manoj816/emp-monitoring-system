@@ -22,36 +22,43 @@ export default function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
   }
 
   return (
-    <main className="page" style={{ maxWidth: 380, margin: "4rem auto" }}>
-      <h1>EmpVerify Admin</h1>
-      <p>Sign in with your administrator account.</p>
-      <form onSubmit={submit} style={{ display: "grid", gap: 12 }}>
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoFocus
-            style={{ width: "100%" }}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: "100%" }}
-          />
-        </label>
-        {error && <p style={{ color: "#b00020", margin: 0 }}>{error}</p>}
-        <button type="submit" disabled={busy}>
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
-    </main>
+    <div className="login-wrap">
+      <main className="card login-card">
+        <div className="brand">
+          <span className="brand-mark">EV</span>
+          <span>
+            <span className="brand-name">EmpVerify</span>
+            <span className="brand-sub">Admin console</span>
+          </span>
+        </div>
+        <h1>Sign in</h1>
+        <p className="muted" style={{ margin: 0 }}>Use your administrator account.</p>
+        <form onSubmit={submit}>
+          <label>
+            Email
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoFocus
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </label>
+          {error && <p className="error-text" style={{ margin: 0 }}>{error}</p>}
+          <button className="primary" type="submit" disabled={busy}>
+            {busy ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+      </main>
+    </div>
   );
 }
