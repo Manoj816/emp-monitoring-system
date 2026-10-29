@@ -141,7 +141,7 @@ export default function ChecksPage() {
         emptyText="No checks match this filter."
         columns={[
           {
-            key: "when", header: "When",
+            key: "when", header: "When", filter: "date", date: (row) => row.requestedAt,
             value: (row) => new Date(row.requestedAt).toLocaleString(),
             render: (row) => <span title={row.checkId}>{new Date(row.requestedAt).toLocaleString()}</span>,
           },

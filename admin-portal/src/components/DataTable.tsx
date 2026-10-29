@@ -12,10 +12,24 @@ export interface Column<T> {
   /** Plain-text value of the cell, used for filtering and as the default display. */
   value: (row: T) => string;
   render?: (row: T) => ReactNode;
-  /** "text" = contains match (default); "select" = pick one of the values present; "none" = no filter. */
-  filter?: "text" | "select" | "none";
+  /**
+   * "text" = contains match (default); "select" = pick one of the values present;
+   * "date" = From / To range on the column's date; "none" = no filter.
+   */
+  filter?: "text" | "select" | "date" | "none";
+  /** The raw timestamp for a "date" column (the display value stays `value`). */
+  date?: (row: T) => string | Date | null | undefined;
   cellStyle?: CSSProperties;
   headerStyle?: CSSProperties;
+}
+
+/** Inclusive local-day bounds for a From / To pair of yyyy-mm-dd inputs. */
+function inRange(raw: string | Date | null | undefined, from: string, to: string): boolean {
+  if (!raw) return false;
+  const t = new Date(raw).getTime();
+  if (from && t < new Date(`${from}T00:00:00`).getTime()) return false;
+  if (to && t > new Date(`${to}T23:59:59.999`).getTime()) return false;
+  return true;
 }
 
 const PAGE_SIZES = [10, 25, 50, 100];
@@ -37,9 +51,16 @@ export default function DataTable<T>(props: {
   const filtered = useMemo(() => {
     if (activeFilters.length === 0) return rows;
     return rows.filter((row) =>
-      activeFilters.every(([key, needle]) => {
-        const column = columns.find((c) => c.key === key);
-        if (!column) return true;
+      columns.every((column) => {
+        if (column.filter === "none") return true;
+        if (column.filter === "date") {
+          const from = filters[`${column.key}.from`] ?? "";
+          const to = filters[`${column.key}.to`] ?? "";
+          if (!from && !to) return true;
+          return inRange(column.date ? column.date(row) : column.value(row), from, to);
+        }
+        const needle = filters[column.key] ?? "";
+        if (needle === "") return true;
         const haystack = column.value(row);
         return column.filter === "select"
           ? haystack === needle
@@ -78,7 +99,27 @@ export default function DataTable<T>(props: {
           <tr className="filter-row">
             {columns.map((c) => (
               <th key={c.key}>
-                {c.filter === "none" ? null : c.filter === "select" ? (
+                {c.filter === "none" ? null : c.filter === "date" ? (
+                  <span className="date-range">
+                    <input
+                      type="date"
+                      value={filters[`${c.key}.from`] ?? ""}
+                      max={filters[`${c.key}.to`] || undefined}
+                      onChange={(e) => setFilters({ ...filters, [`${c.key}.from`]: e.target.value })}
+                      aria-label={`${c.header} from`}
+                      title="From (inclusive)"
+                    />
+                    <span className="muted">–</span>
+                    <input
+                      type="date"
+                      value={filters[`${c.key}.to`] ?? ""}
+                      min={filters[`${c.key}.from`] || undefined}
+                      onChange={(e) => setFilters({ ...filters, [`${c.key}.to`]: e.target.value })}
+                      aria-label={`${c.header} to`}
+                      title="To (inclusive)"
+                    />
+                  </span>
+                ) : c.filter === "select" ? (
                   <select
                     value={filters[c.key] ?? ""}
                     onChange={(e) => setFilters({ ...filters, [c.key]: e.target.value })}
