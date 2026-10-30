@@ -146,11 +146,11 @@ export default function ChecksPage() {
             render: (row) => (
               <>{row.employeeName ?? row.employeeId.slice(0, 8)} <span className="muted">{row.employeeCode ?? ""}</span></>
             ),
-            headerStyle: { width: 170 },
+            headerStyle: { width: 150 },
           },
           {
             key: "type", header: "Type", filter: "select", value: (row) => row.checkType,
-            cellStyle: { color: "var(--muted)" }, headerStyle: { width: 130 },
+            cellStyle: { color: "var(--muted)" }, headerStyle: { width: 120 },
           },
           {
             key: "status", header: "Status", filter: "select",
@@ -166,18 +166,18 @@ export default function ChecksPage() {
                 )}
               </>
             ),
-            cellStyle: { maxWidth: 360 }, headerStyle: { width: 360 },
+            cellStyle: { maxWidth: 300 }, headerStyle: { width: 300 },
           },
           {
             key: "similarity", header: "Similarity", value: (row) => row.similarityScore?.toFixed(1) ?? "—",
-            headerStyle: { width: 100 },
+            headerStyle: { width: 90 },
           },
           {
             key: "liveness", header: "Liveness", value: (row) => row.livenessConfidence?.toFixed(1) ?? "—",
-            headerStyle: { width: 100 },
+            headerStyle: { width: 90 },
           },
           {
-            key: "review", header: "Review", filter: "select",
+            key: "review", header: "Review", filter: "select", headerStyle: { width: 120 },
             value: (row) =>
               row.reviewResolution ?? (row.status === "CHECK" || row.status === "MULTIPLE_FACES" ? "needs review" : "—"),
             render: (row) =>
@@ -190,7 +190,7 @@ export default function ChecksPage() {
               ),
           },
           {
-            key: "evidence", header: "Evidence", filter: "select",
+            key: "evidence", header: "Evidence", filter: "select", headerStyle: { width: 110 },
             value: (row) => (row.hasEvidence ? "retained" : "not retained"),
             render: (row) =>
               row.hasEvidence
@@ -201,7 +201,7 @@ export default function ChecksPage() {
             key: "when", header: "When", filter: "date", date: (row) => row.requestedAt,
             value: (row) => new Date(row.requestedAt).toLocaleString(),
             render: (row) => <span title={row.checkId}>{new Date(row.requestedAt).toLocaleString()}</span>,
-            headerStyle: { width: 300 },
+            headerStyle: { width: 250 },
           },
         ]}
       />
