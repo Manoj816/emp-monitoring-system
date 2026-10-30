@@ -9,15 +9,17 @@ export interface StatItem {
 }
 
 /**
- * Summary tiles on demand. Returns the controls (to place in a toolbar) and the
- * panel of tiles (to place below it). Hidden until asked for: "Show stats" for a
- * whole data set, or (dated) "Today's stats" / "Stats for dates…" with a From / To
- * pair. The caller computes the tiles for the requested range.
+ * Summary tiles on demand, shown in a popup. Returns the toolbar controls and
+ * the popup element (null while closed). Dated data offers "Today's stats" and
+ * "Stats for dates…" (From / To inside the popup); other data a single "Stats"
+ * button for the whole set. The caller computes the tiles for the requested range.
  */
 export function useStatsBar(props: {
   compute: (range: { from: string; to: string } | null) => StatItem[];
   /** Offers Today and a date range (for data with a timestamp). */
   dated?: boolean;
+  /** Popup title for the whole-data-set stats. */
+  title?: string;
 }): { controls: ReactNode; panel: ReactNode } {
   const [mode, setMode] = useState<"hidden" | "all" | "today" | "range">("hidden");
   const [from, setFrom] = useState("");
@@ -25,50 +27,51 @@ export function useStatsBar(props: {
 
   const range =
     mode === "today" ? { from: todayIso(), to: todayIso() } : mode === "range" ? { from, to } : null;
+  const title =
+    mode === "today" ? "Today's stats" : mode === "range" ? "Stats for dates" : (props.title ?? "Stats");
   const caption =
     mode === "today" ? `Today, ${describeRange(todayIso(), todayIso())}`
       : mode === "range" ? describeRange(from, to)
-        : mode === "all" ? "All data" : "";
+        : "All data";
 
   const controls = (
     <span className="stats-controls">
       {props.dated ? (
         <>
-          <button className={`action ${mode === "today" ? "primary" : ""}`} onClick={() => setMode(mode === "today" ? "hidden" : "today")}>
-            Today's stats
-          </button>
-          <button className={`action ${mode === "range" ? "primary" : ""}`} onClick={() => setMode(mode === "range" ? "hidden" : "range")}>
-            Stats for dates…
-          </button>
-          {mode === "range" && (
-            <span className="stats-range">
-              <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} aria-label="Stats from" />
-              <span className="muted">–</span>
-              <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} aria-label="Stats to" />
-            </span>
-          )}
+          <button className="action" onClick={() => setMode("today")}>Today's stats</button>
+          <button className="action" onClick={() => setMode("range")}>Stats for dates…</button>
         </>
       ) : (
-        <button className={`action ${mode === "all" ? "primary" : ""}`} onClick={() => setMode(mode === "all" ? "hidden" : "all")}>
-          {mode === "all" ? "Hide stats" : "Show stats"}
-        </button>
+        <button className="action" onClick={() => setMode("all")}>Stats</button>
       )}
     </span>
   );
 
+  const close = () => setMode("hidden");
+
   const panel =
     mode === "hidden" ? null : (
-      <div className="stats-panel">
-        <Stats items={props.compute(range)} />
-        <span className="stats-caption">
-          {caption}
-          {props.dated && (
-            <>
-              {" · "}
-              <button className="link" onClick={() => setMode("hidden")}>Hide</button>
-            </>
+      <div className="overlay" onClick={close}>
+        <div className="modal stats-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+          <h3 style={{ marginTop: 0 }}>{title}</h3>
+          {mode === "range" && (
+            <div className="stats-range">
+              <label>
+                From
+                <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+              </label>
+              <label>
+                To
+                <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+              </label>
+            </div>
           )}
-        </span>
+          <Stats items={props.compute(range)} />
+          <p className="stats-caption">{caption}</p>
+          <div className="row">
+            <button className="action" onClick={close}>Close</button>
+          </div>
+        </div>
       </div>
     );
 

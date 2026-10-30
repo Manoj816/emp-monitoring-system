@@ -46,6 +46,7 @@ export default function DevicesPage() {
   }
 
   const stats = useStatsBar({
+    title: "System stats",
     compute: () => [
       { label: "Systems", value: devices.length },
       { label: "Assigned", value: devices.filter((d) => d.employeeId !== null && d.status === "ACTIVE").length, tone: "ok" },

@@ -69,6 +69,7 @@ export default function EmployeesPage() {
   }
 
   const stats = useStatsBar({
+    title: "Employee stats",
     compute: () => [
       { label: "Employees", value: employees.length },
       { label: "Active", value: employees.filter((e) => e.status === "ACTIVE").length, tone: "ok" },
