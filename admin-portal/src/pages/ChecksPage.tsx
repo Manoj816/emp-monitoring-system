@@ -3,7 +3,7 @@ import { api, type AdminCheckRow, type ReviewResolution } from "../api";
 import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
 import { useStatsBar } from "../components/StatsBar";
-import { inLocalDayRange } from "../utils/dates";
+import { inDateRange } from "../utils/dates";
 
 const FILTERS = ["ALL", "CHECK", "MATCH", "MISSED", "ERRORS"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -97,7 +97,7 @@ export default function ChecksPage(props: { title: string; hint: string }) {
     dated: true,
     title: "Check stats",
     compute: (range) => {
-      const set = range ? rows.filter((r) => inLocalDayRange(r.requestedAt, range.from, range.to)) : rows;
+      const set = range ? rows.filter((r) => inDateRange(r.requestedAt, range)) : rows;
       return [
         { label: "Checks", value: set.length },
         { label: "Needs review", value: set.filter((r) => (r.status === "CHECK" || r.status === "MULTIPLE_FACES") && !r.reviewResolution).length, tone: "warn" },
@@ -120,6 +120,12 @@ export default function ChecksPage(props: { title: string; hint: string }) {
     <>
       <div className="toolbar">
         <CardTitle title={props.title} hint={props.hint} />
+        <span className="toolbar-right">
+          {stats.controls}
+          <span className="muted">Auto-refreshes every 20s</span>
+        </span>
+      </div>
+      <div className="subbar">
         <div className="chips" role="tablist" aria-label="Quick filter">
           {FILTERS.map((f) => (
             <button
@@ -133,10 +139,6 @@ export default function ChecksPage(props: { title: string; hint: string }) {
             </button>
           ))}
         </div>
-        <span className="toolbar-right">
-          {stats.controls}
-          <span className="muted">Auto-refreshes every 20s</span>
-        </span>
       </div>
       {stats.panel}
 

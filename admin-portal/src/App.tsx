@@ -25,7 +25,11 @@ const SECTIONS: { id: Section; label: string; hint: string; description: string;
     id: "devices",
     label: "Devices",
     hint: "Registered systems",
-    description: "Systems that registered themselves on install. Assign one to an employee to start verification on it.",
+    description:
+      "Systems that registered themselves on install. A system shows as Unassigned until you link it to an employee; " +
+      "that activates verification on it. Reassign hands a system to a different employee, and offboarding an employee " +
+      "deregisters their systems back to Unassigned. Revoking immediately blocks a device from verifying and from " +
+      "re-authenticating (lost or retired machine).",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="5" width="18" height="12" rx="2" />

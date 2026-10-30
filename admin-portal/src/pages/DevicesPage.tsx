@@ -114,12 +114,6 @@ export default function DevicesPage(props: { title: string; hint: string }) {
         <span className="toolbar-right">{stats.controls}</span>
       </div>
       {stats.panel}
-      <p className="help">
-        A system that registered itself on install shows as <em>Unassigned</em> until you link it to
-        an employee — that activates verification on it. <em>Reassign</em> hands a system to a different
-        employee; offboarding an employee deregisters their systems back to Unassigned. Revoking
-        immediately blocks a device from verifying and from re-authenticating (lost or retired machine).
-      </p>
       {error && <p className="error-text">{error}</p>}
 
       <DataTable

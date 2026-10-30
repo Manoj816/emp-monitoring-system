@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { inLocalDayRange } from "../utils/dates";
+import { inDateRange, parseRange, serializeRange, type DateRange } from "../utils/dates";
+import DateRangePicker from "./DateRangePicker";
 
 /**
  * Table with a filter on every column and client-side pagination (25 rows a
@@ -15,7 +16,7 @@ export interface Column<T> {
   render?: (row: T) => ReactNode;
   /**
    * "text" = contains match (default); "select" = pick one of the values present;
-   * "date" = From / To range on the column's date; "none" = no filter.
+   * "date" = preset / custom range picker on the column's date; "none" = no filter.
    */
   filter?: "text" | "select" | "date" | "none";
   /** The raw timestamp for a "date" column (the display value stays `value`). */
@@ -42,14 +43,15 @@ export default function DataTable<T>(props: {
 
   const filtered = useMemo(() => {
     if (activeFilters.length === 0) return rows;
+    const ranges = new Map<string, DateRange>();
+    columns.forEach((c) => {
+      if (c.filter === "date") ranges.set(c.key, parseRange(filters[c.key]));
+    });
     return rows.filter((row) =>
       columns.every((column) => {
         if (column.filter === "none") return true;
         if (column.filter === "date") {
-          const from = filters[`${column.key}.from`] ?? "";
-          const to = filters[`${column.key}.to`] ?? "";
-          if (!from && !to) return true;
-          return inLocalDayRange(column.date ? column.date(row) : column.value(row), from, to);
+          return inDateRange(column.date ? column.date(row) : column.value(row), ranges.get(column.key)!);
         }
         const needle = filters[column.key] ?? "";
         if (needle === "") return true;
@@ -92,25 +94,11 @@ export default function DataTable<T>(props: {
             {columns.map((c) => (
               <th key={c.key}>
                 {c.filter === "none" ? null : c.filter === "date" ? (
-                  <span className="date-range">
-                    <input
-                      type="date"
-                      value={filters[`${c.key}.from`] ?? ""}
-                      max={filters[`${c.key}.to`] || undefined}
-                      onChange={(e) => setFilters({ ...filters, [`${c.key}.from`]: e.target.value })}
-                      aria-label={`${c.header} from`}
-                      title="From (inclusive)"
-                    />
-                    <span className="muted">–</span>
-                    <input
-                      type="date"
-                      value={filters[`${c.key}.to`] ?? ""}
-                      min={filters[`${c.key}.from`] || undefined}
-                      onChange={(e) => setFilters({ ...filters, [`${c.key}.to`]: e.target.value })}
-                      aria-label={`${c.header} to`}
-                      title="To (inclusive)"
-                    />
-                  </span>
+                  <DateRangePicker
+                    value={parseRange(filters[c.key])}
+                    onChange={(range) => setFilters({ ...filters, [c.key]: serializeRange(range) })}
+                    label={c.header}
+                  />
                 ) : c.filter === "select" ? (
                   <select
                     value={filters[c.key] ?? ""}
