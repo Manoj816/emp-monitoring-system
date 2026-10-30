@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Employee } from "../api";
+import { api, type DeviceSummary, type Employee } from "../api";
 import AddEmployeeDialog from "../components/AddEmployeeDialog";
 import CameraCapture from "../components/CameraCapture";
 import DataTable from "../components/DataTable";
@@ -8,6 +8,7 @@ import Stats from "../components/Stats";
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cameraFor, setCameraFor] = useState<Employee | null>(null);
@@ -18,11 +19,18 @@ export default function EmployeesPage() {
 
   async function refresh() {
     try {
-      setEmployees(await api.listEmployees());
+      const [emps, devs] = await Promise.all([api.listEmployees(), api.listDevices()]);
+      setEmployees(emps);
+      setDevices(devs);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+
+  /** The systems currently assigned to an employee (revoked ones excluded). */
+  function systemsOf(employee: Employee): DeviceSummary[] {
+    return devices.filter((d) => d.employeeId === employee.id && d.status !== "REVOKED");
   }
 
   useEffect(() => {
@@ -108,6 +116,27 @@ export default function EmployeesPage() {
               emp.hasReferenceImage
                 ? <span className="badge match">uploaded</span>
                 : <span className="badge check">missing</span>,
+          },
+          {
+            key: "system", header: "System",
+            value: (emp) => {
+              const names = systemsOf(emp).map((d) => d.hostname ?? d.id.slice(0, 8));
+              return names.length === 0 ? "none" : names.join(", ");
+            },
+            render: (emp) => {
+              const list = systemsOf(emp);
+              if (list.length === 0) return <span className="muted">none</span>;
+              return (
+                <>
+                  {list.map((d) => (
+                    <span key={d.id} className="badge neutral" style={{ marginRight: 4 }}
+                          title={`${d.status} · agent ${d.agentVersion ?? "?"} · last seen ${d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : "never"}`}>
+                      {d.hostname ?? d.id.slice(0, 8)}
+                    </span>
+                  ))}
+                </>
+              );
+            },
           },
           {
             key: "enrollment", header: "Live enrollment", filter: "select",
