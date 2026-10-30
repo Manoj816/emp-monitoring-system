@@ -166,8 +166,10 @@ tbody tr:hover td { background: #f9fbff; }
 .data-table .filter-row input, .data-table .filter-row select {
   width: 100%; min-width: 70px; font-size: 12px; padding: 5px 8px; border-radius: 7px; background: #fff;
 }
-.data-table .filter-row .date-range { display: flex; align-items: center; gap: 3px; }
-.data-table .filter-row .date-range input { min-width: 112px; width: auto; padding: 4px 4px; font-size: 11.5px; }
+/* From / To stacked so the pair fits a normal column; the dash is not needed then. */
+.data-table .filter-row .date-range { display: flex; flex-direction: column; gap: 3px; }
+.data-table .filter-row .date-range > .muted { display: none; }
+.data-table .filter-row .date-range input { width: 100%; min-width: 0; padding: 4px 6px; font-size: 11.5px; }
 .table-footer {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
   flex-wrap: wrap; margin-top: 12px; font-size: 13px;
