@@ -141,11 +141,6 @@ export default function ChecksPage() {
         emptyText="No checks match this filter."
         columns={[
           {
-            key: "when", header: "When", filter: "date", date: (row) => row.requestedAt,
-            value: (row) => new Date(row.requestedAt).toLocaleString(),
-            render: (row) => <span title={row.checkId}>{new Date(row.requestedAt).toLocaleString()}</span>,
-          },
-          {
             key: "employee", header: "Employee",
             value: (row) => `${row.employeeName ?? row.employeeId.slice(0, 8)} ${row.employeeCode ?? ""}`.trim(),
             render: (row) => (
@@ -191,6 +186,11 @@ export default function ChecksPage() {
               row.hasEvidence
                 ? <button className="action" onClick={() => void showEvidence(row)}>View</button>
                 : <span className="muted">not retained</span>,
+          },
+          {
+            key: "when", header: "When", filter: "date", date: (row) => row.requestedAt,
+            value: (row) => new Date(row.requestedAt).toLocaleString(),
+            render: (row) => <span title={row.checkId}>{new Date(row.requestedAt).toLocaleString()}</span>,
           },
         ]}
       />
