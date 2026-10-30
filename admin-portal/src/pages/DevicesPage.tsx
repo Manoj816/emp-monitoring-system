@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
+import ActionMenu from "../components/ActionMenu";
 import DataTable from "../components/DataTable";
 import Stats from "../components/Stats";
 
@@ -156,35 +157,30 @@ export default function DevicesPage() {
             cellStyle: { color: "var(--muted)" },
           },
           {
-            key: "actions", header: "Actions", filter: "none", value: () => "",
-            cellStyle: { whiteSpace: "nowrap" },
+            key: "actions", header: "", filter: "none", value: () => "",
+            cellStyle: { whiteSpace: "nowrap", textAlign: "right" },
             render: (d) => (
               <>
                 {d.status !== "REVOKED" && d.employeeId === null && picker(d)}
-                {d.status !== "REVOKED" && d.employeeId !== null && (
-                  reassigning === d.id ? (
-                    <>
-                      {picker(d)}
-                      <button className="action" disabled={busy} onClick={() => setReassigning(null)}>
-                        Cancel
-                      </button>{" "}
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        className="action"
-                        disabled={busy}
-                        onClick={() => setReassigning(d.id)}
-                        title="Hand this system to a different employee"
-                      >
-                        Reassign
-                      </button>{" "}
-                    </>
-                  )
+                {d.status !== "REVOKED" && d.employeeId !== null && reassigning === d.id && (
+                  <>
+                    {picker(d)}
+                    <button className="action" disabled={busy} onClick={() => setReassigning(null)}>
+                      Cancel
+                    </button>{" "}
+                  </>
                 )}
-                <button className="action" disabled={busy || d.status === "REVOKED"} onClick={() => revoke(d)}>
-                  Revoke
-                </button>
+                <ActionMenu
+                  disabled={busy || d.status === "REVOKED"}
+                  label={`Actions for ${d.hostname ?? d.id}`}
+                  items={[
+                    {
+                      label: "Reassign to another employee", onClick: () => setReassigning(d.id),
+                      disabled: d.employeeId === null, title: "Hand this system to a different employee",
+                    },
+                    { label: "Revoke", onClick: () => revoke(d), danger: true, title: "Lost or retired machine: blocks it immediately" },
+                  ]}
+                />
               </>
             ),
           },

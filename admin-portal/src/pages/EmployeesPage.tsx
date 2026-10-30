@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
+import ActionMenu from "../components/ActionMenu";
 import AddEmployeeDialog from "../components/AddEmployeeDialog";
 import CameraCapture from "../components/CameraCapture";
 import DataTable from "../components/DataTable";
@@ -64,6 +65,21 @@ export default function EmployeesPage() {
     void run(async () => {
       const result = await api.offboardEmployee(employee.id);
       alert(`${employee.fullName} offboarded. Systems deregistered: ${result.devicesDeregistered}.`);
+    });
+  }
+
+  function requestFirstScan(employee: Employee) {
+    if (
+      !confirm(
+        `Ask ${employee.fullName} for the first scan again? The current live scan is retired and their system(s) ` +
+          `open the enrollment scan at the next check (within a minute if the PC is on). The uploaded ID/photo stays.`,
+      )
+    ) {
+      return;
+    }
+    void run(async () => {
+      const r = await api.requestReEnrollment(employee.id);
+      alert(`Re-enrollment requested for ${employee.fullName}: ${r.systemsReset} system(s) will ask for the enrollment scan.`);
     });
   }
 
@@ -152,21 +168,26 @@ export default function EmployeesPage() {
             ),
           },
           {
-            key: "actions", header: "Actions", filter: "none", value: () => "",
-            cellStyle: { whiteSpace: "nowrap" },
+            key: "actions", header: "", filter: "none", value: () => "",
+            cellStyle: { whiteSpace: "nowrap", textAlign: "right", width: 48 },
             render: (emp) => (
-              <>
-                <button className="action" disabled={busy} onClick={() => setDetails(emp)}
-                        title="Record, uploaded ID/photo, enrolled live scan and assigned systems">
-                  Details
-                </button>{" "}
-                <button className="action" disabled={busy} onClick={() => setCameraFor(emp)}>Webcam</button>{" "}
-                <button className="action" disabled={busy} onClick={() => pickFile(emp)}>Upload photo</button>{" "}
-                <button className="action" disabled={busy || emp.status === "OFFBOARDED"} onClick={() => offboard(emp)}
-                        title="Marks the employee OFFBOARDED and deregisters their systems">
-                  Offboard
-                </button>
-              </>
+              <ActionMenu
+                disabled={busy}
+                label={`Actions for ${emp.fullName}`}
+                items={[
+                  { label: "Details", onClick: () => setDetails(emp), title: "Record, pictures and assigned systems" },
+                  { label: "Replace ID / photo", onClick: () => pickFile(emp) },
+                  { label: "Replace with webcam", onClick: () => setCameraFor(emp) },
+                  {
+                    label: "Request first scan again", onClick: () => requestFirstScan(emp),
+                    disabled: emp.status !== "ACTIVE", title: "Keep the photo; the employee enrolls again at the next check",
+                  },
+                  {
+                    label: "Offboard", onClick: () => offboard(emp), danger: true,
+                    disabled: emp.status === "OFFBOARDED", title: "Marks the employee OFFBOARDED and deregisters their systems",
+                  },
+                ]}
+              />
             ),
           },
         ]}

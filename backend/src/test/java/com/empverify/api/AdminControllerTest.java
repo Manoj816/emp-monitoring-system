@@ -161,6 +161,30 @@ class AdminControllerTest {
     }
 
     @Test
+    void replacingThePhotoRetiresTheOldReferencesBeforeStoringTheNewOne() {
+        var employeeId = UUID.randomUUID();
+        when(employees.findById(employeeId)).thenReturn(Optional.of(new Employee()));
+        var oldUpload = new ReferenceImage();
+        oldUpload.setSource(ReferenceImageSource.ADMIN_UPLOAD);
+        var oldLive = new ReferenceImage();
+        oldLive.setSource(ReferenceImageSource.LIVE_ENROLLMENT);
+        when(referenceImages.findAllByEmployeeIdAndStatus(employeeId, ReferenceImageStatus.ACTIVE))
+                .thenReturn(java.util.List.of(oldUpload, oldLive));
+        when(storage.store(anyString(), any())).thenAnswer(inv -> inv.getArgument(0));
+        when(referenceImages.findByEmployeeIdAndStatusAndSource(any(), any(), any())).thenReturn(Optional.empty());
+
+        controller.uploadReferenceImage(employeeId, PHOTO);
+
+        assertEquals(ReferenceImageStatus.REPLACED, oldUpload.getStatus());
+        assertEquals(ReferenceImageStatus.REPLACED, oldLive.getStatus());
+        var order = org.mockito.Mockito.inOrder(referenceImages);
+        order.verify(referenceImages).flush();
+        order.verify(referenceImages).save(org.mockito.ArgumentMatchers.argThat(
+                r -> r.getSource() == ReferenceImageSource.ADMIN_UPLOAD && r.getStatus() == ReferenceImageStatus.ACTIVE));
+        verify(deviceService).resetEnrollmentForEmployee(employeeId);
+    }
+
+    @Test
     void replacingThePhotoWithoutAnImageIsRefused() {
         var employeeId = UUID.randomUUID();
         when(employees.findById(employeeId)).thenReturn(Optional.of(new Employee()));

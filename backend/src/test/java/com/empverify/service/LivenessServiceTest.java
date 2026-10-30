@@ -131,6 +131,7 @@ class LivenessServiceTest {
 
         assertEquals(CheckStatus.MATCH, result.getStatus());
         assertEquals(ReferenceImageStatus.REPLACED, previous.getStatus());
+        verify(referenceImages).flush(); // the retirement reaches the database before the insert
         verify(referenceImages).save(org.mockito.ArgumentMatchers.argThat(
                 r -> r.getSource() == ReferenceImageSource.LIVE_ENROLLMENT
                         && r.getStatus() == ReferenceImageStatus.ACTIVE && "reference/live2.jpg".equals(r.getS3Key())));

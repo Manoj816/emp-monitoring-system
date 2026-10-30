@@ -243,6 +243,9 @@ public class AdminController {
                     previous.setStatus(ReferenceImageStatus.REPLACED);
                     referenceImages.save(previous);
                 });
+        // Write the retirements before the new row: in one transaction Hibernate
+        // would otherwise insert first and trip the one-active-per-source index.
+        referenceImages.flush();
 
         saveAdminUpload(employeeId, image);
         deviceService.resetEnrollmentForEmployee(employeeId); // each system re-enrolls against the new photo

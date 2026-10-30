@@ -229,6 +229,7 @@ public class LivenessService {
             }
             existing.get().setStatus(ReferenceImageStatus.REPLACED);
             referenceImages.save(existing.get());
+            referenceImages.flush(); // retire before insert (one active live reference per employee)
         }
         var reference = new ReferenceImage();
         reference.setEmployeeId(check.getEmployeeId());

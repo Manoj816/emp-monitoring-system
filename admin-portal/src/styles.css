@@ -201,6 +201,29 @@ button.primary, button.action.primary {
 }
 button.primary:hover, button.action.primary:hover { background: var(--accent-strong); color: #fff; }
 button:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
+/* Standard vertical-dots row menu trigger */
+button.kebab {
+  width: 34px; height: 34px; padding: 0; border: none; border-radius: 50%; background: transparent;
+  color: var(--muted); display: inline-grid; place-items: center; cursor: pointer; vertical-align: middle;
+  transition: background 0.15s, color 0.15s;
+}
+button.kebab:hover, button.kebab[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+button.kebab:disabled { opacity: 0.4; cursor: default; background: transparent; }
+
+/* Row action menu (rendered on body, fixed position) */
+.menu-list {
+  position: fixed; z-index: 60; min-width: 220px; padding: 6px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 12px 32px -12px rgba(16, 24, 40, 0.4);
+}
+.menu-item {
+  display: block; width: 100%; text-align: left; padding: 8px 12px; border: none; background: none;
+  border-radius: 7px; font: inherit; font-size: 13.5px; color: var(--text); cursor: pointer;
+}
+.menu-item:hover { background: var(--accent-soft); color: var(--accent); }
+.menu-item.danger { color: var(--bad); }
+.menu-item.danger:hover { background: #fdebe9; color: var(--bad); }
+.menu-item:disabled { opacity: 0.45; cursor: default; background: none; color: var(--text); }
 button.link {
   background: none; border: none; color: var(--accent); cursor: pointer; font: inherit; font-size: 13px; padding: 0;
   text-decoration: underline;
@@ -255,6 +278,26 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 }
 .photo-actions { display: flex; flex-direction: column; gap: 8px; }
 
+/* Employee details popup */
+.modal.xl { max-width: 880px; }
+.details-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.details-head h3 { margin: 0 0 2px; font-size: 18px; }
+.details-head .meta { color: var(--muted); font-size: 13px; }
+.avatar.lg { width: 48px; height: 48px; font-size: 20px; flex: 0 0 48px; }
+.details-body { display: grid; grid-template-columns: 1.45fr 1fr; gap: 14px; }
+.panel { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: #fbfcfe; }
+.panel h4 { margin: 0 0 10px; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.panel .fine { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+.panel .photo-row { gap: 14px; }
+.panel .photo-row figure { width: 196px; }
+.panel .photo-row .photo-preview, .panel .photo-row .photo-placeholder { width: 196px; height: 196px; }
+.system-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.system-list li { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+.system-list .host { font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.system-list .sub { font-size: 12px; color: var(--muted); }
+.details-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+.details-actions .left { display: flex; gap: 8px; flex-wrap: wrap; }
+
 .details-grid { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0 0 14px; }
 .details-grid dt { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 .details-grid dd { margin: 0; }
@@ -303,6 +346,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
   .content { padding: 14px 14px 24px; }
   .form-grid { grid-template-columns: 1fr; }
   .photo-pick-body { flex-direction: column; }
+  .details-body { grid-template-columns: 1fr; }
   .login-wrap { flex-direction: column; }
   .login-hero { padding: 28px 24px; }
 }

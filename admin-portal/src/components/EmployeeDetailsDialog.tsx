@@ -3,10 +3,11 @@ import { api, type DeviceSummary, type Employee } from "../api";
 import CameraCapture from "./CameraCapture";
 
 /**
- * Employee details popup: the record, the uploaded ID/photo, the enrolled live
- * scan and the systems assigned to the employee, plus the two actions that make
- * the employee enroll again: replacing the ID/photo, or asking for the first
- * scan again as it is. Viewing a reference image is audited server-side.
+ * Employee details popup: identity references (uploaded ID/photo and the
+ * enrolled live scan), the systems assigned to the employee with their
+ * enrollment state, and the two actions that make the employee enroll again:
+ * replacing the ID/photo, or asking for the first scan again as it is.
+ * Viewing a reference image is audited server-side.
  */
 export default function EmployeeDetailsDialog(props: {
   employee: Employee;
@@ -82,7 +83,7 @@ export default function EmployeeDetailsDialog(props: {
   function replacePhoto(image: Blob) {
     void run("Replace photo", async () => {
       await api.uploadReferenceImage(employee.id, image);
-      return "ID/photo replaced. The previous live scan is retired; every system of this employee runs the enrollment scan at its next check (within a minute if the PC is on).";
+      return "ID/photo replaced. The previous live scan is retired; each system of this employee opens the enrollment scan at its next check (within a minute if the PC is on).";
     });
   }
 
@@ -100,7 +101,7 @@ export default function EmployeeDetailsDialog(props: {
   function requestReEnrollment() {
     if (
       !confirm(
-        `Ask ${employee.fullName} for the first scan again? Their current live scan is retired and their system(s) ` +
+        `Ask ${employee.fullName} for the first scan again? The current live scan is retired and their system(s) ` +
           `open the enrollment scan at the next check (within a minute if the PC is on). The uploaded ID/photo stays.`,
       )
     ) {
@@ -114,56 +115,88 @@ export default function EmployeeDetailsDialog(props: {
     });
   }
 
+  const initial = employee.fullName.trim().charAt(0).toUpperCase() || "?";
+  const active = devices.filter((d) => d.status !== "REVOKED");
+
   return (
     <div className="overlay" onClick={busy ? undefined : props.onClose}>
-      <div className="modal wide" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <h3 style={{ marginTop: 0 }}>
-          {employee.fullName}{" "}
-          <span className={`badge ${employee.status === "ACTIVE" ? "match" : "neutral"}`}>{employee.status}</span>
-        </h3>
+      <div className="modal xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <header className="details-head">
+          <span className="avatar lg">{initial}</span>
+          <div>
+            <h3>
+              {employee.fullName}{" "}
+              <span className={`badge ${employee.status === "ACTIVE" ? "match" : "neutral"}`}>{employee.status}</span>
+            </h3>
+            <div className="meta">
+              {employee.employeeCode} · {employee.email}{employee.department ? ` · ${employee.department}` : ""}
+            </div>
+          </div>
+        </header>
 
-        <dl className="details-grid">
-          <dt>Employee code</dt><dd>{employee.employeeCode}</dd>
-          <dt>Email</dt><dd>{employee.email}</dd>
-          <dt>Department</dt><dd>{employee.department ?? "—"}</dd>
-          <dt>Assigned systems</dt>
-          <dd>
-            {devices.length === 0
-              ? "none"
-              : devices.map((d) => (
-                  <span key={d.id} style={{ display: "block" }}>
-                    {d.hostname ?? d.id.slice(0, 8)} · {d.status}
-                    {d.status !== "REVOKED" && (
-                      d.enrolledAt
-                        ? <span className="badge match" style={{ marginLeft: 6 }}>enrolled {new Date(d.enrolledAt).toLocaleDateString()}</span>
-                        : <span className="badge neutral" style={{ marginLeft: 6 }}>pending first scan</span>
-                    )}
-                  </span>
+        <div className="details-body">
+          <section className="panel">
+            <h4>Identity references</h4>
+            <div className="photo-row">
+              <figure>
+                {reference ? (
+                  <img className="photo-preview" src={reference} alt="Uploaded ID / photo" />
+                ) : (
+                  <div className="photo-placeholder">No ID/photo uploaded.</div>
+                )}
+                <figcaption>Uploaded ID / photo</figcaption>
+              </figure>
+              <figure>
+                {enrolled ? (
+                  <img className="photo-preview" src={enrolled} alt="Enrolled live scan" />
+                ) : (
+                  <div className="photo-placeholder">
+                    {employee.hasLiveEnrollment ? "Loading…" : "Pending first scan"}
+                  </div>
+                )}
+                <figcaption>Enrolled live scan</figcaption>
+              </figure>
+            </div>
+            <p className="fine">
+              Every check is compared against both pictures. The live scan is captured by the system's
+              enrollment scan and is refreshed whenever the employee enrolls again.
+            </p>
+          </section>
+
+          <section className="panel">
+            <h4>Assigned systems</h4>
+            {active.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>No system assigned. Assign one on the Devices page.</p>
+            ) : (
+              <ul className="system-list">
+                {active.map((d) => (
+                  <li key={d.id}>
+                    <span className="host">
+                      {d.hostname ?? d.id.slice(0, 8)}
+                      <span className={`badge ${d.status === "ACTIVE" ? "match" : "check"}`}>{d.status}</span>
+                      {d.enrolledAt
+                        ? <span className="badge match">enrolled {new Date(d.enrolledAt).toLocaleDateString()}</span>
+                        : <span className="badge neutral">pending first scan</span>}
+                    </span>
+                    <span className="sub">
+                      agent {d.agentVersion ?? "?"} · last seen {d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : "never"}
+                    </span>
+                  </li>
                 ))}
-          </dd>
-        </dl>
+              </ul>
+            )}
+            {devices.length > active.length && (
+              <p className="fine">{devices.length - active.length} revoked system(s) not shown.</p>
+            )}
+          </section>
+        </div>
 
-        <div className="photo-row">
-          <figure>
-            {reference ? (
-              <img className="photo-preview" src={reference} alt="Uploaded ID / photo" />
-            ) : (
-              <div className="photo-placeholder">No ID/photo uploaded.</div>
-            )}
-            <figcaption>Uploaded ID / photo</figcaption>
-          </figure>
-          <figure>
-            {enrolled ? (
-              <img className="photo-preview" src={enrolled} alt="Enrolled live scan" />
-            ) : (
-              <div className="photo-placeholder">
-                {employee.hasLiveEnrollment ? "Loading…" : "Pending first scan — the first live scan that matches the photo is kept here."}
-              </div>
-            )}
-            <figcaption>Enrolled live scan</figcaption>
-          </figure>
-          <div className="photo-actions" style={{ justifyContent: "center" }}>
-            <button className="action" disabled={busy} onClick={() => fileInputRef.current?.click()}
+        {notice && <p className="notice" style={{ marginBottom: 0 }}>{notice}</p>}
+        {error && <p className="error-text">{error}</p>}
+
+        <footer className="details-actions">
+          <div className="left">
+            <button className="primary" disabled={busy} onClick={() => fileInputRef.current?.click()}
                     title="Upload a new ID/photo; the employee enrolls again against it">
               Replace ID / photo
             </button>
@@ -173,14 +206,8 @@ export default function EmployeeDetailsDialog(props: {
               Request first scan again
             </button>
           </div>
-        </div>
-
-        {notice && <p className="notice" style={{ marginBottom: 0 }}>{notice}</p>}
-        {error && <p className="error-text">{error}</p>}
-
-        <div className="row">
           <button className="action" disabled={busy} onClick={props.onClose}>Close</button>
-        </div>
+        </footer>
 
         <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={onFileChosen} />
       </div>
