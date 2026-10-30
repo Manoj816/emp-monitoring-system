@@ -88,6 +88,8 @@ public class VerificationCheck {
     public String getErrorDetail() { return errorDetail; }
     public void setErrorDetail(String v) { this.errorDetail = v; }
     public Instant getRequestedAt() { return requestedAt; }
+    /** Only for server-recorded rows (NO_CHECK), which are dated at the end of the work window. */
+    public void setRequestedAt(Instant v) { this.requestedAt = v; }
     public Instant getExpiresAt() { return expiresAt; }
     public void setExpiresAt(Instant v) { this.expiresAt = v; }
     public Instant getCompletedAt() { return completedAt; }

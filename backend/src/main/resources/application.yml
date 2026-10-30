@@ -83,3 +83,9 @@ empverify:
     # < review-threshold             -> CHECK with mismatch flag
     # (per-policy values in check_policies override at runtime)
     check-expiry-seconds: 120
+    # The zone in which a work day is judged for the NO_CHECK record. The agent
+    # applies the policy's window in the PC's local time; a fleet in one zone sets
+    # that zone here (WORK_ZONE=America/New_York).
+    zone: ${WORK_ZONE:UTC}
+    # How often the server looks for employees whose systems opened no check today.
+    no-check-sweep-ms: 300000

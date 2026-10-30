@@ -15,9 +15,19 @@ function badgeClass(status: string): string {
   return "badge error";
 }
 
-/** A check that ended without a scan is stored as EXPIRED; administrators read it as a miss. */
+/**
+ * A check that ended without a scan is stored as EXPIRED; administrators read it
+ * as a miss. NO_CHECK is the server's record of a work day on which no check was
+ * opened at all (system off), listed under Missed as well.
+ */
 function statusLabel(status: string): string {
-  return status === "EXPIRED" ? "MISSED" : status;
+  if (status === "EXPIRED") return "MISSED";
+  if (status === "NO_CHECK") return "NO CHECK";
+  return status;
+}
+
+function isMissed(status: string): boolean {
+  return status === "EXPIRED" || status === "NO_CHECK";
 }
 
 const FILTER_LABELS: Record<Filter, string> = {
@@ -75,7 +85,7 @@ export default function ChecksPage(props: { title: string; hint: string }) {
 
   const visible = rows.filter((r) => {
     if (filter === "ALL") return true;
-    if (filter === "MISSED") return r.status === "EXPIRED";
+    if (filter === "MISSED") return isMissed(r.status);
     if (filter === "ERRORS") return r.status === "VERIFICATION_ERROR" || r.status === "NO_FACE";
     if (filter === "CHECK") return r.status === "CHECK" || r.status === "MULTIPLE_FACES";
     return r.status === filter;
@@ -102,7 +112,7 @@ export default function ChecksPage(props: { title: string; hint: string }) {
         { label: "Checks", value: set.length },
         { label: "Needs review", value: set.filter((r) => (r.status === "CHECK" || r.status === "MULTIPLE_FACES") && !r.reviewResolution).length, tone: "warn" },
         { label: "Matches", value: set.filter((r) => r.status === "MATCH").length, tone: "ok" },
-        { label: "Missed", value: set.filter((r) => r.status === "EXPIRED").length, tone: "bad" },
+        { label: "Missed", value: set.filter((r) => isMissed(r.status)).length, tone: "bad" },
         { label: "Errors", value: set.filter((r) => r.status === "VERIFICATION_ERROR" || r.status === "NO_FACE").length, tone: "bad" },
       ];
     },

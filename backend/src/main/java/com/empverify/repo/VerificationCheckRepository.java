@@ -17,4 +17,8 @@ public interface VerificationCheckRepository extends JpaRepository<VerificationC
 
     /** Checks still waiting for a scan past their deadline (the expiry sweep turns them into EXPIRED). */
     List<VerificationCheck> findByStatusAndExpiresAtBefore(CheckStatus status, Instant cutoff);
+
+    /** Whether any check (of any outcome) was opened for the employee in [from, to). */
+    boolean existsByEmployeeIdAndRequestedAtGreaterThanEqualAndRequestedAtLessThan(
+            UUID employeeId, Instant from, Instant to);
 }

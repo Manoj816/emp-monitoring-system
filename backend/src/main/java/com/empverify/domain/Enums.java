@@ -20,5 +20,10 @@ public final class Enums {
     /** ENROLLMENT = the first live scan after assignment, matched against the uploaded ID/photo. */
     public enum CheckType { ENROLLMENT, SESSION_START, PERIODIC, LIVENESS, ESCALATION }
 
-    public enum CheckStatus { PENDING, MATCH, CHECK, NO_FACE, MULTIPLE_FACES, VERIFICATION_ERROR, EXPIRED }
+    /**
+     * EXPIRED = a check was opened but no scan was done (the portal shows it as Missed).
+     * NO_CHECK = no check was opened at all that work day (system off, agent not
+     * running); recorded by the server after the window, also listed under Missed.
+     */
+    public enum CheckStatus { PENDING, MATCH, CHECK, NO_FACE, MULTIPLE_FACES, VERIFICATION_ERROR, EXPIRED, NO_CHECK }
 }

@@ -43,7 +43,10 @@ const SECTIONS: { id: Section; label: string; hint: string; description: string;
     id: "checks",
     label: "Verification checks",
     hint: "Results and reviews",
-    description: "Every scan with its live-person confidence, face match, review state and retained evidence.",
+    description:
+      "Every scan with its live-person confidence, face match, review state and retained evidence. Missed covers " +
+      "both a scan that was opened but not done and a work day on which an employee's system opened no check at " +
+      "all (machine off); the latter is recorded by the server once the work window has closed.",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" />
