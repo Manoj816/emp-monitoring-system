@@ -51,6 +51,8 @@ export interface DeviceSummary {
   agentVersion: string | null;
   registeredAt: string | null;
   lastSeenAt: string | null;
+  /** When the enrollment scan on this system matched; null until the system's first check. */
+  enrolledAt: string | null;
 }
 
 async function authHeaders(): Promise<Record<string, string>> {

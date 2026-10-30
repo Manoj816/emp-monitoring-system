@@ -44,6 +44,10 @@ public class Device {
     @Column(name = "last_seen_at")
     private Instant lastSeenAt;
 
+    /** When an ENROLLMENT scan on this system matched; null until then, and again after (re)assignment. */
+    @Column(name = "enrolled_at")
+    private Instant enrolledAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -64,4 +68,6 @@ public class Device {
     public void setRegisteredAt(Instant v) { this.registeredAt = v; }
     public Instant getLastSeenAt() { return lastSeenAt; }
     public void setLastSeenAt(Instant v) { this.lastSeenAt = v; }
+    public Instant getEnrolledAt() { return enrolledAt; }
+    public void setEnrolledAt(Instant v) { this.enrolledAt = v; }
 }

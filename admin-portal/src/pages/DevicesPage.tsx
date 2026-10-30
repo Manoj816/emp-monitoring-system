@@ -134,6 +134,16 @@ export default function DevicesPage() {
             value: (d) => d.status,
             render: (d) => <span className={statusBadge(d.status)}>{d.status}</span>,
           },
+          {
+            key: "enrolled", header: "Enrollment", filter: "select",
+            value: (d) => (d.employeeId === null ? "—" : d.enrolledAt ? "done" : "pending first scan"),
+            render: (d) =>
+              d.employeeId === null
+                ? <span className="muted">—</span>
+                : d.enrolledAt
+                  ? <span className="badge match" title={`Enrollment scan matched ${new Date(d.enrolledAt).toLocaleString()}`}>done</span>
+                  : <span className="badge neutral" title="The first check on this system is the enrollment scan">pending first scan</span>,
+          },
           { key: "agent", header: "Agent", value: (d) => d.agentVersion ?? "—", cellStyle: { color: "var(--muted)" } },
           {
             key: "registered", header: "Registered",

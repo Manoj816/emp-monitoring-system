@@ -43,6 +43,7 @@ class LivenessServiceTest {
     @Mock private ImageStorage storage;
     @Mock private PolicyService policyService;
     @Mock private VerificationService verificationService;
+    @Mock private DeviceService deviceService;
     @Mock private AuditService audit;
 
     private LivenessService service;
@@ -52,7 +53,7 @@ class LivenessServiceTest {
     void setUp() {
         service = new LivenessService(
                 checks, referenceImages, provider, storage, policyService,
-                verificationService, audit, "http://localhost:5174", 80.0);
+                verificationService, deviceService, audit, "http://localhost:5174", 80.0);
         // recordOutcome echoes the status onto the check so assertions can read it.
         lenient().when(verificationService.recordOutcome(any(), any(), anyBoolean(), any(), any(), any(), any()))
                 .thenAnswer(inv -> {
@@ -106,6 +107,52 @@ class LivenessServiceTest {
         verify(referenceImages).save(org.mockito.ArgumentMatchers.argThat(
                 r -> r.getSource() == ReferenceImageSource.LIVE_ENROLLMENT && r.getEmployeeId().equals(employeeId)));
         verify(audit).record(any(), eq("LIVE_REFERENCE_ENROLLED"), eq("employee"), eq(employeeId.toString()), any());
+    }
+
+    @Test
+    void enrollmentScanOnASystemReplacesTheLiveReferenceAndEnrollsTheSystem() {
+        // A reinstalled or reassigned system runs ENROLLMENT again even though the
+        // employee already has a live reference from an earlier system.
+        var check = pending("sess-1");
+        check.setCheckType(CheckType.ENROLLMENT);
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(provider.getResult("sess-1"))
+                .thenReturn(new LivenessProvider.Result(98.0, new byte[] {7}, "SUCCEEDED"));
+        stubBestMatch(95.0, ReferenceImageSource.ADMIN_UPLOAD);
+        var previous = new ReferenceImage();
+        previous.setEmployeeId(employeeId);
+        previous.setSource(ReferenceImageSource.LIVE_ENROLLMENT);
+        when(referenceImages.findByEmployeeIdAndStatusAndSource(
+                employeeId, ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT))
+                .thenReturn(Optional.of(previous));
+        when(storage.store(any(), eq(new byte[] {7}))).thenReturn("reference/live2.jpg");
+
+        var result = service.completeLiveness(check.getId(), "the-nonce");
+
+        assertEquals(CheckStatus.MATCH, result.getStatus());
+        assertEquals(ReferenceImageStatus.REPLACED, previous.getStatus());
+        verify(referenceImages).save(org.mockito.ArgumentMatchers.argThat(
+                r -> r.getSource() == ReferenceImageSource.LIVE_ENROLLMENT
+                        && r.getStatus() == ReferenceImageStatus.ACTIVE && "reference/live2.jpg".equals(r.getS3Key())));
+        verify(deviceService).markEnrolled(check.getDeviceId());
+    }
+
+    @Test
+    void enrollmentScanWithoutPriorReferenceStoresItAndEnrollsTheSystem() {
+        var check = pending("sess-1");
+        check.setCheckType(CheckType.ENROLLMENT);
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(provider.getResult("sess-1"))
+                .thenReturn(new LivenessProvider.Result(98.0, new byte[] {7}, "SUCCEEDED"));
+        stubBestMatch(95.0, ReferenceImageSource.ADMIN_UPLOAD);
+        stubNoLiveEnrollmentYet();
+        when(storage.store(any(), eq(new byte[] {7}))).thenReturn("reference/live.jpg");
+
+        var result = service.completeLiveness(check.getId(), "the-nonce");
+
+        assertEquals(CheckStatus.MATCH, result.getStatus());
+        verify(referenceImages).save(any());
+        verify(deviceService).markEnrolled(check.getDeviceId());
     }
 
     @Test

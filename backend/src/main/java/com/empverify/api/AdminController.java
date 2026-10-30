@@ -167,7 +167,9 @@ public class AdminController {
     public record DeviceSummary(
             String id, String employeeId, String employeeName, String platform,
             String hostname, String status, String agentVersion,
-            java.time.Instant registeredAt, java.time.Instant lastSeenAt) {}
+            java.time.Instant registeredAt, java.time.Instant lastSeenAt,
+            /** When the enrollment scan on this system matched; null until its first check. */
+            java.time.Instant enrolledAt) {}
 
     public record OffboardResponse(String employeeId, String status, int devicesDeregistered) {}
 
@@ -183,7 +185,7 @@ public class AdminController {
                     d.getEmployeeId() == null ? null : d.getEmployeeId().toString(),
                     emp == null ? null : emp.getFullName(),
                     d.getPlatform().name(), d.getHostname(), d.getStatus().name(),
-                    d.getAgentVersion(), d.getRegisteredAt(), d.getLastSeenAt());
+                    d.getAgentVersion(), d.getRegisteredAt(), d.getLastSeenAt(), d.getEnrolledAt());
         }).toList();
     }
 
@@ -200,7 +202,7 @@ public class AdminController {
                 d.getId().toString(), employeeId.toString(),
                 emp == null ? null : emp.getFullName(),
                 d.getPlatform().name(), d.getHostname(), d.getStatus().name(),
-                d.getAgentVersion(), d.getRegisteredAt(), d.getLastSeenAt());
+                d.getAgentVersion(), d.getRegisteredAt(), d.getLastSeenAt(), d.getEnrolledAt());
     }
 
     /** Revokes a device's authorization (lost/retired machine). */
@@ -243,6 +245,7 @@ public class AdminController {
                 });
 
         saveAdminUpload(employeeId, image);
+        deviceService.resetEnrollmentForEmployee(employeeId); // each system re-enrolls against the new photo
         audit.record("admin", "REFERENCE_IMAGE_UPLOADED", "employee", employeeId.toString(), null);
         return toResponse(employee);
     }

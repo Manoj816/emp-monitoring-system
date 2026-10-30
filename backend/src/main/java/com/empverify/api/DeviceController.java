@@ -53,8 +53,10 @@ public class DeviceController {
 
     /**
      * @param assigned linked to an employee and ACTIVE; checks require this
-     * @param enrolled the employee's first live scan has matched the uploaded ID/photo;
-     *                 until then the next check is the enrollment scan
+     * @param enrolled an enrollment scan on THIS system has matched the uploaded ID/photo
+     *                 and the live reference it produced is still on file; until then the
+     *                 next check is the enrollment scan (so every new, reinstalled or
+     *                 reassigned system starts with one)
      * @param employeeId the linked employee (null while unassigned); lets the agent
      *                   notice a reassignment or an offboarding without a restart
      */
@@ -97,8 +99,9 @@ public class DeviceController {
     public MeResponse me(Authentication auth) {
         var device = deviceService.getDevice(UUID.fromString(auth.getName()));
         boolean assigned = device.getEmployeeId() != null && device.getStatus() == DeviceStatus.ACTIVE;
-        boolean enrolled = assigned && referenceImages.findByEmployeeIdAndStatusAndSource(
-                device.getEmployeeId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT)
+        boolean enrolled = assigned && device.getEnrolledAt() != null
+                && referenceImages.findByEmployeeIdAndStatusAndSource(
+                        device.getEmployeeId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT)
                 .isPresent();
         return new MeResponse(device.getId().toString(), device.getStatus().name(), assigned, enrolled,
                 assigned ? device.getEmployeeId().toString() : null);

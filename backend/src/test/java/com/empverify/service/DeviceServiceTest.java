@@ -297,11 +297,42 @@ class DeviceServiceTest {
         when(employees.findById(second.getId())).thenReturn(Optional.of(second));
         when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
 
+        device.setEnrolledAt(Instant.now());
+
         service.assignDevice(device.getId(), second.getId(), "admin");
 
         assertEquals(second.getId(), device.getEmployeeId());
         assertEquals(DeviceStatus.ACTIVE, device.getStatus());
+        assertEquals(null, device.getEnrolledAt(), "a reassigned system starts with the enrollment scan again");
         verify(audit).record(eq("admin"), eq("DEVICE_REASSIGNED"), eq("device"), eq(device.getId().toString()), any());
+    }
+
+    @Test
+    void newPhotoResetsEnrollmentOnEveryEnrolledSystemOfTheEmployee() {
+        var employee = activeEmployee();
+        var enrolled = new Device();
+        enrolled.setEmployeeId(employee.getId());
+        enrolled.setEnrolledAt(Instant.now());
+        var notYet = new Device();
+        notYet.setEmployeeId(employee.getId());
+        when(devices.findByEmployeeId(employee.getId())).thenReturn(List.of(enrolled, notYet));
+        when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        int reset = service.resetEnrollmentForEmployee(employee.getId());
+
+        assertEquals(1, reset);
+        assertEquals(null, enrolled.getEnrolledAt());
+    }
+
+    @Test
+    void markEnrolledStampsTheDevice() {
+        var device = new Device();
+        when(devices.findById(device.getId())).thenReturn(Optional.of(device));
+        when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service.markEnrolled(device.getId());
+
+        assertNotNull(device.getEnrolledAt());
     }
 
     @Test

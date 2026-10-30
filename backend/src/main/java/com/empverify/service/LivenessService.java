@@ -1,6 +1,7 @@
 package com.empverify.service;
 
 import com.empverify.domain.Enums.CheckStatus;
+import com.empverify.domain.Enums.CheckType;
 import com.empverify.domain.Enums.ReferenceImageSource;
 import com.empverify.domain.Enums.ReferenceImageStatus;
 import com.empverify.domain.ReferenceImage;
@@ -39,6 +40,7 @@ public class LivenessService {
     private final ImageStorage storage;
     private final PolicyService policyService;
     private final VerificationService verificationService;
+    private final DeviceService deviceService;
     private final AuditService audit;
     private final String livenessUiUrl;
     private final double livenessThreshold;
@@ -50,6 +52,7 @@ public class LivenessService {
             ImageStorage storage,
             PolicyService policyService,
             VerificationService verificationService,
+            DeviceService deviceService,
             AuditService audit,
             @Value("${empverify.liveness-ui-url}") String livenessUiUrl,
             @Value("${empverify.liveness-threshold:80}") double livenessThreshold) {
@@ -59,6 +62,7 @@ public class LivenessService {
         this.storage = storage;
         this.policyService = policyService;
         this.verificationService = verificationService;
+        this.deviceService = deviceService;
         this.audit = audit;
         this.livenessUiUrl = livenessUiUrl;
         this.livenessThreshold = livenessThreshold;
@@ -180,7 +184,16 @@ public class LivenessService {
         }
 
         if (mapped.status() == CheckStatus.MATCH) {
-            enrollLiveReferenceIfFirst(check, result, captured);
+            if (check.getCheckType() == CheckType.ENROLLMENT) {
+                // The enrollment scan of this system: its frame becomes (or refreshes)
+                // the live reference, and the system is enrolled from here on.
+                storeLiveReference(check, captured, true);
+                deviceService.markEnrolled(check.getDeviceId());
+            } else if (referenceImages.findByEmployeeIdAndStatusAndSource(
+                    check.getEmployeeId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT)
+                    .isEmpty()) {
+                storeLiveReference(check, captured, false); // first live match on record
+            }
             return verificationService.recordOutcome(
                     check, CheckStatus.MATCH, false, outcome.similarity(), result.confidence(), null, null);
         }
@@ -201,17 +214,21 @@ public class LivenessService {
     }
 
     /**
-     * The first scan that passes liveness and matches the uploaded ID/photo becomes
-     * the employee's second reference: later checks are compared against both, so
+     * A scan that passes liveness and matches the uploaded ID/photo becomes the
+     * employee's second reference: later checks are compared against both, so
      * day-to-day matching is against a real frame of the person at their desk and
-     * not only an ID photo.
+     * not only an ID photo. An enrollment scan replaces the previous live reference
+     * (a reinstalled or reassigned system re-enrolls); other matches only fill a gap.
      */
-    private void enrollLiveReferenceIfFirst(
-            VerificationCheck check, LivenessProvider.Result result, byte[] captured) {
-        if (referenceImages.findByEmployeeIdAndStatusAndSource(
-                check.getEmployeeId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT)
-                .isPresent()) {
-            return;
+    private void storeLiveReference(VerificationCheck check, byte[] captured, boolean replaceExisting) {
+        var existing = referenceImages.findByEmployeeIdAndStatusAndSource(
+                check.getEmployeeId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT);
+        if (existing.isPresent()) {
+            if (!replaceExisting) {
+                return;
+            }
+            existing.get().setStatus(ReferenceImageStatus.REPLACED);
+            referenceImages.save(existing.get());
         }
         var reference = new ReferenceImage();
         reference.setEmployeeId(check.getEmployeeId());

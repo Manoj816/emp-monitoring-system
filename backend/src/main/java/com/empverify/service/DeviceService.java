@@ -169,6 +169,7 @@ public class DeviceService {
         }
         device.setEmployeeId(employeeId);
         device.setStatus(DeviceStatus.ACTIVE);
+        device.setEnrolledAt(null); // every (re)assignment starts with the enrollment scan
         devices.save(device);
 
         audit.record(actor, previous == null ? "DEVICE_ASSIGNED" : "DEVICE_REASSIGNED", "device",
@@ -228,6 +229,32 @@ public class DeviceService {
     }
 
     /**
+     * A new ID/photo invalidates every enrollment made against the old one: each
+     * of the employee's systems runs the enrollment scan again at its next check.
+     */
+    @Transactional
+    public int resetEnrollmentForEmployee(UUID employeeId) {
+        int reset = 0;
+        for (var device : devices.findByEmployeeId(employeeId)) {
+            if (device.getEnrolledAt() != null) {
+                device.setEnrolledAt(null);
+                devices.save(device);
+                reset++;
+            }
+        }
+        return reset;
+    }
+
+    /** Called when an ENROLLMENT scan on the device matched: later checks on it are periodic. */
+    @Transactional
+    public void markEnrolled(UUID deviceId) {
+        devices.findById(deviceId).ifPresent(device -> {
+            device.setEnrolledAt(Instant.now());
+            devices.save(device);
+        });
+    }
+
+    /**
      * Revokes a device's authorization. Takes effect immediately: every
      * authenticated agent endpoint re-checks active status, and re-authentication
      * is refused. This is the admin lever for a lost/retired machine.
@@ -264,6 +291,7 @@ public class DeviceService {
         int deregistered = 0;
         for (var device : devices.findByEmployeeId(employeeId)) {
             device.setEmployeeId(null);
+            device.setEnrolledAt(null);
             if (device.getStatus() != DeviceStatus.REVOKED) {
                 device.setStatus(DeviceStatus.PENDING);
                 deregistered++;
