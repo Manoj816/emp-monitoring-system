@@ -22,6 +22,8 @@ export default function EmployeesPage() {
       const [emps, devs] = await Promise.all([api.listEmployees(), api.listDevices()]);
       setEmployees(emps);
       setDevices(devs);
+      // Keep an open details popup on the fresh record (photo/enrollment flags).
+      setDetails((current) => (current ? (emps.find((e) => e.id === current.id) ?? current) : current));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -172,7 +174,13 @@ export default function EmployeesPage() {
 
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={onFileChosen} />
 
-      {details && <EmployeeDetailsDialog employee={details} onClose={() => setDetails(null)} />}
+      {details && (
+        <EmployeeDetailsDialog
+          employee={details}
+          onClose={() => setDetails(null)}
+          onChanged={() => void refresh()}
+        />
+      )}
 
       {adding && (
         <AddEmployeeDialog

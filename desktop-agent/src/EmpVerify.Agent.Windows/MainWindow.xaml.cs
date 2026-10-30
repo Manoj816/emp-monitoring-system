@@ -504,6 +504,15 @@ public partial class MainWindow : Window
             await ActivateAsync();
             return true;
         }
+        if (previous is { Enrolled: true } && !state.Enrolled)
+        {
+            // An administrator replaced the ID/photo or asked for the first scan again:
+            // the enrollment scan is due now, not at the day's random time.
+            Log("An administrator requested a new enrollment scan — opening it now.");
+            _checkRetriesLeft = _settings.MissedCheckRetries;
+            await RunCheckAsync(CheckType.Enrollment, scheduled: true, demo: true);
+            return true;
+        }
         return false;
     }
 

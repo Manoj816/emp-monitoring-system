@@ -143,6 +143,24 @@ class AdminControllerTest {
     }
 
     @Test
+    void requestingReEnrollmentRetiresTheLiveReferenceAndResetsTheSystems() {
+        var employeeId = UUID.randomUUID();
+        when(employees.findById(employeeId)).thenReturn(Optional.of(new Employee()));
+        var live = new ReferenceImage();
+        live.setSource(ReferenceImageSource.LIVE_ENROLLMENT);
+        when(referenceImages.findByEmployeeIdAndStatusAndSource(
+                employeeId, ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT))
+                .thenReturn(Optional.of(live));
+        when(deviceService.resetEnrollmentForEmployee(employeeId)).thenReturn(2);
+
+        var response = controller.requestReEnrollment(employeeId);
+
+        assertEquals(2, response.systemsReset());
+        assertEquals(ReferenceImageStatus.REPLACED, live.getStatus());
+        verify(audit).record(eq("admin"), eq("RE_ENROLLMENT_REQUESTED"), eq("employee"), eq(employeeId.toString()), any());
+    }
+
+    @Test
     void replacingThePhotoWithoutAnImageIsRefused() {
         var employeeId = UUID.randomUUID();
         when(employees.findById(employeeId)).thenReturn(Optional.of(new Employee()));

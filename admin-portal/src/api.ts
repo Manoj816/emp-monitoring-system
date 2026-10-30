@@ -134,6 +134,12 @@ export const api = {
       body: JSON.stringify({ employeeId }),
     }),
 
+  /** Asks the employee's systems for the enrollment scan again (the current live scan is retired). */
+  requestReEnrollment: (employeeId: string) =>
+    request<{ employeeId: string; systemsReset: number }>(`/api/v1/admin/employees/${employeeId}/re-enroll`, {
+      method: "POST",
+    }),
+
   /** Marks the employee OFFBOARDED and deregisters their systems (back to Unassigned) in the same step. */
   offboardEmployee: (employeeId: string) =>
     request<{ employeeId: string; status: string; devicesDeregistered: number }>(

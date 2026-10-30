@@ -250,6 +250,31 @@ public class AdminController {
         return toResponse(employee);
     }
 
+    public record ReEnrollResponse(String employeeId, int systemsReset) {}
+
+    /**
+     * Asks for the enrollment scan again without changing the ID/photo: the
+     * employee's current live reference is retired and every system of theirs
+     * runs the enrollment scan at its next check (the agent opens it within a
+     * minute when the PC is on). On a match, that scan becomes the new live reference.
+     */
+    @PostMapping("/employees/{employeeId}/re-enroll")
+    @Transactional
+    public ReEnrollResponse requestReEnrollment(@PathVariable UUID employeeId) {
+        employees.findById(employeeId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "employee not found"));
+        referenceImages.findByEmployeeIdAndStatusAndSource(
+                employeeId, ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT)
+                .ifPresent(live -> {
+                    live.setStatus(ReferenceImageStatus.REPLACED);
+                    referenceImages.save(live);
+                });
+        int reset = deviceService.resetEnrollmentForEmployee(employeeId);
+        audit.record("admin", "RE_ENROLLMENT_REQUESTED", "employee", employeeId.toString(),
+                "{\"systemsReset\":" + reset + "}");
+        return new ReEnrollResponse(employeeId.toString(), reset);
+    }
+
     public record AdminCheckRow(
             String checkId, String status, boolean mismatchFlag, Double similarityScore,
             Double livenessConfidence,
