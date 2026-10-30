@@ -94,6 +94,7 @@ export default function ChecksPage() {
 
   const stats = useStatsBar({
     dated: true,
+    title: "Check stats",
     compute: (range) => {
       const set = range ? rows.filter((r) => inLocalDayRange(r.requestedAt, range.from, range.to)) : rows;
       return [

@@ -9,71 +9,79 @@ export interface StatItem {
 }
 
 /**
- * Summary tiles on demand, shown in a popup. Returns the toolbar controls and
- * the popup element (null while closed). Dated data offers "Today's stats" and
- * "Stats for dates…" (From / To inside the popup); other data a single "Stats"
- * button for the whole set. The caller computes the tiles for the requested range.
+ * Summary tiles on demand, shown in a popup behind a single "Stats" button.
+ * Dated data gets From / To pickers inside the popup, prefilled with today, so
+ * today's numbers show first and any range is one change away. Returns the
+ * toolbar control and the popup element (null while closed).
  */
 export function useStatsBar(props: {
   compute: (range: { from: string; to: string } | null) => StatItem[];
-  /** Offers Today and a date range (for data with a timestamp). */
+  /** Offers the date range (for data with a timestamp). */
   dated?: boolean;
-  /** Popup title for the whole-data-set stats. */
+  /** Popup title. */
   title?: string;
 }): { controls: ReactNode; panel: ReactNode } {
-  const [mode, setMode] = useState<"hidden" | "all" | "today" | "range">("hidden");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState(todayIso());
+  const [to, setTo] = useState(todayIso());
 
-  const range =
-    mode === "today" ? { from: todayIso(), to: todayIso() } : mode === "range" ? { from, to } : null;
-  const title =
-    mode === "today" ? "Today's stats" : mode === "range" ? "Stats for dates" : (props.title ?? "Stats");
-  const caption =
-    mode === "today" ? `Today, ${describeRange(todayIso(), todayIso())}`
-      : mode === "range" ? describeRange(from, to)
-        : "All data";
+  function show() {
+    if (props.dated) {
+      setFrom(todayIso());
+      setTo(todayIso());
+    }
+    setOpen(true);
+  }
 
   const controls = (
     <span className="stats-controls">
-      {props.dated ? (
-        <>
-          <button className="action" onClick={() => setMode("today")}>Today's stats</button>
-          <button className="action" onClick={() => setMode("range")}>Stats for dates…</button>
-        </>
-      ) : (
-        <button className="action" onClick={() => setMode("all")}>Stats</button>
-      )}
+      <button className="action" onClick={show}>Stats</button>
     </span>
   );
 
-  const close = () => setMode("hidden");
+  const range = props.dated ? { from, to } : null;
+  const caption = props.dated
+    ? (from === todayIso() && to === todayIso() ? `Today, ${describeRange(from, to)}` : describeRange(from, to))
+    : "All data";
 
-  const panel =
-    mode === "hidden" ? null : (
-      <div className="overlay" onClick={close}>
-        <div className="modal stats-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-          <h3 style={{ marginTop: 0 }}>{title}</h3>
-          {mode === "range" && (
-            <div className="stats-range">
-              <label>
-                From
-                <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
-              </label>
-              <label>
-                To
-                <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
-              </label>
-            </div>
-          )}
-          <Stats items={props.compute(range)} />
-          <p className="stats-caption">{caption}</p>
-          <div className="row">
-            <button className="action" onClick={close}>Close</button>
+  const panel = !open ? null : (
+    <div className="overlay" onClick={() => setOpen(false)}>
+      <div className="modal stats-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <h3 style={{ marginTop: 0 }}>{props.title ?? "Stats"}</h3>
+        {props.dated && (
+          <div className="stats-range">
+            <label>
+              From
+              <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+            </label>
+            <label>
+              To
+              <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+            </label>
+            <button
+              className="link"
+              style={{ alignSelf: "flex-end", marginBottom: 6 }}
+              onClick={() => { setFrom(todayIso()); setTo(todayIso()); }}
+            >
+              Today
+            </button>
+            <button
+              className="link"
+              style={{ alignSelf: "flex-end", marginBottom: 6 }}
+              onClick={() => { setFrom(""); setTo(""); }}
+            >
+              All dates
+            </button>
           </div>
+        )}
+        <Stats items={props.compute(range)} />
+        <p className="stats-caption">{caption}</p>
+        <div className="row">
+          <button className="action" onClick={() => setOpen(false)}>Close</button>
         </div>
       </div>
-    );
+    </div>
+  );
 
   return { controls, panel };
 }
