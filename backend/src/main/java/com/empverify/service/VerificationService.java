@@ -123,7 +123,7 @@ public class VerificationService {
             UUID deviceId, UUID checkId, String nonce, byte[] imageBytes, String cameraDeviceName) {
         var check = checks.findById(checkId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "check not found"));
-        if (!check.getDeviceId().equals(deviceId)) {
+        if (!deviceId.equals(check.getDeviceId())) { // null once the system was deleted
             throw new ApiException(HttpStatus.FORBIDDEN, "check belongs to another device");
         }
         if (check.getStatus() != CheckStatus.PENDING) {
@@ -178,7 +178,7 @@ public class VerificationService {
     public VerificationCheck getOwnedCheck(UUID deviceId, UUID checkId) {
         var check = checks.findById(checkId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "check not found"));
-        if (!check.getDeviceId().equals(deviceId)) {
+        if (!deviceId.equals(check.getDeviceId())) { // null once the system was deleted
             throw new ApiException(HttpStatus.FORBIDDEN, "check belongs to another device");
         }
         return check;

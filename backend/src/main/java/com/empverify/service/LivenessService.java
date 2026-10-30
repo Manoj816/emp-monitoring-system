@@ -188,7 +188,9 @@ public class LivenessService {
                 // The enrollment scan of this system: its frame becomes (or refreshes)
                 // the live reference, and the system is enrolled from here on.
                 storeLiveReference(check, captured, true);
-                deviceService.markEnrolled(check.getDeviceId());
+                if (check.getDeviceId() != null) { // the system may have been deleted meanwhile
+                    deviceService.markEnrolled(check.getDeviceId());
+                }
             } else if (referenceImages.findByEmployeeIdAndStatusAndSource(
                     check.getEmployeeId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT)
                     .isEmpty()) {

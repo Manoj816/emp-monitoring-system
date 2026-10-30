@@ -326,6 +326,27 @@ class DeviceServiceTest {
     }
 
     @Test
+    void deleteDeviceRemovesTheRowAndAuditsIt() {
+        var device = new Device();
+        device.setStatus(DeviceStatus.REVOKED);
+        device.setHostname("LAPTOP-OLD");
+        when(devices.findById(device.getId())).thenReturn(Optional.of(device));
+
+        service.deleteDevice(device.getId(), "admin");
+
+        verify(devices).delete(device);
+        verify(audit).record(eq("admin"), eq("DEVICE_DELETED"), eq("device"), eq(device.getId().toString()), any());
+    }
+
+    @Test
+    void deleteUnknownDeviceIs404() {
+        var id = UUID.randomUUID();
+        when(devices.findById(id)).thenReturn(Optional.empty());
+
+        assertThrows(ApiException.class, () -> service.deleteDevice(id, "admin"));
+    }
+
+    @Test
     void offboardEmployeeMarksOffboardedAndDeregistersTheirSystems() {
         var employee = activeEmployee();
         var active = new Device();

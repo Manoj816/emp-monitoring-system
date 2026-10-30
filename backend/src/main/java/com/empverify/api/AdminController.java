@@ -211,6 +211,15 @@ public class AdminController {
         deviceService.revokeDevice(deviceId, "admin");
     }
 
+    /**
+     * Removes a system row for good (a stale duplicate, a retired machine). The
+     * employee's check history is kept: the checks only lose their link to it.
+     */
+    @org.springframework.web.bind.annotation.DeleteMapping("/devices/{deviceId}")
+    public void deleteDevice(@PathVariable UUID deviceId) {
+        deviceService.deleteDevice(deviceId, "admin");
+    }
+
     /** Verifies the tamper-evident audit log hash chain is intact. */
     @GetMapping("/audit/verify")
     public java.util.Map<String, Object> verifyAudit() {
@@ -306,7 +315,7 @@ public class AdminController {
                     c.getCheckType().name(), c.getEmployeeId().toString(),
                     emp == null ? null : emp.getEmployeeCode(),
                     emp == null ? null : emp.getFullName(),
-                    c.getDeviceId().toString(),
+                    c.getDeviceId() == null ? null : c.getDeviceId().toString(),
                     c.getEvidenceS3Key() != null, c.getErrorDetail(),
                     c.getRequestedAt(), c.getCompletedAt(),
                     reviewByCheck.get(c.getId()));
@@ -340,7 +349,7 @@ public class AdminController {
                 check.getCheckType().name(), check.getEmployeeId().toString(),
                 emp == null ? null : emp.getEmployeeCode(),
                 emp == null ? null : emp.getFullName(),
-                check.getDeviceId().toString(),
+                check.getDeviceId() == null ? null : check.getDeviceId().toString(),
                 check.getEvidenceS3Key() != null, check.getErrorDetail(),
                 check.getRequestedAt(), check.getCompletedAt(),
                 request.resolution());

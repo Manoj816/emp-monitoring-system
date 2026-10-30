@@ -30,7 +30,8 @@ const SECTIONS: { id: Section; label: string; hint: string; description: string;
       "that activates verification on it, and the first check after any assignment is the enrollment scan. A reinstalled " +
       "system comes back as Unassigned (same row, history kept) and must be assigned again. Reassign hands a system to a " +
       "different employee, and offboarding an employee deregisters their systems back to Unassigned. Revoking immediately " +
-      "blocks a device from verifying and from re-authenticating (lost or retired machine).",
+      "blocks a device from verifying and from re-authenticating (lost or retired machine). Delete removes a row for good " +
+      "(stale duplicate, retired machine); its check history stays with the employee.",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="5" width="18" height="12" rx="2" />

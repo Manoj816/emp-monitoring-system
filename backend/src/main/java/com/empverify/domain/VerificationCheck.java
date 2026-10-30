@@ -19,7 +19,8 @@ public class VerificationCheck {
     @Id
     private UUID id = UUID.randomUUID();
 
-    @Column(name = "device_id", nullable = false)
+    /** The system the check ran on; null once that system was deleted (the check stays with the employee). */
+    @Column(name = "device_id")
     private UUID deviceId;
 
     @Column(name = "employee_id", nullable = false)

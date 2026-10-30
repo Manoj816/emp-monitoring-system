@@ -63,6 +63,18 @@ export default function DevicesPage(props: { title: string; hint: string }) {
     void run(() => api.revokeDevice(device.id));
   }
 
+  function remove(device: DeviceSummary) {
+    if (
+      !confirm(
+        `Delete ${device.hostname ?? device.id} from the list? Its check history stays with the employee. ` +
+          `If the agent on that machine is still running, it registers again as Unassigned.`,
+      )
+    ) {
+      return;
+    }
+    void run(() => api.deleteDevice(device.id));
+  }
+
   function assign(device: DeviceSummary) {
     const employeeId = choice[device.id];
     if (!employeeId) return;
@@ -171,14 +183,22 @@ export default function DevicesPage(props: { title: string; hint: string }) {
                   </>
                 )}
                 <ActionMenu
-                  disabled={busy || d.status === "REVOKED"}
+                  disabled={busy}
                   label={`Actions for ${d.hostname ?? d.id}`}
                   items={[
                     {
                       label: "Reassign to another employee", onClick: () => setReassigning(d.id),
-                      disabled: d.employeeId === null, title: "Hand this system to a different employee",
+                      disabled: d.employeeId === null || d.status === "REVOKED",
+                      title: "Hand this system to a different employee",
                     },
-                    { label: "Revoke", onClick: () => revoke(d), danger: true, title: "Lost or retired machine: blocks it immediately" },
+                    {
+                      label: "Revoke", onClick: () => revoke(d), danger: true, disabled: d.status === "REVOKED",
+                      title: "Lost or retired machine: blocks it immediately",
+                    },
+                    {
+                      label: "Delete", onClick: () => remove(d), danger: true,
+                      title: "Remove this row (stale duplicate or retired machine); its check history stays with the employee",
+                    },
                   ]}
                 />
               </>

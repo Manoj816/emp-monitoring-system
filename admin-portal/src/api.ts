@@ -26,7 +26,8 @@ export interface AdminCheckRow {
   employeeId: string;
   employeeCode: string | null;
   employeeName: string | null;
-  deviceId: string;
+  /** Null once the system the check ran on was deleted; the check stays with the employee. */
+  deviceId: string | null;
   hasEvidence: boolean;
   errorDetail: string | null;
   requestedAt: string;
@@ -124,6 +125,15 @@ export const api = {
       headers: await authHeaders(),
     });
     if (!r.ok) throw new Error(`revoke failed: ${r.status}`);
+  },
+
+  /** Removes a system row (stale duplicate, retired machine); its checks stay with the employee. */
+  deleteDevice: async (deviceId: string) => {
+    const r = await fetch(`/api/v1/admin/devices/${deviceId}`, {
+      method: "DELETE",
+      headers: await authHeaders(),
+    });
+    if (!r.ok) throw new Error(`delete failed: ${r.status}`);
   },
 
   /** Links a registered (unassigned) system to an employee and activates it. */

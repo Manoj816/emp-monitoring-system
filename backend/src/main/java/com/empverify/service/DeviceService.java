@@ -327,6 +327,24 @@ public class DeviceService {
     }
 
     /**
+     * Admin: removes a system row for good — a stale duplicate from before machine
+     * ids, or a retired machine. The employee's verification history is kept: the
+     * checks lose only their link to the system (V9, ON DELETE SET NULL). An agent
+     * still running on that machine can no longer sign in and registers again as
+     * Unassigned on its next start or sign-in.
+     */
+    @Transactional
+    public void deleteDevice(UUID deviceId, String actor) {
+        var device = devices.findById(deviceId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "device not found"));
+        devices.delete(device);
+        audit.record(actor, "DEVICE_DELETED", "device", deviceId.toString(),
+                "{\"hostname\":" + (device.getHostname() == null ? "null" : "\"" + device.getHostname() + "\"")
+                        + ",\"status\":\"" + device.getStatus() + "\",\"employeeId\":"
+                        + (device.getEmployeeId() == null ? "null" : "\"" + device.getEmployeeId() + "\"") + "}");
+    }
+
+    /**
      * Offboards an employee: marks them OFFBOARDED and, in the same step,
      * deregisters every system linked to them — the link is removed and the
      * system goes back to Unassigned (PENDING), so it can no longer verify anyone
