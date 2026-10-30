@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
 import ActionMenu from "../components/ActionMenu";
 import DataTable from "../components/DataTable";
-import StatsBar from "../components/StatsBar";
+import { useStatsBar } from "../components/StatsBar";
 
 function statusBadge(status: string): string {
   if (status === "ACTIVE") return "badge match";
@@ -44,6 +44,15 @@ export default function DevicesPage() {
       setBusy(false);
     }
   }
+
+  const stats = useStatsBar({
+    compute: () => [
+      { label: "Systems", value: devices.length },
+      { label: "Assigned", value: devices.filter((d) => d.employeeId !== null && d.status === "ACTIVE").length, tone: "ok" },
+      { label: "Unassigned", value: devices.filter((d) => d.employeeId === null && d.status !== "REVOKED").length, tone: "warn" },
+      { label: "Revoked", value: devices.filter((d) => d.status === "REVOKED").length, tone: "bad" },
+    ],
+  });
 
   function revoke(device: DeviceSummary) {
     if (!confirm(`Revoke ${device.hostname ?? device.id}? The agent on that machine will stop verifying immediately.`)) {
@@ -99,15 +108,10 @@ export default function DevicesPage() {
   return (
     <>
       <div className="toolbar">
-        <StatsBar
-          compute={() => [
-            { label: "Systems", value: devices.length },
-            { label: "Assigned", value: devices.filter((d) => d.employeeId !== null && d.status === "ACTIVE").length, tone: "ok" },
-            { label: "Unassigned", value: devices.filter((d) => d.employeeId === null && d.status !== "REVOKED").length, tone: "warn" },
-            { label: "Revoked", value: devices.filter((d) => d.status === "REVOKED").length, tone: "bad" },
-          ]}
-        />
+        <span />
+        <span className="toolbar-right">{stats.controls}</span>
       </div>
+      {stats.panel}
       <p className="help">
         A system that registered itself on install shows as <em>Unassigned</em> until you link it to
         an employee — that activates verification on it. <em>Reassign</em> hands a system to a different

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type AdminCheckRow, type ReviewResolution } from "../api";
 import DataTable from "../components/DataTable";
-import StatsBar from "../components/StatsBar";
+import { useStatsBar } from "../components/StatsBar";
 import { inLocalDayRange } from "../utils/dates";
 
 const FILTERS = ["ALL", "CHECK", "MATCH", "MISSED", "ERRORS"] as const;
@@ -92,6 +92,20 @@ export default function ChecksPage() {
     }
   }
 
+  const stats = useStatsBar({
+    dated: true,
+    compute: (range) => {
+      const set = range ? rows.filter((r) => inLocalDayRange(r.requestedAt, range.from, range.to)) : rows;
+      return [
+        { label: "Checks", value: set.length },
+        { label: "Needs review", value: set.filter((r) => (r.status === "CHECK" || r.status === "MULTIPLE_FACES") && !r.reviewResolution).length, tone: "warn" },
+        { label: "Matches", value: set.filter((r) => r.status === "MATCH").length, tone: "ok" },
+        { label: "Missed", value: set.filter((r) => r.status === "EXPIRED").length, tone: "bad" },
+        { label: "Errors", value: set.filter((r) => r.status === "VERIFICATION_ERROR" || r.status === "NO_FACE").length, tone: "bad" },
+      ];
+    },
+  });
+
   async function showEvidence(row: AdminCheckRow) {
     try {
       setEvidence({ checkId: row.checkId, url: await api.loadEvidence(row.checkId) });
@@ -102,22 +116,6 @@ export default function ChecksPage() {
 
   return (
     <>
-      <div className="toolbar">
-        <StatsBar
-          dated
-          compute={(range) => {
-            const set = range ? rows.filter((r) => inLocalDayRange(r.requestedAt, range.from, range.to)) : rows;
-            return [
-              { label: "Checks", value: set.length },
-              { label: "Needs review", value: set.filter((r) => (r.status === "CHECK" || r.status === "MULTIPLE_FACES") && !r.reviewResolution).length, tone: "warn" },
-              { label: "Matches", value: set.filter((r) => r.status === "MATCH").length, tone: "ok" },
-              { label: "Missed", value: set.filter((r) => r.status === "EXPIRED").length, tone: "bad" },
-              { label: "Errors", value: set.filter((r) => r.status === "VERIFICATION_ERROR" || r.status === "NO_FACE").length, tone: "bad" },
-            ];
-          }}
-        />
-      </div>
-
       <div className="toolbar">
         <div className="chips" role="tablist" aria-label="Quick filter">
           {FILTERS.map((f) => (
@@ -133,10 +131,11 @@ export default function ChecksPage() {
           ))}
         </div>
         <span className="toolbar-right">
+          {stats.controls}
           <span className="muted">Auto-refreshes every 20s</span>
-          <button className="action" onClick={() => void refresh()}>Refresh</button>
         </span>
       </div>
+      {stats.panel}
 
       {error && <p className="error-text">{error}</p>}
 

@@ -5,7 +5,7 @@ import AddEmployeeDialog from "../components/AddEmployeeDialog";
 import CameraCapture from "../components/CameraCapture";
 import DataTable from "../components/DataTable";
 import EmployeeDetailsDialog from "../components/EmployeeDetailsDialog";
-import StatsBar from "../components/StatsBar";
+import { useStatsBar } from "../components/StatsBar";
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -68,6 +68,15 @@ export default function EmployeesPage() {
     });
   }
 
+  const stats = useStatsBar({
+    compute: () => [
+      { label: "Employees", value: employees.length },
+      { label: "Active", value: employees.filter((e) => e.status === "ACTIVE").length, tone: "ok" },
+      { label: "Photo missing", value: employees.filter((e) => !e.hasReferenceImage).length, tone: "warn" },
+      { label: "Live enrollment done", value: employees.filter((e) => e.hasLiveEnrollment).length, tone: "ok" },
+    ],
+  });
+
   function requestFirstScan(employee: Employee) {
     if (
       !confirm(
@@ -100,16 +109,13 @@ export default function EmployeesPage() {
   return (
     <>
       <div className="toolbar">
-        <StatsBar
-          compute={() => [
-            { label: "Employees", value: employees.length },
-            { label: "Active", value: employees.filter((e) => e.status === "ACTIVE").length, tone: "ok" },
-            { label: "Photo missing", value: employees.filter((e) => !e.hasReferenceImage).length, tone: "warn" },
-            { label: "Live enrollment done", value: employees.filter((e) => e.hasLiveEnrollment).length, tone: "ok" },
-          ]}
-        />
-        <button className="primary" disabled={busy} onClick={() => setAdding(true)}>+ Add employee</button>
+        <span />
+        <span className="toolbar-right">
+          {stats.controls}
+          <button className="primary" disabled={busy} onClick={() => setAdding(true)}>+ Add employee</button>
+        </span>
       </div>
+      {stats.panel}
 
       {error && <p className="error-text">{error}</p>}
 
