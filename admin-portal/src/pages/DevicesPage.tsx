@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
 import ActionMenu from "../components/ActionMenu";
 import DataTable from "../components/DataTable";
-import Stats from "../components/Stats";
+import StatsBar from "../components/StatsBar";
 
 function statusBadge(status: string): string {
   if (status === "ACTIVE") return "badge match";
@@ -99,8 +99,8 @@ export default function DevicesPage() {
   return (
     <>
       <div className="toolbar">
-        <Stats
-          items={[
+        <StatsBar
+          compute={() => [
             { label: "Systems", value: devices.length },
             { label: "Assigned", value: devices.filter((d) => d.employeeId !== null && d.status === "ACTIVE").length, tone: "ok" },
             { label: "Unassigned", value: devices.filter((d) => d.employeeId === null && d.status !== "REVOKED").length, tone: "warn" },

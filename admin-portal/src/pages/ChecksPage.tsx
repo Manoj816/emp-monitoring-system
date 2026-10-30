@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, type AdminCheckRow, type ReviewResolution } from "../api";
 import DataTable from "../components/DataTable";
-import Stats from "../components/Stats";
+import StatsBar from "../components/StatsBar";
+import { inLocalDayRange } from "../utils/dates";
 
 const FILTERS = ["ALL", "CHECK", "MATCH", "MISSED", "ERRORS"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -102,14 +103,18 @@ export default function ChecksPage() {
   return (
     <>
       <div className="toolbar">
-        <Stats
-          items={[
-            { label: "Checks", value: rows.length },
-            { label: "Needs review", value: rows.filter((r) => (r.status === "CHECK" || r.status === "MULTIPLE_FACES") && !r.reviewResolution).length, tone: "warn" },
-            { label: "Matches", value: rows.filter((r) => r.status === "MATCH").length, tone: "ok" },
-            { label: "Missed", value: rows.filter((r) => r.status === "EXPIRED").length, tone: "bad" },
-            { label: "Errors", value: rows.filter((r) => r.status === "VERIFICATION_ERROR" || r.status === "NO_FACE").length, tone: "bad" },
-          ]}
+        <StatsBar
+          dated
+          compute={(range) => {
+            const set = range ? rows.filter((r) => inLocalDayRange(r.requestedAt, range.from, range.to)) : rows;
+            return [
+              { label: "Checks", value: set.length },
+              { label: "Needs review", value: set.filter((r) => (r.status === "CHECK" || r.status === "MULTIPLE_FACES") && !r.reviewResolution).length, tone: "warn" },
+              { label: "Matches", value: set.filter((r) => r.status === "MATCH").length, tone: "ok" },
+              { label: "Missed", value: set.filter((r) => r.status === "EXPIRED").length, tone: "bad" },
+              { label: "Errors", value: set.filter((r) => r.status === "VERIFICATION_ERROR" || r.status === "NO_FACE").length, tone: "bad" },
+            ];
+          }}
         />
       </div>
 

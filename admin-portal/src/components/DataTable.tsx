@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { inLocalDayRange } from "../utils/dates";
 
 /**
  * Table with a filter on every column and client-side pagination (25 rows a
@@ -21,15 +22,6 @@ export interface Column<T> {
   date?: (row: T) => string | Date | null | undefined;
   cellStyle?: CSSProperties;
   headerStyle?: CSSProperties;
-}
-
-/** Inclusive local-day bounds for a From / To pair of yyyy-mm-dd inputs. */
-function inRange(raw: string | Date | null | undefined, from: string, to: string): boolean {
-  if (!raw) return false;
-  const t = new Date(raw).getTime();
-  if (from && t < new Date(`${from}T00:00:00`).getTime()) return false;
-  if (to && t > new Date(`${to}T23:59:59.999`).getTime()) return false;
-  return true;
 }
 
 const PAGE_SIZES = [10, 25, 50, 100];
@@ -57,7 +49,7 @@ export default function DataTable<T>(props: {
           const from = filters[`${column.key}.from`] ?? "";
           const to = filters[`${column.key}.to`] ?? "";
           if (!from && !to) return true;
-          return inRange(column.date ? column.date(row) : column.value(row), from, to);
+          return inLocalDayRange(column.date ? column.date(row) : column.value(row), from, to);
         }
         const needle = filters[column.key] ?? "";
         if (needle === "") return true;

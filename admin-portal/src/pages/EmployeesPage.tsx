@@ -5,7 +5,7 @@ import AddEmployeeDialog from "../components/AddEmployeeDialog";
 import CameraCapture from "../components/CameraCapture";
 import DataTable from "../components/DataTable";
 import EmployeeDetailsDialog from "../components/EmployeeDetailsDialog";
-import Stats from "../components/Stats";
+import StatsBar from "../components/StatsBar";
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -100,8 +100,8 @@ export default function EmployeesPage() {
   return (
     <>
       <div className="toolbar">
-        <Stats
-          items={[
+        <StatsBar
+          compute={() => [
             { label: "Employees", value: employees.length },
             { label: "Active", value: employees.filter((e) => e.status === "ACTIVE").length, tone: "ok" },
             { label: "Photo missing", value: employees.filter((e) => !e.hasReferenceImage).length, tone: "warn" },

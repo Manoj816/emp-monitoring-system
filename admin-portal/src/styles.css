@@ -123,6 +123,11 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
 .toolbar-right { display: flex; align-items: center; gap: 10px; }
 
+.stats-bar { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 0; }
+.stats-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stats-range { display: inline-flex; align-items: center; gap: 4px; }
+.stats-range input { padding: 4px 6px; font-size: 12px; }
+.stats-caption { font-size: 12px; color: var(--muted); }
 .stats { display: flex; flex-wrap: wrap; gap: 10px; }
 .stat {
   display: flex; flex-direction: column; min-width: 120px; padding: 8px 14px;
