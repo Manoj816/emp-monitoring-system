@@ -72,7 +72,7 @@ export default function EmployeesPage() {
     if (
       !confirm(
         `Ask ${employee.fullName} for the first scan again? The current live scan is retired and their system(s) ` +
-          `open the enrollment scan at the next check (within a minute if the PC is on). The uploaded ID/photo stays.`,
+          `run the enrollment scan as the next check (the day's random time, or Verify now). The uploaded ID/photo stays.`,
       )
     ) {
       return;

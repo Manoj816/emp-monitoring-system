@@ -83,7 +83,7 @@ export default function EmployeeDetailsDialog(props: {
   function replacePhoto(image: Blob) {
     void run("Replace photo", async () => {
       await api.uploadReferenceImage(employee.id, image);
-      return "ID/photo replaced. The previous live scan is retired; each system of this employee opens the enrollment scan at its next check (within a minute if the PC is on).";
+      return "ID/photo replaced. The previous live scan is retired; each system of this employee runs the enrollment scan as its next check (the day's random time, or Verify now).";
     });
   }
 
@@ -102,7 +102,7 @@ export default function EmployeeDetailsDialog(props: {
     if (
       !confirm(
         `Ask ${employee.fullName} for the first scan again? The current live scan is retired and their system(s) ` +
-          `open the enrollment scan at the next check (within a minute if the PC is on). The uploaded ID/photo stays.`,
+          `run the enrollment scan as the next check (the day's random time, or Verify now). The uploaded ID/photo stays.`,
       )
     ) {
       return;

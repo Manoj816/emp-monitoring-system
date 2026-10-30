@@ -29,6 +29,9 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Identify this installation to the server so a reinstall re-uses its device row.
+        EmpVerify.Agent.Core.Api.AgentApiClient.MachineId = MachineIdentity.Id;
+
         _window = new MainWindow();
 
         _trayIcon = new WinForms.NotifyIcon

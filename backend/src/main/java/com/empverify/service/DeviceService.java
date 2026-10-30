@@ -79,8 +79,13 @@ public class DeviceService {
         return token.getId() + "." + secret;
     }
 
-    @Transactional
     public Registration register(String enrollmentToken, String platform, String hostname, String agentVersion) {
+        return register(enrollmentToken, platform, hostname, agentVersion, null);
+    }
+
+    @Transactional
+    public Registration register(
+            String enrollmentToken, String platform, String hostname, String agentVersion, String machineId) {
         String[] parts = enrollmentToken.split("\\.", 2);
         if (parts.length != 2) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "invalid enrollment token");
@@ -99,12 +104,15 @@ public class DeviceService {
         }
 
         String secret = randomSecret();
-        var device = new Device();
+        var device = sameMachine(machineId).orElseGet(Device::new);
+        boolean reused = device.getRegisteredAt() != null;
         device.setEmployeeId(token.getEmployeeId());
         device.setPlatform(DevicePlatform.valueOf(platform));
         device.setHostname(hostname);
         device.setAgentVersion(agentVersion);
+        device.setMachineId(blankToNull(machineId));
         device.setStatus(DeviceStatus.ACTIVE);
+        device.setEnrolledAt(null); // a fresh registration starts with the enrollment scan
         device.setCredentialHash(encoder.encode(secret));
         device.setRegisteredAt(Instant.now());
         devices.save(device);
@@ -112,9 +120,25 @@ public class DeviceService {
         token.setUsedAt(Instant.now());
         enrollmentTokens.save(token);
 
-        audit.record("device:" + device.getId(), "DEVICE_REGISTERED", "device",
+        audit.record("device:" + device.getId(), reused ? "DEVICE_REREGISTERED" : "DEVICE_REGISTERED", "device",
                 device.getId().toString(), "{\"platform\":\"" + platform + "\"}");
         return new Registration(device.getId(), secret);
+    }
+
+    /**
+     * The existing row for this physical machine, if the agent sent a machine id
+     * and one is on file. A reinstall, a wiped profile or a credential reset then
+     * updates that row instead of adding a duplicate.
+     */
+    private java.util.Optional<Device> sameMachine(String machineId) {
+        if (machineId == null || machineId.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        return devices.findByMachineIdOrderByRegisteredAtDesc(machineId.trim()).stream().findFirst();
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
     }
 
     /**
@@ -124,24 +148,44 @@ public class DeviceService {
      * wait for assignment, but every verification endpoint requires ACTIVE, which
      * only {@link #assignDevice} grants.
      */
-    @Transactional
     public Registration provision(String provisioningToken, String platform, String hostname, String agentVersion) {
+        return provision(provisioningToken, platform, hostname, agentVersion, null);
+    }
+
+    /**
+     * With a machine id, the same physical machine re-uses its existing row: a
+     * still-assigned system keeps its employee (and restarts with the enrollment
+     * scan); a revoked one comes back as Unassigned, so an administrator decides
+     * again whether it may verify anyone.
+     */
+    @Transactional
+    public Registration provision(
+            String provisioningToken, String platform, String hostname, String agentVersion, String machineId) {
         if (this.provisioningToken == null || !MessageDigest.isEqual(
                 this.provisioningToken, provisioningToken.getBytes(StandardCharsets.UTF_8))) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "invalid provisioning token");
         }
         String secret = randomSecret();
-        var device = new Device();
+        var existing = sameMachine(machineId);
+        var device = existing.orElseGet(Device::new);
+        String previousStatus = existing.map(d -> d.getStatus().name()).orElse(null);
+        if (existing.isEmpty() || device.getStatus() == DeviceStatus.REVOKED || device.getEmployeeId() == null) {
+            device.setEmployeeId(null);
+            device.setStatus(DeviceStatus.PENDING);
+        }
         device.setPlatform(DevicePlatform.valueOf(platform));
         device.setHostname(hostname);
         device.setAgentVersion(agentVersion);
-        device.setStatus(DeviceStatus.PENDING);
+        device.setMachineId(blankToNull(machineId));
+        device.setEnrolledAt(null); // every (re)install starts with the enrollment scan
         device.setCredentialHash(encoder.encode(secret));
         device.setRegisteredAt(Instant.now());
         devices.save(device);
 
-        audit.record("device:" + device.getId(), "DEVICE_PROVISIONED", "device",
-                device.getId().toString(), "{\"platform\":\"" + platform + "\"}");
+        audit.record("device:" + device.getId(), existing.isPresent() ? "DEVICE_REPROVISIONED" : "DEVICE_PROVISIONED",
+                "device", device.getId().toString(),
+                "{\"platform\":\"" + platform + "\",\"previousStatus\":"
+                        + (previousStatus == null ? "null" : "\"" + previousStatus + "\"") + "}");
         return new Registration(device.getId(), secret);
     }
 
@@ -186,12 +230,19 @@ public class DeviceService {
     }
 
     public DeviceAuth authenticate(UUID deviceId, String deviceSecret) {
-        return authenticate(deviceId, deviceSecret, null);
+        return authenticate(deviceId, deviceSecret, null, null);
     }
 
-    /** @param agentVersion when given, recorded so the fleet view shows the version actually running */
-    @Transactional
     public DeviceAuth authenticate(UUID deviceId, String deviceSecret, String agentVersion) {
+        return authenticate(deviceId, deviceSecret, agentVersion, null);
+    }
+
+    /**
+     * @param agentVersion when given, recorded so the fleet view shows the version actually running
+     * @param machineId when given, recorded so a later reinstall finds this row (back-fills older rows)
+     */
+    @Transactional
+    public DeviceAuth authenticate(UUID deviceId, String deviceSecret, String agentVersion, String machineId) {
         var device = devices.findById(deviceId)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "unknown device"));
         // PENDING (provisioned, not yet assigned) may authenticate so the agent can poll
@@ -203,6 +254,9 @@ public class DeviceService {
         device.setLastSeenAt(Instant.now());
         if (agentVersion != null && !agentVersion.isBlank()) {
             device.setAgentVersion(agentVersion.trim());
+        }
+        if (machineId != null && !machineId.isBlank() && device.getMachineId() == null) {
+            device.setMachineId(machineId.trim());
         }
         devices.save(device);
         return new DeviceAuth(deviceTokens.issue(deviceId), deviceTokens.ttlSeconds());

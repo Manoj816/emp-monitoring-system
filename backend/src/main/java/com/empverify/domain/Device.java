@@ -48,6 +48,10 @@ public class Device {
     @Column(name = "enrolled_at")
     private Instant enrolledAt;
 
+    /** Stable id of the physical installation (Windows MachineGuid); lets a reinstall re-use this row. */
+    @Column(name = "machine_id")
+    private String machineId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -70,4 +74,6 @@ public class Device {
     public void setLastSeenAt(Instant v) { this.lastSeenAt = v; }
     public Instant getEnrolledAt() { return enrolledAt; }
     public void setEnrolledAt(Instant v) { this.enrolledAt = v; }
+    public String getMachineId() { return machineId; }
+    public void setMachineId(String v) { this.machineId = v; }
 }

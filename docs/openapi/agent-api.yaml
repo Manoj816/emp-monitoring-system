@@ -41,6 +41,11 @@ paths:
                 platform: { type: string, enum: [WINDOWS, MACOS] }
                 hostname: { type: string }
                 agentVersion: { type: string }
+                machineId:
+                  type: string
+                  description: >
+                    Optional stable id of the installation (Windows MachineGuid). The same
+                    machine re-uses its existing device row instead of creating a duplicate.
       responses:
         "200":
           description: Device registered.
@@ -77,6 +82,13 @@ paths:
                 platform: { type: string, enum: [WINDOWS, MACOS] }
                 hostname: { type: string }
                 agentVersion: { type: string }
+                machineId:
+                  type: string
+                  description: >
+                    Optional stable id of the installation (Windows MachineGuid). A machine
+                    already on file re-uses its row: a still-assigned system keeps its employee
+                    (and starts again with the enrollment scan); a revoked one comes back as
+                    Unassigned for an administrator to decide.
       responses:
         "200":
           description: System registered (unassigned).

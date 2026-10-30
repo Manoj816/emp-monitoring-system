@@ -506,12 +506,11 @@ public partial class MainWindow : Window
         }
         if (previous is { Enrolled: true } && !state.Enrolled)
         {
-            // An administrator replaced the ID/photo or asked for the first scan again:
-            // the enrollment scan is due now, not at the day's random time.
-            Log("An administrator requested a new enrollment scan — opening it now.");
-            _checkRetriesLeft = _settings.MissedCheckRetries;
-            await RunCheckAsync(CheckType.Enrollment, scheduled: true, demo: true);
-            return true;
+            // An administrator replaced the ID/photo or asked for the first scan again.
+            // Nothing pops up now: the next check (the day's random time, or Verify now)
+            // runs as the enrollment scan.
+            Log("An administrator requested a new enrollment scan — the next check will be the enrollment scan.");
+            LogNextCheck();
         }
         return false;
     }

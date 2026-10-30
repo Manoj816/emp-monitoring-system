@@ -32,22 +32,30 @@ public class DeviceController {
         this.referenceImages = referenceImages;
     }
 
+    /** @param machineId optional stable id of the installation; the same machine re-uses its device row */
     public record RegisterRequest(
             @NotBlank String enrollmentToken,
             @NotBlank @Pattern(regexp = "WINDOWS|MACOS") String platform,
             String hostname,
-            String agentVersion) {}
+            String agentVersion,
+            String machineId) {}
 
+    /** @param machineId optional stable id of the installation; the same machine re-uses its device row */
     public record ProvisionRequest(
             @NotBlank String provisioningToken,
             @NotBlank @Pattern(regexp = "WINDOWS|MACOS") String platform,
             String hostname,
-            String agentVersion) {}
+            String agentVersion,
+            String machineId) {}
 
     public record RegisterResponse(String deviceId, String deviceSecret) {}
 
-    /** @param agentVersion optional; reported on every sign-in so an upgraded agent shows its real version */
-    public record AuthRequest(@NotBlank String deviceId, @NotBlank String deviceSecret, String agentVersion) {}
+    /**
+     * @param agentVersion optional; reported on every sign-in so an upgraded agent shows its real version
+     * @param machineId optional; back-fills the machine id on rows registered before it existed
+     */
+    public record AuthRequest(
+            @NotBlank String deviceId, @NotBlank String deviceSecret, String agentVersion, String machineId) {}
 
     public record AuthResponse(String accessToken, long expiresInSeconds) {}
 
@@ -72,7 +80,8 @@ public class DeviceController {
     @PostMapping("/register")
     public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
         var registration = deviceService.register(
-                request.enrollmentToken(), request.platform(), request.hostname(), request.agentVersion());
+                request.enrollmentToken(), request.platform(), request.hostname(), request.agentVersion(),
+                request.machineId());
         return new RegisterResponse(registration.deviceId().toString(), registration.deviceSecret());
     }
 
@@ -83,14 +92,16 @@ public class DeviceController {
     @PostMapping("/provision")
     public RegisterResponse provision(@Valid @RequestBody ProvisionRequest request) {
         var registration = deviceService.provision(
-                request.provisioningToken(), request.platform(), request.hostname(), request.agentVersion());
+                request.provisioningToken(), request.platform(), request.hostname(), request.agentVersion(),
+                request.machineId());
         return new RegisterResponse(registration.deviceId().toString(), registration.deviceSecret());
     }
 
     @PostMapping("/auth")
     public AuthResponse auth(@Valid @RequestBody AuthRequest request) {
         var auth = deviceService.authenticate(
-                UUID.fromString(request.deviceId()), request.deviceSecret(), request.agentVersion());
+                UUID.fromString(request.deviceId()), request.deviceSecret(), request.agentVersion(),
+                request.machineId());
         return new AuthResponse(auth.accessToken(), auth.expiresInSeconds());
     }
 

@@ -7,4 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface DeviceRepository extends JpaRepository<Device, UUID> {
     List<Device> findByEmployeeId(UUID employeeId);
+
+    /** Newest first: the row a re-registering machine should re-use. */
+    List<Device> findByMachineIdOrderByRegisteredAtDesc(String machineId);
 }

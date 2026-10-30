@@ -25,13 +25,21 @@ public sealed class AgentApiClient : IAgentApi
         _http = http;
     }
 
-    private sealed record RegisterRequest(string EnrollmentToken, string Platform, string? Hostname, string? AgentVersion);
+    private sealed record RegisterRequest(
+        string EnrollmentToken, string Platform, string? Hostname, string? AgentVersion, string? MachineId);
     private sealed record RegisterResponse(string DeviceId, string DeviceSecret);
-    private sealed record AuthRequest(string DeviceId, string DeviceSecret, string? AgentVersion);
+    private sealed record AuthRequest(string DeviceId, string DeviceSecret, string? AgentVersion, string? MachineId);
 
     /// <summary>The build's version, reported on every sign-in so the fleet view tracks upgrades.</summary>
     private static readonly string? AgentVersion =
         typeof(AgentApiClient).Assembly.GetName().Version?.ToString();
+
+    /// <summary>
+    /// Stable id of this installation, supplied by the platform head. Sent with every
+    /// registration and sign-in so the server re-uses the same device row after a
+    /// reinstall instead of listing the machine twice.
+    /// </summary>
+    public static string? MachineId { get; set; }
     private sealed record AuthResponse(string AccessToken, long ExpiresInSeconds);
     private sealed record PolicyResponse(
         string WorkWindowStart, string WorkWindowEnd, string Timezone,
@@ -42,13 +50,14 @@ public sealed class AgentApiClient : IAgentApi
     {
         var response = await _http.PostAsJsonAsync(
             "/api/v1/devices/register",
-            new RegisterRequest(enrollmentToken, platform, hostname, agentVersion), ct);
+            new RegisterRequest(enrollmentToken, platform, hostname, agentVersion, MachineId), ct);
         response.EnsureSuccessStatusCode();
         var body = (await response.Content.ReadFromJsonAsync<RegisterResponse>(ct))!;
         return new DeviceCredentials(body.DeviceId, body.DeviceSecret);
     }
 
-    private sealed record ProvisionRequest(string ProvisioningToken, string Platform, string? Hostname, string? AgentVersion);
+    private sealed record ProvisionRequest(
+        string ProvisioningToken, string Platform, string? Hostname, string? AgentVersion, string? MachineId);
     private sealed record MeResponse(string DeviceId, string Status, bool Assigned, bool Enrolled, string? EmployeeId);
 
     public async Task<DeviceCredentials> ProvisionAsync(
@@ -56,7 +65,7 @@ public sealed class AgentApiClient : IAgentApi
     {
         var response = await _http.PostAsJsonAsync(
             "/api/v1/devices/provision",
-            new ProvisionRequest(provisioningToken, platform, hostname, agentVersion), ct);
+            new ProvisionRequest(provisioningToken, platform, hostname, agentVersion, MachineId), ct);
         response.EnsureSuccessStatusCode();
         var body = (await response.Content.ReadFromJsonAsync<RegisterResponse>(ct))!;
         return new DeviceCredentials(body.DeviceId, body.DeviceSecret);
@@ -71,7 +80,8 @@ public sealed class AgentApiClient : IAgentApi
     public async Task<string> AuthenticateAsync(DeviceCredentials credentials, CancellationToken ct)
     {
         var response = await _http.PostAsJsonAsync(
-            "/api/v1/devices/auth", new AuthRequest(credentials.DeviceId, credentials.DeviceSecret, AgentVersion), ct);
+            "/api/v1/devices/auth",
+            new AuthRequest(credentials.DeviceId, credentials.DeviceSecret, AgentVersion, MachineId), ct);
         response.EnsureSuccessStatusCode();
         var body = (await response.Content.ReadFromJsonAsync<AuthResponse>(ct))!;
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", body.AccessToken);

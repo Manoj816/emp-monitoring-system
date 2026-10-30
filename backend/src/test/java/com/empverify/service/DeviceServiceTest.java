@@ -247,6 +247,72 @@ class DeviceServiceTest {
     }
 
     @Test
+    void sameMachineReProvisioningReusesTheRowAndKeepsItsEmployee() {
+        var employee = activeEmployee();
+        var existing = new Device();
+        existing.setEmployeeId(employee.getId());
+        existing.setStatus(DeviceStatus.ACTIVE);
+        existing.setMachineId("MACHINE-GUID-1");
+        existing.setRegisteredAt(Instant.now().minusSeconds(3600));
+        existing.setEnrolledAt(Instant.now());
+        when(devices.findByMachineIdOrderByRegisteredAtDesc("MACHINE-GUID-1")).thenReturn(List.of(existing));
+        when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        var registration = service.provision("tenant-token", "WINDOWS", "LAPTOP-1", "0.9.0.0", "MACHINE-GUID-1");
+
+        assertEquals(existing.getId(), registration.deviceId(), "no duplicate row for the same machine");
+        assertEquals(employee.getId(), existing.getEmployeeId(), "the assignment survives a reinstall");
+        assertEquals(DeviceStatus.ACTIVE, existing.getStatus());
+        assertEquals(null, existing.getEnrolledAt(), "a reinstall starts with the enrollment scan");
+        assertEquals("0.9.0.0", existing.getAgentVersion());
+        verify(audit).record(any(), eq("DEVICE_REPROVISIONED"), eq("device"), eq(existing.getId().toString()), any());
+    }
+
+    @Test
+    void revokedMachineComesBackUnassigned() {
+        var revoked = new Device();
+        revoked.setEmployeeId(UUID.randomUUID());
+        revoked.setStatus(DeviceStatus.REVOKED);
+        revoked.setMachineId("MACHINE-GUID-2");
+        revoked.setRegisteredAt(Instant.now().minusSeconds(3600));
+        when(devices.findByMachineIdOrderByRegisteredAtDesc("MACHINE-GUID-2")).thenReturn(List.of(revoked));
+        when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        var registration = service.provision("tenant-token", "WINDOWS", "LAPTOP-2", "0.9.0.0", "MACHINE-GUID-2");
+
+        assertEquals(revoked.getId(), registration.deviceId());
+        assertEquals(DeviceStatus.PENDING, revoked.getStatus(), "an administrator must assign it again");
+        assertEquals(null, revoked.getEmployeeId());
+    }
+
+    @Test
+    void unknownMachineStillGetsANewRow() {
+        when(devices.findByMachineIdOrderByRegisteredAtDesc("NEW-GUID")).thenReturn(List.of());
+        when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        var registration = service.provision("tenant-token", "WINDOWS", "LAPTOP-3", "0.9.0.0", "NEW-GUID");
+
+        assertNotNull(registration.deviceId());
+        verify(audit).record(any(), eq("DEVICE_PROVISIONED"), eq("device"), any(), any());
+    }
+
+    @Test
+    void signInBackfillsTheMachineIdOnce() {
+        var device = new Device();
+        device.setStatus(DeviceStatus.ACTIVE);
+        device.setCredentialHash(encoder.encode("secret"));
+        when(devices.findById(device.getId())).thenReturn(Optional.of(device));
+        when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(deviceTokens.issue(device.getId())).thenReturn("token");
+        when(deviceTokens.ttlSeconds()).thenReturn(3600L);
+
+        service.authenticate(device.getId(), "secret", "0.9.0.0", "MACHINE-GUID-3");
+        service.authenticate(device.getId(), "secret", "0.9.0.0", "OTHER-GUID");
+
+        assertEquals("MACHINE-GUID-3", device.getMachineId(), "the first reported id sticks");
+    }
+
+    @Test
     void revokeDeviceSetsRevokedStatus() {
         var device = new Device();
         device.setStatus(DeviceStatus.ACTIVE);
