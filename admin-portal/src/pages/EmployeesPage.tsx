@@ -3,11 +3,12 @@ import { api, type DeviceSummary, type Employee } from "../api";
 import ActionMenu from "../components/ActionMenu";
 import AddEmployeeDialog from "../components/AddEmployeeDialog";
 import CameraCapture from "../components/CameraCapture";
+import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
 import EmployeeDetailsDialog from "../components/EmployeeDetailsDialog";
 import { useStatsBar } from "../components/StatsBar";
 
-export default function EmployeesPage() {
+export default function EmployeesPage(props: { title: string; hint: string }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +111,7 @@ export default function EmployeesPage() {
   return (
     <>
       <div className="toolbar">
-        <span />
+        <CardTitle title={props.title} hint={props.hint} />
         <span className="toolbar-right">
           {stats.controls}
           <button className="primary" disabled={busy} onClick={() => setAdding(true)}>+ Add employee</button>

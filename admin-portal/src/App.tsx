@@ -148,23 +148,16 @@ export default function App() {
         </aside>
 
         <div className="content">
-          <div className="page-header">
-            <div>
-              <h1>{current.label}</h1>
-              <p className="muted">{current.description}</p>
-            </div>
-          </div>
-
           {notice && (
             <p className="notice" style={{ margin: "0 0 16px" }}>
               {notice}
             </p>
           )}
 
-          <main className="card" key={resetCount}>
-            {section === "employees" && <EmployeesPage />}
-            {section === "devices" && <DevicesPage />}
-            {section === "checks" && <ChecksPage />}
+          <main className="card" key={resetCount} aria-label={current.label}>
+            {section === "employees" && <EmployeesPage title={current.label} hint={current.description} />}
+            {section === "devices" && <DevicesPage title={current.label} hint={current.description} />}
+            {section === "checks" && <ChecksPage title={current.label} hint={current.description} />}
           </main>
         </div>
       </div>

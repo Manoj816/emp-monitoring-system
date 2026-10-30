@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type AdminCheckRow, type ReviewResolution } from "../api";
+import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
 import { useStatsBar } from "../components/StatsBar";
 import { inLocalDayRange } from "../utils/dates";
@@ -23,7 +24,7 @@ const FILTER_LABELS: Record<Filter, string> = {
   ALL: "All", CHECK: "Needs review", MATCH: "Match", MISSED: "Missed", ERRORS: "Errors",
 };
 
-export default function ChecksPage() {
+export default function ChecksPage(props: { title: string; hint: string }) {
   const [rows, setRows] = useState<AdminCheckRow[]>([]);
   const [filter, setFilter] = useState<Filter>("ALL");
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +119,7 @@ export default function ChecksPage() {
   return (
     <>
       <div className="toolbar">
+        <CardTitle title={props.title} hint={props.hint} />
         <div className="chips" role="tablist" aria-label="Quick filter">
           {FILTERS.map((f) => (
             <button

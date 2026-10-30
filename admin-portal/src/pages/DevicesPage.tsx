@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
 import ActionMenu from "../components/ActionMenu";
+import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
 import { useStatsBar } from "../components/StatsBar";
 
@@ -10,7 +11,7 @@ function statusBadge(status: string): string {
   return "badge error"; // REVOKED
 }
 
-export default function DevicesPage() {
+export default function DevicesPage(props: { title: string; hint: string }) {
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [choice, setChoice] = useState<Record<string, string>>({}); // deviceId -> employeeId
@@ -109,7 +110,7 @@ export default function DevicesPage() {
   return (
     <>
       <div className="toolbar">
-        <span />
+        <CardTitle title={props.title} hint={props.hint} />
         <span className="toolbar-right">{stats.controls}</span>
       </div>
       {stats.panel}

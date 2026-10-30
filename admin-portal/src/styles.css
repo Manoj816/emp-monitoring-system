@@ -104,9 +104,23 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 
 .content { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 22px 28px 32px; }
 
-.page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
-.page-header h1 { margin: 0 0 4px; font-size: 24px; }
-.page-header p { margin: 0; max-width: 760px; }
+/* Card title with the description behind an info icon (tooltip on hover / focus) */
+.card-title { margin: 0; font-size: 20px; display: inline-flex; align-items: center; gap: 8px; }
+.info-tip {
+  position: relative; width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center;
+  font-size: 11px; font-weight: 700; font-style: italic; font-family: Georgia, serif;
+  background: var(--accent-soft); color: var(--accent); cursor: help; outline: none;
+}
+.info-tip::after {
+  content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 8px); z-index: 40;
+  width: max-content; max-width: 420px; padding: 8px 12px; border-radius: 8px;
+  background: #1c2733; color: #fff; font: 13px/1.45 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  font-style: normal; font-weight: 400; text-align: left; white-space: normal;
+  box-shadow: 0 10px 24px -10px rgba(16, 24, 40, 0.5); opacity: 0; pointer-events: none;
+  transform: translateY(-4px); transition: opacity 0.12s, transform 0.12s;
+}
+.info-tip:hover::after, .info-tip:focus::after { opacity: 1; transform: none; }
+.toolbar .chips { margin-left: 10px; }
 .nav-toggle { display: none; }
 
 .card {
@@ -120,7 +134,8 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .help { margin: 0 0 14px; color: var(--muted); font-size: 13px; max-width: 980px; }
 
 /* Toolbar row inside a card: summary tiles / quick filters on the left, actions on the right. */
-.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.toolbar .toolbar-right { margin-left: auto; }
 .toolbar-right { display: flex; align-items: center; gap: 10px; }
 
 .stats-controls { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
