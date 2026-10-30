@@ -146,8 +146,12 @@ export default function ChecksPage() {
             render: (row) => (
               <>{row.employeeName ?? row.employeeId.slice(0, 8)} <span className="muted">{row.employeeCode ?? ""}</span></>
             ),
+            headerStyle: { width: 170 },
           },
-          { key: "type", header: "Type", filter: "select", value: (row) => row.checkType, cellStyle: { color: "var(--muted)" } },
+          {
+            key: "type", header: "Type", filter: "select", value: (row) => row.checkType,
+            cellStyle: { color: "var(--muted)" }, headerStyle: { width: 130 },
+          },
           {
             key: "status", header: "Status", filter: "select",
             value: (row) => statusLabel(row.status),
@@ -162,10 +166,16 @@ export default function ChecksPage() {
                 )}
               </>
             ),
-            cellStyle: { maxWidth: 340 },
+            cellStyle: { maxWidth: 360 }, headerStyle: { width: 360 },
           },
-          { key: "similarity", header: "Similarity", value: (row) => row.similarityScore?.toFixed(1) ?? "—" },
-          { key: "liveness", header: "Liveness", value: (row) => row.livenessConfidence?.toFixed(1) ?? "—" },
+          {
+            key: "similarity", header: "Similarity", value: (row) => row.similarityScore?.toFixed(1) ?? "—",
+            headerStyle: { width: 100 },
+          },
+          {
+            key: "liveness", header: "Liveness", value: (row) => row.livenessConfidence?.toFixed(1) ?? "—",
+            headerStyle: { width: 100 },
+          },
           {
             key: "review", header: "Review", filter: "select",
             value: (row) =>
@@ -191,6 +201,7 @@ export default function ChecksPage() {
             key: "when", header: "When", filter: "date", date: (row) => row.requestedAt,
             value: (row) => new Date(row.requestedAt).toLocaleString(),
             render: (row) => <span title={row.checkId}>{new Date(row.requestedAt).toLocaleString()}</span>,
+            headerStyle: { width: 300 },
           },
         ]}
       />
