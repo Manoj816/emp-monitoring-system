@@ -49,6 +49,25 @@ public static class ProvisioningReader
             ?? ReadFile("enroll.token", ProvisioningKind.Enrollment);
     }
 
+    /// <summary>
+    /// The id the installer writes on every run (HKLM\Software\EmpVerify\InstallId).
+    /// The agent remembers the id it registered under; a different one means the
+    /// installer has run again, and the system registers afresh. Null when absent
+    /// (a package pushed without the installer keeps its registration).
+    /// </summary>
+    public static string? ReadInstallId()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(RegPath);
+            return key?.GetValue("InstallId") is string id && !string.IsNullOrWhiteSpace(id) ? id.Trim() : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static Provisioning? ReadFile(string name, ProvisioningKind kind)
     {
         try

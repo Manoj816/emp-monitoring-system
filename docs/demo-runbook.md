@@ -25,13 +25,14 @@ deploys, not for the demo).
 ## 2. Remove the current agent (start from scratch)
 
 1. Right-click the EmpVerify tray icon → **Exit**.
-2. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.8.0.0`
+2. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.11.0.0`
    and double-click **`Uninstall-EmpVerify.cmd`** (accept the administrator prompt).
    This removes the app for all users, the run-at-sign-in entry, and keeps the
    provisioning token so the next install registers again without typing anything.
-3. Optional, for a truly clean laptop: delete the folder `%LOCALAPPDATA%\EmpVerify`
-   (its settings, stored device credentials and the check window's browser data).
-   Without this the reinstalled agent reuses the same device identity.
+3. Nothing else to clean up: every run of the installer makes the agent discard
+   its stored device identity and register the system again, so it comes back
+   as **Unassigned** in the Devices tab (same row, history kept), you assign the
+   employee again, and the first check after that is the enrollment scan.
 
 ## 3. Reset the data in the portal (optional)
 
@@ -48,7 +49,7 @@ them stops the servers.
 
 ## 5. Install the agent (one double-click)
 
-1. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.8.0.0`.
+1. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.11.0.0`.
    It already contains `provisioning.json` (backend address + tenant token), so
    nothing has to be typed.
 2. Double-click **`Install-EmpVerify.cmd`** and accept the administrator prompt.
@@ -56,7 +57,7 @@ them stops the servers.
    provisioning, package install, launch) and stays open so you can read it.
 3. The agent appears in the tray and registers this PC as **Unassigned**.
 
-To install on another PC: copy the whole `setup-0.8.0.0` folder there (or the
+To install on another PC: copy the whole `setup-0.11.0.0` folder there (or the
 zip next to it plus a `provisioning.json`) and do the same two clicks. The
 other PC needs Windows 10 1809+ / Windows 11, 64-bit, internet access, and a
 webcam. Nothing else. Note: until the two web apps are hosted in AWS, checks

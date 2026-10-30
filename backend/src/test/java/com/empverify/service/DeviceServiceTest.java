@@ -247,7 +247,7 @@ class DeviceServiceTest {
     }
 
     @Test
-    void sameMachineReProvisioningReusesTheRowAndKeepsItsEmployee() {
+    void sameMachineReProvisioningReusesTheRowButComesBackUnassigned() {
         var employee = activeEmployee();
         var existing = new Device();
         existing.setEmployeeId(employee.getId());
@@ -261,9 +261,9 @@ class DeviceServiceTest {
         var registration = service.provision("tenant-token", "WINDOWS", "LAPTOP-1", "0.9.0.0", "MACHINE-GUID-1");
 
         assertEquals(existing.getId(), registration.deviceId(), "no duplicate row for the same machine");
-        assertEquals(employee.getId(), existing.getEmployeeId(), "the assignment survives a reinstall");
-        assertEquals(DeviceStatus.ACTIVE, existing.getStatus());
-        assertEquals(null, existing.getEnrolledAt(), "a reinstall starts with the enrollment scan");
+        assertEquals(null, existing.getEmployeeId(), "a reinstalled system must be assigned again");
+        assertEquals(DeviceStatus.PENDING, existing.getStatus());
+        assertEquals(null, existing.getEnrolledAt(), "the first check after assignment is the enrollment scan");
         assertEquals("0.9.0.0", existing.getAgentVersion());
         verify(audit).record(any(), eq("DEVICE_REPROVISIONED"), eq("device"), eq(existing.getId().toString()), any());
     }

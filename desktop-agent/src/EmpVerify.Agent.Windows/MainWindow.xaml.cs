@@ -104,6 +104,17 @@ public partial class MainWindow : Window
     private async Task TryConnectAsync()
     {
         var credentials = await _credentialStore.LoadAsync(CancellationToken.None);
+        var installId = ProvisioningReader.ReadInstallId();
+        if (credentials is not null && installId is not null
+            && !string.Equals(installId, _settings.RegisteredInstallId, StringComparison.Ordinal))
+        {
+            // The installer has run since this system registered. To the administrator
+            // a reinstall is a new system: it comes back as Unassigned and is assigned
+            // and enrolled again, so the stored identity is dropped here.
+            Log("The agent was reinstalled — registering this system again.");
+            await _credentialStore.DeleteAsync(CancellationToken.None);
+            credentials = null;
+        }
         if (credentials is null)
         {
             // Self-register from a deploy-time token, if the installer/MDM supplied one.
@@ -151,6 +162,8 @@ public partial class MainWindow : Window
                 Log($"Device registered: {credentials.DeviceId}");
             }
             await _credentialStore.SaveAsync(credentials, CancellationToken.None);
+            _settings.RegisteredInstallId = ProvisioningReader.ReadInstallId();
+            _settings.Save();
             ProvisioningReader.Clear();
             return credentials;
         }
@@ -217,6 +230,8 @@ public partial class MainWindow : Window
         _awaitingAssignment = true;
         SetStatus("Registered — waiting for an administrator to assign this system.");
         Log("Waiting for an administrator to assign this system to an employee...");
+        _trayIcon?.ShowBalloonTip(4000, "EmpVerify Agent",
+            "Registered. Waiting for an administrator to assign this system.", WinForms.ToolTipIcon.Info);
         _timer.Start();
     }
 
@@ -246,8 +261,9 @@ public partial class MainWindow : Window
             DemoScheduleButton.IsEnabled = true;
             DemoClearButton.IsEnabled = true;
             SetStatus("Connected — scheduled checks active.");
-            Log($"Connected. Policy: window {_policy.WorkWindowStart}-{_policy.WorkWindowEnd}, " +
-                $"{_policy.MaxChecksPerDay} checks/day, {_policy.ResponseTimeoutSeconds}s response window.");
+            // Deliberately no schedule details (window, count, time): the day's check
+            // is random so that nobody can plan around it.
+            Log("Connected. Scheduled identity checks are active.");
             if (_settings.DemoIntervalMinutes > 0)
             {
                 Log($"Demo mode: a check every {_settings.DemoIntervalMinutes} min.");
@@ -288,8 +304,8 @@ public partial class MainWindow : Window
         }
         var retryAt = DateTimeOffset.Now.AddMinutes(Math.Max(1, _settings.RetryMinutes));
         _sessionStartRetryAt = retryAt;
-        Log($"Session-start scan not completed — it reopens at {retryAt:HH:mm}. Click 'Liveness check' to do it now.");
-        SetStatus($"Face scan required — reopens at {retryAt:HH:mm}.");
+        Log("Session-start scan not completed — it reopens shortly. Click 'Liveness check' to do it now.");
+        SetStatus("Face scan required — it reopens shortly.");
     }
 
     /// <summary>
@@ -315,20 +331,19 @@ public partial class MainWindow : Window
         _checkRetriesLeft--;
         _checkRetryAt = retryAt;
         _checkRetryIsDemo = demo;
-        Log($"{Label(type)} missed — recorded for the administrator; one more attempt at {retryAt:HH:mm}.");
+        Log($"{Label(type)} missed — recorded for the administrator; it is offered once more later today.");
     }
 
+    /// <summary>
+    /// Tells the employee what to expect, without the time: the day's check is random
+    /// precisely so that nobody can plan around it, so neither its time nor whether
+    /// one is still due today is shown.
+    /// </summary>
     private void LogNextCheck()
     {
-        var next = _scheduler.NextCheck(_plan, DateTimeOffset.Now);
-        if (next is null)
-        {
-            Log("No check planned for the rest of today.");
-            return;
-        }
         Log(_deviceState is { Enrolled: false }
-            ? $"Next scheduled check: {next:HH:mm} — the enrollment scan, matched against the photo on file."
-            : $"Next scheduled check: {next:HH:mm}.");
+            ? "The next check is the enrollment scan, matched against the photo on file. It opens at a random time during the work day."
+            : "Identity checks open at a random time during the work day.");
     }
 
     /// <summary>

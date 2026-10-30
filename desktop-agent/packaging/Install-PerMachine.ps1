@@ -189,6 +189,13 @@ if ($ProvisioningToken) {
 } else {
     Write-Warning "No provisioning token: the agent will ask for an enrollment token on first launch. Pass -ProvisioningToken/-BackendUrl or put provisioning.json next to this script."
 }
+# Every run of this installer is a (re)install to the server: the agent compares
+# this id with the one it registered under and, when they differ, discards its
+# stored device identity and registers the system again as Unassigned, so the
+# administrator assigns the employee again and the first check is the enrollment scan.
+if (-not (Test-Path $regPath)) { New-Item -Path $regPath | Out-Null }
+Set-ItemProperty -Path $regPath -Name "InstallId" -Value ([guid]::NewGuid().ToString())
+Write-Host "  install id written; the agent registers this system again as 'Unassigned'"
 
 # ---------------------------------------------------------------- 5. package
 Write-Host "[5/6] Installing the package for all users..."

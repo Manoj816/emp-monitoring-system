@@ -30,6 +30,11 @@ public sealed class AgentSettings
     public int RetryMinutes { get; set; } = 2;
     public int MissedCheckRetries { get; set; } = 1;
 
+    // The installer's InstallId (HKLM\Software\EmpVerify) at the time this system
+    // registered. When the installer runs again the id changes, and the agent drops
+    // its stored identity and registers the system afresh (back to Unassigned).
+    public string? RegisteredInstallId { get; set; }
+
     public static AgentSettings Load()
     {
         try

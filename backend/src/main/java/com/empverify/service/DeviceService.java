@@ -153,10 +153,11 @@ public class DeviceService {
     }
 
     /**
-     * With a machine id, the same physical machine re-uses its existing row: a
-     * still-assigned system keeps its employee (and restarts with the enrollment
-     * scan); a revoked one comes back as Unassigned, so an administrator decides
-     * again whether it may verify anyone.
+     * With a machine id, the same physical machine re-uses its existing row, so the
+     * fleet never lists a laptop twice and its check history stays together. The
+     * reinstall is otherwise a fresh start for the administrator: whatever the row
+     * was before (assigned, or revoked), it comes back as Unassigned, has to be
+     * assigned again, and the next check on it is the enrollment scan.
      */
     @Transactional
     public Registration provision(
@@ -169,10 +170,9 @@ public class DeviceService {
         var existing = sameMachine(machineId);
         var device = existing.orElseGet(Device::new);
         String previousStatus = existing.map(d -> d.getStatus().name()).orElse(null);
-        if (existing.isEmpty() || device.getStatus() == DeviceStatus.REVOKED || device.getEmployeeId() == null) {
-            device.setEmployeeId(null);
-            device.setStatus(DeviceStatus.PENDING);
-        }
+        UUID previousEmployee = device.getEmployeeId();
+        device.setEmployeeId(null);
+        device.setStatus(DeviceStatus.PENDING);
         device.setPlatform(DevicePlatform.valueOf(platform));
         device.setHostname(hostname);
         device.setAgentVersion(agentVersion);
@@ -185,7 +185,9 @@ public class DeviceService {
         audit.record("device:" + device.getId(), existing.isPresent() ? "DEVICE_REPROVISIONED" : "DEVICE_PROVISIONED",
                 "device", device.getId().toString(),
                 "{\"platform\":\"" + platform + "\",\"previousStatus\":"
-                        + (previousStatus == null ? "null" : "\"" + previousStatus + "\"") + "}");
+                        + (previousStatus == null ? "null" : "\"" + previousStatus + "\"")
+                        + ",\"previousEmployeeId\":"
+                        + (previousEmployee == null ? "null" : "\"" + previousEmployee + "\"") + "}");
         return new Registration(device.getId(), secret);
     }
 
