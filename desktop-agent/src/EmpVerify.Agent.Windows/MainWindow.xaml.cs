@@ -54,6 +54,8 @@ public partial class MainWindow : Window
     private DeviceState? _deviceState;
     private DateTime _planDate = DateTime.MinValue;
     private DateTimeOffset _lastStateRefresh = DateTimeOffset.MinValue;
+    /// <summary>The server is currently unreachable; keeps the wake-up burst to one log line.</summary>
+    private bool _offline;
     private bool _exiting;
 
     /// <summary>How often an active agent re-reads its assignment (offboarding / reassignment).</summary>
@@ -364,7 +366,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Log($"Could not read enrollment state: {ex.Message}");
+            NoteNetworkFailure(ex, "Could not read enrollment state");
         }
         return _deviceState is { Enrolled: false } ? CheckType.Enrollment : CheckType.Periodic;
     }
@@ -387,6 +389,94 @@ public partial class MainWindow : Window
         }
     }
 
+    // ---- the network after a wake-up ----------------------------------------------
+
+    /// <summary>
+    /// True for the failures a PC that has just started or woken up produces: DNS not
+    /// up yet ("No such host is known"), no route, a refused connection, a timeout.
+    /// An HTTP error status is not one of these — there the server did answer.
+    /// </summary>
+    private static bool IsNetworkFailure(Exception? ex)
+    {
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is System.Net.Sockets.SocketException or TaskCanceledException)
+            {
+                return true;
+            }
+            if (e is HttpRequestException { StatusCode: null })
+            {
+                return true; // the request never got a response at all
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Reports a failed call. An unreachable server is logged once, as a plain
+    /// sentence: a waking PC fails every call for a minute, and a burst of raw
+    /// "No such host is known" lines reads like a broken agent when nothing is
+    /// wrong. Any other failure is logged with its message as before. Returns true
+    /// when the cause was the network being down.
+    /// </summary>
+    private bool NoteNetworkFailure(Exception ex, string what)
+    {
+        if (!IsNetworkFailure(ex))
+        {
+            Log($"{what}: {ex.Message}");
+            return false;
+        }
+        if (!_offline)
+        {
+            _offline = true;
+            Log("Waiting for the network — the EmpVerify server cannot be reached yet. "
+                + "This is normal for a minute after the PC starts or wakes up; checks resume by themselves.");
+            SetStatus("Waiting for the network…");
+        }
+        return true;
+    }
+
+    /// <summary>A call got through: say so once, so the quiet period has a visible end.</summary>
+    private void NetworkOk()
+    {
+        if (_offline)
+        {
+            _offline = false;
+            Log("Back online — identity checks continue as normal.");
+            SetStatus("Connected — scheduled checks active.");
+        }
+    }
+
+    /// <summary>
+    /// Whether the server can be reached right now (refreshing the device token on
+    /// the way). A non-network error is left for the check itself to surface; only
+    /// an unreachable server stops a scheduled check before it starts.
+    /// </summary>
+    private async Task<bool> ServerReachableAsync()
+    {
+        try
+        {
+            await EnsureAuthenticatedAsync(CancellationToken.None);
+            NetworkOk();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            return !NoteNetworkFailure(ex, "Could not reach the server");
+        }
+    }
+
+    /// <summary>
+    /// The server was unreachable, so nothing was opened and nothing was recorded.
+    /// That is not the employee missing a check: the same check is offered again in
+    /// a few minutes and the day's retry budget is deliberately left untouched.
+    /// </summary>
+    private void RearmAfterNetworkFailure(bool demo)
+    {
+        _checkRetryAt = DateTimeOffset.Now.AddMinutes(Math.Max(1, _settings.RetryMinutes));
+        _checkRetryIsDemo = demo;
+    }
+
     // ---- scheduling ---------------------------------------------------------------
 
     private async Task OnScheduleTickAsync()
@@ -407,7 +497,7 @@ public partial class MainWindow : Window
             }
             catch (Exception ex)
             {
-                Log($"Assignment check failed: {ex.Message}");
+                NoteNetworkFailure(ex, "Assignment check failed");
             }
             return;
         }
@@ -498,6 +588,14 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task RunScheduledCheckAsync(bool demo)
     {
+        // A PC that has just woken up often has no network for a minute. Nothing can
+        // be opened, scanned or recorded then, so re-arm instead of spending the
+        // day's attempt on a check that cannot reach the server.
+        if (!await ServerReachableAsync())
+        {
+            RearmAfterNetworkFailure(demo);
+            return;
+        }
         var type = await ResolveScheduledCheckTypeAsync();
         if (await TryRecordUnavailableMissAsync(type, demo))
         {
@@ -529,12 +627,19 @@ public partial class MainWindow : Window
             await EnsureAuthenticatedAsync(CancellationToken.None);
             var check = await _api!.OpenCheckAsync(type, CancellationToken.None);
             await _api.CancelCheckAsync(check.CheckId, reason, CancellationToken.None);
+            NetworkOk();
             Log($"{Label(type)} not shown — {StateDescription(_workstation.Current)}. Recorded for the administrator.");
             SetStatus($"Last check: missed ({reason}) at {DateTime.Now:HH:mm}.");
         }
         catch (Exception ex)
         {
-            Log($"{Label(type)}: could not record the '{reason}' state: {ex.Message}");
+            if (NoteNetworkFailure(ex, $"{Label(type)}: could not record the '{reason}' state"))
+            {
+                // Nothing reached the server, so nothing was recorded: never claim it
+                // was, and do not spend one of the day's attempts on a failed call.
+                RearmAfterNetworkFailure(demo);
+                return true;
+            }
         }
         ScheduleCheckRetry(type, demo);
         return true;
@@ -562,9 +667,10 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Log($"Could not refresh device state: {ex.Message}");
+            NoteNetworkFailure(ex, "Could not refresh device state");
             return false;
         }
+        NetworkOk();
 
         var previous = _deviceState;
         _deviceState = state;
@@ -707,7 +813,13 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Log($"{type} check error: {ex.Message}");
+            // A scheduled check that died because the server was unreachable was
+            // never recorded either way, so offer it again shortly rather than
+            // letting the day's check vanish with a one-line error.
+            if (NoteNetworkFailure(ex, $"{Label(type)} error") && scheduled)
+            {
+                RearmAfterNetworkFailure(demo);
+            }
         }
         finally
         {
