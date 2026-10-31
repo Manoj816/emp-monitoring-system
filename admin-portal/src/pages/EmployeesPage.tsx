@@ -4,7 +4,6 @@ import ActionMenu from "../components/ActionMenu";
 import AddEmployeeDialog from "../components/AddEmployeeDialog";
 import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
-import EditEmployeeDialog from "../components/EditEmployeeDialog";
 import EmployeeDetailsDialog from "../components/EmployeeDetailsDialog";
 import { useStatsBar } from "../components/StatsBar";
 
@@ -14,7 +13,6 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<Employee | null>(null);
   const [details, setDetails] = useState<Employee | null>(null);
   const fileTargetRef = useRef<Employee | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -183,8 +181,10 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
                 disabled={busy}
                 label={`Actions for ${emp.fullName}`}
                 items={[
-                  { label: "Details", onClick: () => setDetails(emp), title: "Record, pictures and assigned systems" },
-                  { label: "Edit details", onClick: () => setEditing(emp), title: "Correct name, code, email or department" },
+                  {
+                    label: "Details", onClick: () => setDetails(emp),
+                    title: "Record, pictures and assigned systems — edit the details with the pencil inside",
+                  },
                   { label: "Replace ID / photo", onClick: () => pickFile(emp) },
                   {
                     label: "Request first scan again", onClick: () => requestFirstScan(emp),
@@ -216,17 +216,6 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
           onClose={() => setAdding(false)}
           onCreated={() => {
             setAdding(false);
-            void refresh();
-          }}
-        />
-      )}
-
-      {editing && (
-        <EditEmployeeDialog
-          employee={editing}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null);
             void refresh();
           }}
         />

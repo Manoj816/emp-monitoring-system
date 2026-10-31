@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type DeviceSummary, type Employee } from "../api";
+import { api, DEPARTMENTS, type DeviceSummary, type Employee } from "../api";
 
 /**
- * Employee details popup: identity references (uploaded ID/photo and the
- * enrolled live scan), the systems assigned to the employee with their
- * enrollment state, and the two actions that make the employee enroll again:
- * replacing the ID/photo, or asking for the first scan again as it is.
- * Viewing a reference image is audited server-side.
+ * Employee details popup: the record itself (editable in place via the pencil
+ * icon — a name change, a department move, a typo in the code or email),
+ * identity references (uploaded ID/photo and the enrolled live scan), the
+ * systems assigned to the employee with their enrollment state, and the two
+ * actions that make the employee enroll again: replacing the ID/photo, or
+ * asking for the first scan again as it is. Viewing a reference image is
+ * audited server-side.
  */
 export default function EmployeeDetailsDialog(props: {
   employee: Employee;
   onClose: () => void;
-  /** Something changed (photo replaced, re-enrollment requested): the parent refreshes. */
+  /** Something changed (details edited, photo replaced, re-enrollment requested): the parent refreshes. */
   onChanged: () => void;
 }) {
   const { employee } = props;
@@ -21,6 +23,8 @@ export default function EmployeeDetailsDialog(props: {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ employeeCode: "", fullName: "", email: "", department: "" });
   const [version, setVersion] = useState(0); // bump to reload the pictures
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -96,6 +100,46 @@ export default function EmployeeDetailsDialog(props: {
     replacePhoto(file);
   }
 
+  // ---- editing the record in place --------------------------------------------
+
+  // A legacy record may carry a department outside today's fixed list (or none):
+  // it still shows as the current choice so saving without touching it keeps it.
+  const departments: string[] = [...DEPARTMENTS];
+  if (employee.department && !departments.includes(employee.department)) {
+    departments.unshift(employee.department);
+  }
+
+  function startEdit() {
+    setForm({
+      employeeCode: employee.employeeCode,
+      fullName: employee.fullName,
+      email: employee.email,
+      department: employee.department ?? "",
+    });
+    setError(null);
+    setNotice(null);
+    setEditing(true);
+  }
+
+  const formComplete =
+    form.employeeCode.trim() !== "" && form.fullName.trim() !== "" &&
+    form.email.trim() !== "" && form.department !== "";
+
+  function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!formComplete) return;
+    void run("Save details", async () => {
+      await api.updateEmployee(employee.id, {
+        employeeCode: form.employeeCode.trim(),
+        fullName: form.fullName.trim(),
+        email: form.email.trim(),
+        department: form.department,
+      });
+      setEditing(false);
+      return "Details updated.";
+    });
+  }
+
   function requestReEnrollment() {
     if (
       !confirm(
@@ -121,7 +165,7 @@ export default function EmployeeDetailsDialog(props: {
       <div className="modal xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <header className="details-head">
           <span className="avatar lg">{initial}</span>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <h3>
               {employee.fullName}{" "}
               <span className={`badge ${employee.status === "ACTIVE" ? "match" : "neutral"}`}>{employee.status}</span>
@@ -130,7 +174,76 @@ export default function EmployeeDetailsDialog(props: {
               {employee.employeeCode} · {employee.email}{employee.department ? ` · ${employee.department}` : ""}
             </div>
           </div>
+          {!editing && (
+            <button
+              className="kebab"
+              disabled={busy}
+              onClick={startEdit}
+              title="Edit details (name, code, email, department)"
+              aria-label="Edit details"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                   strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+            </button>
+          )}
         </header>
+
+        {editing && (
+          <section className="panel" style={{ marginBottom: 14 }}>
+            <h4>Edit details</h4>
+            <form onSubmit={saveEdit}>
+              <div className="form-grid">
+                <label>
+                  Employee code *
+                  <input
+                    required
+                    autoFocus
+                    value={form.employeeCode}
+                    onChange={(e) => setForm({ ...form, employeeCode: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Full name *
+                  <input required value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
+                </label>
+                <label>
+                  Email *
+                  <input
+                    required
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Department *
+                  <select
+                    required
+                    value={form.department}
+                    onChange={(e) => setForm({ ...form, department: e.target.value })}
+                  >
+                    <option value="">Select department…</option>
+                    {departments.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="fine">
+                Corrections only: these details do not affect verification. Use "Replace ID / photo" to change the picture.
+              </p>
+              <div className="row">
+                <button type="button" className="action" disabled={busy} onClick={() => setEditing(false)}>Cancel</button>
+                <button type="submit" className="primary" disabled={busy || !formComplete}>
+                  {busy ? "Saving…" : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
 
         <div className="details-body">
           <section className="panel">
