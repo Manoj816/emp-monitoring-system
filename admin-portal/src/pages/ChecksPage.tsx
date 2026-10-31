@@ -106,14 +106,16 @@ export default function ChecksPage(props: { title: string; hint: string }) {
   const stats = useStatsBar({
     dated: true,
     title: "Check stats",
+    // Each tile jumps to its tab on the page (the popup closes itself first).
     compute: (range) => {
       const set = range ? rows.filter((r) => inDateRange(r.requestedAt, range)) : rows;
+      const goTo = (f: Filter) => ({ onClick: () => setFilter(f), title: `Open the ${FILTER_LABELS[f]} tab` });
       return [
-        { label: "Checks", value: set.length },
-        { label: "Needs review", value: set.filter((r) => (r.status === "CHECK" || r.status === "MULTIPLE_FACES") && !r.reviewResolution).length, tone: "warn" },
-        { label: "Matches", value: set.filter((r) => r.status === "MATCH").length, tone: "ok" },
-        { label: "Missed", value: set.filter((r) => isMissed(r.status)).length, tone: "bad" },
-        { label: "Errors", value: set.filter((r) => r.status === "VERIFICATION_ERROR" || r.status === "NO_FACE").length, tone: "bad" },
+        { label: "Checks", value: set.length, ...goTo("ALL") },
+        { label: "Needs review", value: set.filter((r) => (r.status === "CHECK" || r.status === "MULTIPLE_FACES") && !r.reviewResolution).length, tone: "warn" as const, ...goTo("CHECK") },
+        { label: "Matches", value: set.filter((r) => r.status === "MATCH").length, tone: "ok" as const, ...goTo("MATCH") },
+        { label: "Missed", value: set.filter((r) => isMissed(r.status)).length, tone: "bad" as const, ...goTo("MISSED") },
+        { label: "Errors", value: set.filter((r) => r.status === "VERIFICATION_ERROR" || r.status === "NO_FACE").length, tone: "bad" as const, ...goTo("ERRORS") },
       ];
     },
   });

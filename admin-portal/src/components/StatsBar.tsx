@@ -1,13 +1,9 @@
 import { useState, type ReactNode } from "react";
 import DateRangePicker from "./DateRangePicker";
-import Stats from "./Stats";
+import Stats, { type StatTile } from "./Stats";
 import { describeDateRange, presetRange, type DateRange } from "../utils/dates";
 
-export interface StatItem {
-  label: string;
-  value: number | string;
-  tone?: "ok" | "warn" | "bad" | "neutral";
-}
+export interface StatItem extends StatTile {}
 
 /**
  * Summary tiles on demand, shown in a popup behind a single "Stats" button.
@@ -48,7 +44,14 @@ export function useStatsBar(props: {
             </label>
           </div>
         )}
-        <Stats items={props.compute(props.dated ? range : null)} />
+        {/* A clickable tile closes the popup first, then jumps to its tab/filter. */}
+        <Stats
+          items={props.compute(props.dated ? range : null).map((item) =>
+            item.onClick
+              ? { ...item, onClick: () => { setOpen(false); item.onClick!(); } }
+              : item,
+          )}
+        />
         <p className="stats-caption">{props.dated ? describeDateRange(range) : "All data"}</p>
         <div className="row">
           <button className="action" onClick={() => setOpen(false)}>Close</button>
