@@ -25,7 +25,7 @@ deploys, not for the demo).
 ## 2. Remove the current agent (start from scratch)
 
 1. Right-click the EmpVerify tray icon → **Exit**.
-2. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.11.0.0`
+2. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.12.0.0`
    and double-click **`Uninstall-EmpVerify.cmd`** (accept the administrator prompt).
    This removes the app for all users, the run-at-sign-in entry, and keeps the
    provisioning token so the next install registers again without typing anything.
@@ -49,7 +49,7 @@ them stops the servers.
 
 ## 5. Install the agent (one double-click)
 
-1. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.11.0.0`.
+1. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.12.0.0`.
    It already contains `provisioning.json` (backend address + tenant token), so
    nothing has to be typed.
 2. Double-click **`Install-EmpVerify.cmd`** and accept the administrator prompt.
@@ -57,7 +57,7 @@ them stops the servers.
    provisioning, package install, launch) and stays open so you can read it.
 3. The agent appears in the tray and registers this PC as **Unassigned**.
 
-To install on another PC: copy the whole `setup-0.11.0.0` folder there (or the
+To install on another PC: copy the whole `setup-0.12.0.0` folder there (or the
 zip next to it plus a `provisioning.json`) and do the same two clicks. The
 other PC needs Windows 10 1809+ / Windows 11, 64-bit, internet access, and a
 webcam. Nothing else. Note: until the two web apps are hosted in AWS, checks
@@ -79,8 +79,10 @@ only work on the laptop that runs them (step 4).
    one now. Hold up a photo or cover the camera to see a flagged result.
 6. **Verification checks**: tiles, filters (every column, including a date range)
    and **Review** on flagged rows with the three pictures and the reason.
-   Missed checks (window closed, timed out) show as MISSED and are retried once
-   later the same day.
+   Missed checks show as MISSED with why the workstation could not answer — the
+   screen was locked, the machine slept or was shutting down, the employee closed
+   the window, or it was open with no response — and are retried once later the
+   same day. A whole work day with no check at all (machine off) shows as NO CHECK.
 
 ## 7. Other PCs, daily running
 
