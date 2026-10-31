@@ -316,4 +316,27 @@ class VerificationServiceTest {
         assertEquals(VerificationService.CancelReason.CANCELLED, VerificationService.CancelReason.parse("whatever"));
         assertEquals(VerificationService.CancelReason.CANCELLED, VerificationService.CancelReason.parse(null));
     }
+
+    @Test
+    void workstationStateReasonsAreParsedAndHaveReadableDetail() {
+        assertEquals(VerificationService.CancelReason.LOCKED, VerificationService.CancelReason.parse("locked"));
+        assertEquals(VerificationService.CancelReason.ASLEEP, VerificationService.CancelReason.parse("asleep"));
+        assertEquals(VerificationService.CancelReason.SHUTDOWN, VerificationService.CancelReason.parse("shutdown"));
+        assertTrue(VerificationService.CancelReason.LOCKED.detail().toLowerCase().contains("locked"));
+        assertTrue(VerificationService.CancelReason.ASLEEP.detail().toLowerCase().contains("sleep"));
+        assertTrue(VerificationService.CancelReason.SHUTDOWN.detail().toLowerCase().contains("shutting down"));
+    }
+
+    @Test
+    void cancelWithLockedRecordsTheWorkstationState() {
+        var check = pendingCheck("n", Instant.now().plusSeconds(60));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        var result = service.cancel(deviceId, check.getId(), VerificationService.CancelReason.LOCKED);
+
+        assertEquals(CheckStatus.EXPIRED, result.getStatus());
+        assertEquals(VerificationService.CancelReason.LOCKED.detail(), result.getErrorDetail());
+        verify(audit).record(any(), org.mockito.ArgumentMatchers.eq("CHECK_ABANDONED"), any(), any(), any());
+    }
 }

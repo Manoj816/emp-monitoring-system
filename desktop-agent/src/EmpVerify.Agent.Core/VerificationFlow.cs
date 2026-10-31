@@ -36,15 +36,17 @@ public sealed class VerificationFlow
     private readonly ICameraService _camera;
     private readonly INotificationService _notifications;
     private readonly IBrowserLauncher? _browser;
+    private readonly IWorkstationMonitor? _workstation;
 
     public VerificationFlow(
         IAgentApi api, ICameraService camera, INotificationService notifications,
-        IBrowserLauncher? browser = null)
+        IBrowserLauncher? browser = null, IWorkstationMonitor? workstation = null)
     {
         _api = api;
         _camera = camera;
         _notifications = notifications;
         _browser = browser;
+        _workstation = workstation;
     }
 
     /// <param name="promptFirst">
@@ -131,7 +133,8 @@ public sealed class VerificationFlow
         string checkId, IBrowserSession window, TimeSpan responseWindow,
         CancellationToken ct, Func<TimeSpan, CancellationToken, Task> poll)
     {
-        var deadline = DateTimeOffset.UtcNow + responseWindow;
+        var openedAt = DateTimeOffset.UtcNow;
+        var deadline = openedAt + responseWindow;
         while (DateTimeOffset.UtcNow < deadline)
         {
             // The verdict is checked before the window state: a scan that finished
@@ -151,13 +154,39 @@ public sealed class VerificationFlow
             }
             if (window.Closed.IsCompleted)
             {
-                await TryCancelAsync(checkId, "closed", ct);
+                await TryCancelAsync(checkId, MissReason(windowClosed: true, openedAt), ct);
                 return new FlowResult(FlowOutcome.WindowClosed, null);
             }
             await poll(TimeSpan.FromSeconds(2), ct);
         }
-        await TryCancelAsync(checkId, "timeout", ct);
+        await TryCancelAsync(checkId, MissReason(windowClosed: false, openedAt), ct);
         return new FlowResult(FlowOutcome.NotAccepted, null);
+    }
+
+    /// <summary>
+    /// Why a check that was open since <paramref name="openedAt"/> ended without a
+    /// scan, in terms the administrator understands. The workstation state takes
+    /// precedence over the window event: a window that "closed" because the machine
+    /// was shutting down is reported as a shutdown, not an employee dismissal.
+    /// </summary>
+    private string MissReason(bool windowClosed, DateTimeOffset openedAt)
+    {
+        if (_workstation is not null)
+        {
+            if (_workstation.Current == WorkstationState.ShuttingDown)
+            {
+                return "shutdown";
+            }
+            if (_workstation.HasSleptSince(openedAt))
+            {
+                return "asleep";
+            }
+            if (_workstation.Current == WorkstationState.Locked)
+            {
+                return "locked";
+            }
+        }
+        return windowClosed ? "closed" : "timeout";
     }
 
     private async Task TryCancelAsync(string checkId, string reason, CancellationToken ct)

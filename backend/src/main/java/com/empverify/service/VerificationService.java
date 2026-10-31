@@ -193,7 +193,10 @@ public class VerificationService {
         CANCELLED("cancelled by the employee"),
         CLOSED("check window closed before the scan finished"),
         ERROR("face scan could not run"),
-        TIMEOUT("not completed within the response window");
+        TIMEOUT("no response at the workstation within the allowed time (the screen was open but nobody completed the scan)"),
+        LOCKED("the workstation was locked at the scheduled time, so the identity check could not be shown"),
+        ASLEEP("the machine went to sleep during the identity check, so it was not completed"),
+        SHUTDOWN("the machine was shutting down or the user was signing out, so the identity check was not completed");
 
         private final String detail;
 

@@ -32,6 +32,7 @@ public partial class MainWindow : Window
         ? new WebViewCaptureLauncher()
         : new WindowsBrowserLauncher();
     private readonly CheckScheduler _scheduler = new();
+    private readonly WindowsWorkstationMonitor _workstation = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(15) };
 
     private AgentApiClient? _api;
@@ -241,7 +242,7 @@ public partial class MainWindow : Window
         try
         {
             _policy = await _api!.GetPolicyAsync(CancellationToken.None);
-            _flow = new VerificationFlow(_api, _camera, _notifications, _browser);
+            _flow = new VerificationFlow(_api, _camera, _notifications, _browser, _workstation);
 
             // Agent is active: make sure it starts at login (no-op when MSIX-packaged).
             StartupManager.EnsureEnabled();
@@ -447,7 +448,7 @@ public partial class MainWindow : Window
         if (_checkRetryAt is { } again && now >= again)
         {
             _checkRetryAt = null;
-            await RunCheckAsync(await ResolveScheduledCheckTypeAsync(), scheduled: true, demo: _checkRetryIsDemo);
+            await RunScheduledCheckAsync(demo: _checkRetryIsDemo);
             return;
         }
 
@@ -458,7 +459,7 @@ public partial class MainWindow : Window
             {
                 _lastDemoCheck = now;
                 _checkRetriesLeft = _settings.MissedCheckRetries;
-                await RunCheckAsync(await ResolveScheduledCheckTypeAsync(), scheduled: true, demo: true);
+                await RunScheduledCheckAsync(demo: true);
             }
             return;
         }
@@ -469,7 +470,7 @@ public partial class MainWindow : Window
             _demoScheduledAt = null;
             DemoStatusText.Text = "";
             _checkRetriesLeft = _settings.MissedCheckRetries;
-            await RunCheckAsync(await ResolveScheduledCheckTypeAsync(), scheduled: true, demo: true);
+            await RunScheduledCheckAsync(demo: true);
             return;
         }
 
@@ -481,8 +482,66 @@ public partial class MainWindow : Window
         }
         _lastHandled = now;
         _checkRetriesLeft = _settings.MissedCheckRetries;
-        await RunCheckAsync(await ResolveScheduledCheckTypeAsync(), scheduled: true);
+        await RunScheduledCheckAsync(demo: false);
     }
+
+    /// <summary>
+    /// Runs the day's scheduled check — unless the workstation cannot show it right
+    /// now (the screen is locked, or the machine is shutting down). Opening a scan
+    /// window behind a lock screen would only time out unseen, so instead the miss
+    /// is recorded with that exact reason for the administrator and offered again
+    /// later (when the employee unlocks, the retry fires and they do the scan).
+    /// </summary>
+    private async Task RunScheduledCheckAsync(bool demo)
+    {
+        var type = await ResolveScheduledCheckTypeAsync();
+        if (await TryRecordUnavailableMissAsync(type, demo))
+        {
+            return;
+        }
+        await RunCheckAsync(type, scheduled: true, demo: demo);
+    }
+
+    /// <summary>
+    /// If the workstation is locked or shutting down, records the scheduled check as
+    /// a miss with that reason (open-then-cancel, so it shows under Missed with the
+    /// state explained) and schedules the retry, without opening a doomed scan
+    /// window. Returns true when it handled the miss; false to run the check normally.
+    /// </summary>
+    private async Task<bool> TryRecordUnavailableMissAsync(CheckType type, bool demo)
+    {
+        string? reason = _workstation.Current switch
+        {
+            WorkstationState.Locked => "locked",
+            WorkstationState.ShuttingDown => "shutdown",
+            _ => null,
+        };
+        if (reason is null)
+        {
+            return false;
+        }
+        try
+        {
+            await EnsureAuthenticatedAsync(CancellationToken.None);
+            var check = await _api!.OpenCheckAsync(type, CancellationToken.None);
+            await _api.CancelCheckAsync(check.CheckId, reason, CancellationToken.None);
+            Log($"{Label(type)} not shown — {StateDescription(_workstation.Current)}. Recorded for the administrator.");
+            SetStatus($"Last check: missed ({reason}) at {DateTime.Now:HH:mm}.");
+        }
+        catch (Exception ex)
+        {
+            Log($"{Label(type)}: could not record the '{reason}' state: {ex.Message}");
+        }
+        ScheduleCheckRetry(type, demo);
+        return true;
+    }
+
+    private static string StateDescription(WorkstationState state) => state switch
+    {
+        WorkstationState.Locked => "the screen was locked",
+        WorkstationState.ShuttingDown => "the machine was shutting down",
+        _ => "the workstation was unavailable",
+    };
 
     /// <summary>
     /// Re-reads the device state while active. Returns true when the assignment

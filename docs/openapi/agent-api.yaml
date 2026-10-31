@@ -327,20 +327,23 @@ paths:
       tags: [checks]
       summary: Report that a pending check ended without a scan
       description: >
-        Sent by the agent when the employee closes the check window before the scan
-        finishes (reason=closed) or the response window elapses (reason=timeout).
-        The check becomes EXPIRED with the reason recorded, so administrators see a
-        missed check and why — never a check that silently never finished. A missed
-        check is not, by itself, a finding against the employee. Idempotent: a check
-        that already has an outcome is returned unchanged. The liveness page has an
-        equivalent nonce-gated call (POST /api/v1/liveness/{checkId}/cancel?token=)
-        for reason=cancelled / reason=error.
+        Sent by the agent when a check ends without a scan. The reason records what
+        the workstation was doing so the administrator sees not just a missed check
+        but why: reason=closed (employee closed the window), reason=timeout (the
+        screen was open but nobody completed the scan), reason=locked (the screen was
+        locked at the scheduled time), reason=asleep (the machine slept during the
+        check), reason=shutdown (the machine was shutting down or signing out). The
+        check becomes EXPIRED with the reason recorded — never a check that silently
+        never finished. A missed check is not, by itself, a finding against the
+        employee. Idempotent: a check that already has an outcome is returned
+        unchanged. The liveness page has an equivalent nonce-gated call (POST
+        /api/v1/liveness/{checkId}/cancel?token=) for reason=cancelled / reason=error.
       parameters:
         - { name: checkId, in: path, required: true, schema: { type: string, format: uuid } }
         - name: reason
           in: query
           required: false
-          schema: { type: string, enum: [closed, timeout, cancelled, error] }
+          schema: { type: string, enum: [closed, timeout, locked, asleep, shutdown, cancelled, error] }
       responses:
         "200":
           description: The check's state after recording the reason.

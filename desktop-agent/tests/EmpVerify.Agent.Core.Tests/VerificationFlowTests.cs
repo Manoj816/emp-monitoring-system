@@ -84,6 +84,14 @@ public class VerificationFlowTests
         public Task<CheckPolicy> GetPolicyAsync(CancellationToken ct) => throw new NotImplementedException();
     }
 
+    private sealed class FakeWorkstation : IWorkstationMonitor
+    {
+        public WorkstationState State = WorkstationState.Active;
+        public bool Slept;
+        public WorkstationState Current => State;
+        public bool HasSleptSince(DateTimeOffset since) => Slept;
+    }
+
     private sealed class FakeBrowser : IBrowserLauncher
     {
         public int Opens;
@@ -289,5 +297,70 @@ public class VerificationFlowTests
         var flow = new VerificationFlow(new FakeApi(), new FakeCamera(), new FakeNotifications());
         await Assert.ThrowsAsync<InvalidOperationException>(() => flow.RunLivenessCheckAsync(
             CheckType.Liveness, Window, CancellationToken.None, poll: (_, _) => Task.CompletedTask));
+    }
+
+    // ---- the workstation state is reported when a check ends without a scan ----
+
+    [Fact]
+    public async Task TimeoutOnALockedScreenIsReportedAsLocked()
+    {
+        var api = new FakeApi { PendingPolls = int.MaxValue };
+        var browser = new FakeBrowser();
+        var monitor = new FakeWorkstation { State = WorkstationState.Locked };
+        var flow = new VerificationFlow(api, new FakeCamera(), new FakeNotifications(), browser, monitor);
+
+        // Zero window => the poll loop never runs, so it reports not-completed.
+        var result = await flow.RunLivenessCheckAsync(
+            CheckType.Periodic, TimeSpan.Zero, CancellationToken.None, poll: (_, _) => Task.CompletedTask);
+
+        Assert.Equal(FlowOutcome.NotAccepted, result.Outcome);
+        Assert.Equal(new[] { "locked" }, api.Cancels);
+    }
+
+    [Fact]
+    public async Task SleepDuringTheCheckIsReportedAsAsleep()
+    {
+        var api = new FakeApi { PendingPolls = int.MaxValue };
+        var browser = new FakeBrowser();
+        var monitor = new FakeWorkstation { Slept = true }; // suspended during the window, now awake again
+        var flow = new VerificationFlow(api, new FakeCamera(), new FakeNotifications(), browser, monitor);
+
+        var result = await flow.RunLivenessCheckAsync(
+            CheckType.Periodic, TimeSpan.Zero, CancellationToken.None, poll: (_, _) => Task.CompletedTask);
+
+        Assert.Equal(new[] { "asleep" }, api.Cancels);
+    }
+
+    [Fact]
+    public async Task ShutdownDuringTheCheckIsReportedAsShutdown()
+    {
+        var api = new FakeApi { PendingPolls = int.MaxValue };
+        var browser = new FakeBrowser();
+        var monitor = new FakeWorkstation { State = WorkstationState.ShuttingDown };
+        var flow = new VerificationFlow(api, new FakeCamera(), new FakeNotifications(), browser, monitor);
+
+        // The window closes (as it would when the session ends); shutdown outranks "closed".
+        var result = await flow.RunLivenessCheckAsync(
+            CheckType.Periodic, Window, CancellationToken.None,
+            poll: (_, _) => { browser.Last!.CloseByEmployee(); return Task.CompletedTask; });
+
+        Assert.Equal(FlowOutcome.WindowClosed, result.Outcome);
+        Assert.Equal(new[] { "shutdown" }, api.Cancels);
+    }
+
+    [Fact]
+    public async Task ClosingTheWindowWhileActiveStaysClosed()
+    {
+        var api = new FakeApi { PendingPolls = int.MaxValue };
+        var browser = new FakeBrowser();
+        var monitor = new FakeWorkstation { State = WorkstationState.Active };
+        var flow = new VerificationFlow(api, new FakeCamera(), new FakeNotifications(), browser, monitor);
+
+        var result = await flow.RunLivenessCheckAsync(
+            CheckType.Periodic, Window, CancellationToken.None,
+            poll: (_, _) => { browser.Last!.CloseByEmployee(); return Task.CompletedTask; });
+
+        Assert.Equal(FlowOutcome.WindowClosed, result.Outcome);
+        Assert.Equal(new[] { "closed" }, api.Cancels); // the monitor does not override a real dismissal
     }
 }
