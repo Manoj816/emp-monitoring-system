@@ -23,6 +23,26 @@ body {
 .check-page .notice { margin: 0; color: #8a5a00; text-align: center; }
 .check-page .message { font-size: 20px; text-align: center; margin: 0; }
 .check-page .ended { margin: auto 0; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+
+/* Result panel. Only a confirmed match is green; anything else is deliberately
+   neutral or amber so a high live-person score is never read as "passed". */
+.outcome {
+  max-width: 620px; text-align: center; padding: 18px 22px; border-radius: 12px;
+  border: 1px solid #e3e8ef; background: #f8fafc;
+}
+.outcome h2 { margin: 0 0 8px; font-size: 22px; }
+.outcome .outcome-detail { margin: 0; font-size: 16px; line-height: 1.55; color: #33414f; }
+.outcome .outcome-note {
+  margin: 12px 0 0; padding-top: 12px; border-top: 1px solid #e3e8ef;
+  font-size: 13.5px; line-height: 1.5; color: #5b6770;
+}
+.outcome.ok { border-color: #a7e3c4; background: #f0fbf5; }
+.outcome.ok h2 { color: #0b7a58; }
+.outcome.review { border-color: #f3d3a0; background: #fffaf2; }
+.outcome.review h2 { color: #96601a; }
+.outcome.bad { border-color: #f1c4bf; background: #fff6f5; }
+.outcome.bad h2 { color: #a3302a; }
+.check-page .closing, .closing { margin: 0; font-size: 13.5px; color: #6b7785; text-align: center; }
 .close-button {
   font: inherit; font-size: 16px; padding: 10px 28px; border-radius: 8px; cursor: pointer;
   background: #2e5aac; color: #fff; border: 1px solid #2e5aac;

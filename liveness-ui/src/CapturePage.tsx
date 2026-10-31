@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { describeOutcome, type Outcome } from "./outcome";
 
 /**
  * Interactive capture page, opened by the desktop agent in the default browser:
@@ -22,6 +23,7 @@ export default function CapturePage() {
   const streamRef = useRef<MediaStream | null>(null);
   const [state, setState] = useState<State>("starting");
   const [message, setMessage] = useState("");
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [remaining, setRemaining] = useState(RESPONSE_SECONDS);
 
   const ready = Boolean(checkId && token);
@@ -100,9 +102,10 @@ export default function CapturePage() {
       );
       if (!res.ok) throw new Error(`server returned ${res.status}`);
       const body = await res.json();
-      const sim =
-        body.similarityScore != null ? ` (similarity ${Number(body.similarityScore).toFixed(1)})` : "";
-      setMessage(`Result: ${body.status}${sim}. You can return to the EmpVerify app.`);
+      // The raw status and the face-match score stay off this screen: the status
+      // reads like a pass when it is not, and the score would tell anyone trying
+      // a photo of someone else how close they got.
+      setOutcome(describeOutcome(String(body.status)));
       setState("done");
       stopCamera();
     } catch (e) {
@@ -125,10 +128,19 @@ export default function CapturePage() {
       }}
     >
       <h1>Identity check</h1>
-      {state === "done" || state === "error" || state === "expired" ? (
+      {state === "done" && outcome ? (
+        <>
+          <div className={`outcome ${outcome.tone}`}>
+            <h2>{outcome.headline}</h2>
+            <p className="outcome-detail">{outcome.detail}</p>
+          </div>
+          <p className="closing">You can return to the EmpVerify app.</p>
+          {/* The agent honours window.close() once the check has ended. */}
+          <button className="close-button" onClick={() => window.close()}>Close</button>
+        </>
+      ) : state === "done" || state === "error" || state === "expired" ? (
         <>
           <p style={{ fontSize: 18 }}>{message}</p>
-          {/* The agent honours window.close() once the check has ended. */}
           <button className="close-button" onClick={() => window.close()}>Close</button>
         </>
       ) : (

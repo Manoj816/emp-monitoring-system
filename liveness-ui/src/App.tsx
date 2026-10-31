@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Amplify } from "aws-amplify";
 import { FaceLivenessDetector } from "@aws-amplify/ui-react-liveness";
 import "@aws-amplify/ui-react/styles.css";
+import { describeOutcome, livenessNote, type Outcome } from "./outcome";
 
 /**
  * Face Liveness page, opened by the desktop agent (in its own window):
@@ -37,6 +38,9 @@ export default function App() {
   const [state, setState] = useState<State>("scan");
   const [message, setMessage] = useState("");
   const [notice, setNotice] = useState("");
+  // The server's verdict, put into words the employee can act on.
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [liveness, setLiveness] = useState<string | null>(null);
 
   const ready = Boolean(checkId && token && session);
 
@@ -92,11 +96,10 @@ export default function App() {
       );
       if (!res.ok) throw new Error(`server returned ${res.status}`);
       const body = await res.json();
-      const conf =
-        body.livenessConfidence != null
-          ? ` (liveness ${Number(body.livenessConfidence).toFixed(1)})`
-          : "";
-      setMessage(`Result: ${body.status}${conf}. This window closes by itself.`);
+      // Never show the raw status: "CHECK" beside a 99 live-person score reads
+      // like a pass when it means the face did not match the photo on file.
+      setOutcome(describeOutcome(String(body.status)));
+      setLiveness(livenessNote(body.livenessConfidence));
       setState("done");
     } catch (e) {
       // The scan ran but the server could not record it: tell it so the check is
@@ -115,6 +118,18 @@ export default function App() {
     body = <p className="message">Liveness is not configured (VITE_COGNITO_IDENTITY_POOL_ID is missing).</p>;
   } else if (!ready) {
     body = <p className="message">This page must be opened from the EmpVerify desktop app.</p>;
+  } else if (state === "done" && outcome) {
+    body = (
+      <div className="ended">
+        <div className={`outcome ${outcome.tone}`}>
+          <h2>{outcome.headline}</h2>
+          <p className="outcome-detail">{outcome.detail}</p>
+          {liveness && <p className="outcome-note">{liveness}</p>}
+        </div>
+        <p className="closing">This window closes by itself.</p>
+        <button className="close-button" onClick={closeWindow}>Close</button>
+      </div>
+    );
   } else if (state === "done" || state === "error") {
     body = (
       <div className="ended">
@@ -123,7 +138,7 @@ export default function App() {
       </div>
     );
   } else if (state === "working") {
-    body = <p className="message">Verifying…</p>;
+    body = <p className="message">Checking your scan against the photo on file…</p>;
   } else {
     body = (
       <>
