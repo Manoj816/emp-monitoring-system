@@ -104,7 +104,14 @@ export default function AssignEmployeeDialog(props: {
         </div>
 
         <ul className="pick-list" role="listbox" aria-label="Employees">
-          {visible.length === 0 && <li className="pick-empty">No employees match.</li>}
+          {visible.length === 0 && (
+            <li className="pick-empty">
+              {reassign && device.employeeName && q && device.employeeName.toLowerCase().includes(q)
+                ? `${device.employeeName} is already assigned to this system. To make them scan again, use ` +
+                  `"Request first scan again" in their details on the Employees page.`
+                : "No employees match."}
+            </li>
+          )}
           {visible.map((e) => (
             <li key={e.id}>
               <button
