@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, DEPARTMENTS, type DeviceSummary, type Employee } from "../api";
+import ConfirmPhotoDialog from "./ConfirmPhotoDialog";
 
 /**
  * Employee details popup: the record itself (editable in place via the pencil
@@ -24,6 +25,8 @@ export default function EmployeeDetailsDialog(props: {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  // Picked but not uploaded: the confirmation step shows it next to the current one.
+  const [pendingPhoto, setPendingPhoto] = useState<Blob | null>(null);
   const [form, setForm] = useState({ employeeCode: "", fullName: "", email: "", department: "" });
   const [version, setVersion] = useState(0); // bump to reload the pictures
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -82,9 +85,12 @@ export default function EmployeeDetailsDialog(props: {
     }
   }
 
-  function replacePhoto(image: Blob) {
+  function confirmReplacePhoto() {
+    const image = pendingPhoto;
+    if (!image) return;
     void run("Replace photo", async () => {
       await api.uploadReferenceImage(employee.id, image);
+      setPendingPhoto(null);
       return "ID/photo replaced. The previous live scan is retired; each system of this employee runs the enrollment scan as its next check (the day's random time, or Verify now).";
     });
   }
@@ -97,7 +103,8 @@ export default function EmployeeDetailsDialog(props: {
       setError("The ID/photo must be a JPEG or PNG image.");
       return;
     }
-    replacePhoto(file);
+    setError(null);
+    setPendingPhoto(file); // nothing is uploaded until the confirmation step
   }
 
   // ---- editing the record in place --------------------------------------------
@@ -321,6 +328,16 @@ export default function EmployeeDetailsDialog(props: {
 
         <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={onFileChosen} />
       </div>
+
+      {pendingPhoto && (
+        <ConfirmPhotoDialog
+          employee={employee}
+          photo={pendingPhoto}
+          busy={busy}
+          onCancel={() => setPendingPhoto(null)}
+          onConfirm={confirmReplacePhoto}
+        />
+      )}
     </div>
   );
 }

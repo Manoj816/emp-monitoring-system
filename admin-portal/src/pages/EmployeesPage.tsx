@@ -3,6 +3,7 @@ import { api, type DeviceSummary, type Employee } from "../api";
 import ActionMenu from "../components/ActionMenu";
 import AddEmployeeDialog from "../components/AddEmployeeDialog";
 import CardTitle from "../components/CardTitle";
+import ConfirmPhotoDialog from "../components/ConfirmPhotoDialog";
 import DataTable from "../components/DataTable";
 import EmployeeDetailsDialog from "../components/EmployeeDetailsDialog";
 import { useStatsBar } from "../components/StatsBar";
@@ -15,6 +16,8 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [details, setDetails] = useState<Employee | null>(null);
+  // Picked but not uploaded: the confirmation step shows it next to the current one.
+  const [pendingPhoto, setPendingPhoto] = useState<{ employee: Employee; photo: Blob } | null>(null);
   const fileTargetRef = useRef<Employee | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -104,9 +107,13 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
     const file = e.target.files?.[0];
     const target = fileTargetRef.current;
     e.target.value = "";
-    if (file && target) {
-      void run(() => api.uploadReferenceImage(target.id, file).then(() => undefined));
+    if (!file || !target) return;
+    if (!/^image\/(jpeg|png)$/.test(file.type)) {
+      setError("The ID/photo must be a JPEG or PNG image.");
+      return;
     }
+    setError(null);
+    setPendingPhoto({ employee: target, photo: file }); // confirmed before it is uploaded
   }
 
   return (
@@ -222,6 +229,22 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
           onCreated={() => {
             setAdding(false);
             void refresh();
+          }}
+        />
+      )}
+
+      {pendingPhoto && (
+        <ConfirmPhotoDialog
+          employee={pendingPhoto.employee}
+          photo={pendingPhoto.photo}
+          busy={busy}
+          onCancel={() => setPendingPhoto(null)}
+          onConfirm={() => {
+            const { employee, photo } = pendingPhoto;
+            void run(async () => {
+              await api.uploadReferenceImage(employee.id, photo);
+              setPendingPhoto(null);
+            });
           }}
         />
       )}
