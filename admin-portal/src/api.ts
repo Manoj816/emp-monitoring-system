@@ -99,6 +99,17 @@ export const api = {
     return request<Employee>("/api/v1/admin/employees", { method: "POST", body: form });
   },
 
+  /** Corrects name/code/email/department. The photo and status have their own actions; nothing re-enrolls. */
+  updateEmployee: (
+    employeeId: string,
+    input: { employeeCode: string; fullName: string; email: string; department: string },
+  ) =>
+    request<Employee>(`/api/v1/admin/employees/${employeeId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }),
+
   uploadReferenceImage: (employeeId: string, image: Blob) => {
     const form = new FormData();
     form.append("image", image, "reference.jpg");

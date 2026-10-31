@@ -3,13 +3,16 @@ import { api, type DeviceSummary, type Employee } from "../api";
 
 /**
  * Assign / reassign popup for the Devices tab: a searchable, department-
- * filterable list of active employees, built for fleets where a dropdown would
- * be unusable. Assigning resets the employee's first scan — the next check on
- * this system is the enrollment scan, judged against the uploaded ID/photo.
+ * filterable list of employees, built for fleets where a dropdown would be
+ * unusable. Every employee that matches the search is SHOWN — one who cannot
+ * be chosen (already assigned to this system, offboarded, suspended) appears
+ * disabled with the reason, so a search never looks broken. Assigning resets
+ * the employee's first scan: the next check on this system is the enrollment
+ * scan, judged against the uploaded ID/photo.
  */
 export default function AssignEmployeeDialog(props: {
   device: DeviceSummary;
-  /** Active employees (the parent already filtered by status). */
+  /** All employees; the dialog itself decides who is selectable. */
   employees: Employee[];
   onClose: () => void;
   /** Assignment succeeded: the parent refreshes and closes the dialog. */
@@ -23,35 +26,42 @@ export default function AssignEmployeeDialog(props: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // The current employee is excluded: the server refuses a same-employee reassign.
-  const candidates = useMemo(
-    () => props.employees.filter((e) => e.id !== device.employeeId),
-    [props.employees, device.employeeId],
-  );
+  /** Why an employee cannot be chosen; null when they can. */
+  function blocked(e: Employee): string | null {
+    if (e.id === device.employeeId) return "assigned to this system";
+    if (e.status !== "ACTIVE") return e.status.toLowerCase();
+    return null;
+  }
 
   // Filter options come from the employees that exist, so the list never offers
   // a department with nobody in it (legacy employees may have none at all).
   const departments = useMemo(() => {
     const names = new Set<string>();
     let hasNone = false;
-    for (const e of candidates) {
+    for (const e of props.employees) {
       if (e.department) names.add(e.department);
       else hasNone = true;
     }
     return { sorted: [...names].sort((a, b) => a.localeCompare(b)), hasNone };
-  }, [candidates]);
+  }, [props.employees]);
 
   const q = search.trim().toLowerCase();
-  const visible = candidates.filter((e) => {
-    if (department === "(none)" && e.department) return false;
-    if (department && department !== "(none)" && e.department !== department) return false;
-    if (!q) return true;
-    return (
-      e.fullName.toLowerCase().includes(q) ||
-      e.employeeCode.toLowerCase().includes(q) ||
-      e.email.toLowerCase().includes(q)
-    );
-  });
+  const visible = props.employees
+    .filter((e) => {
+      if (department === "(none)" && e.department) return false;
+      if (department && department !== "(none)" && e.department !== department) return false;
+      if (!q) return true;
+      return (
+        e.fullName.toLowerCase().includes(q) ||
+        e.employeeCode.toLowerCase().includes(q) ||
+        e.email.toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      const ab = blocked(a) === null ? 0 : 1;
+      const bb = blocked(b) === null ? 0 : 1;
+      return ab !== bb ? ab - bb : a.fullName.localeCompare(b.fullName);
+    });
 
   async function assign() {
     if (!selected) return;
@@ -106,31 +116,39 @@ export default function AssignEmployeeDialog(props: {
         <ul className="pick-list" role="listbox" aria-label="Employees">
           {visible.length === 0 && (
             <li className="pick-empty">
-              {reassign && device.employeeName && q && device.employeeName.toLowerCase().includes(q)
-                ? `${device.employeeName} is already assigned to this system. To make them scan again, use ` +
-                  `"Request first scan again" in their details on the Employees page.`
-                : "No employees match."}
+              {props.employees.length === 0
+                ? "No employees yet — create one on the Employees page first."
+                : "No employees match this search or department."}
             </li>
           )}
-          {visible.map((e) => (
-            <li key={e.id}>
-              <button
-                type="button"
-                className={`pick-item ${selected?.id === e.id ? "selected" : ""}`}
-                role="option"
-                aria-selected={selected?.id === e.id}
-                disabled={busy}
-                onClick={() => setSelected(selected?.id === e.id ? null : e)}
-              >
-                <span className="avatar">{e.fullName.trim().charAt(0).toUpperCase() || "?"}</span>
-                <span className="pick-main">
-                  <span className="pick-name">{e.fullName}</span>
-                  <span className="pick-sub">{e.employeeCode} · {e.email}</span>
-                </span>
-                <span className="badge neutral">{e.department ?? "No department"}</span>
-              </button>
-            </li>
-          ))}
+          {visible.map((e) => {
+            const reason = blocked(e);
+            return (
+              <li key={e.id}>
+                <button
+                  type="button"
+                  className={`pick-item ${selected?.id === e.id ? "selected" : ""}`}
+                  role="option"
+                  aria-selected={selected?.id === e.id}
+                  disabled={busy || reason !== null}
+                  title={reason === "assigned to this system"
+                    ? "Already assigned here. To make them scan again, use \"Request first scan again\" on the Employees page."
+                    : undefined}
+                  onClick={() => setSelected(selected?.id === e.id ? null : e)}
+                >
+                  <span className="avatar">{e.fullName.trim().charAt(0).toUpperCase() || "?"}</span>
+                  <span className="pick-main">
+                    <span className="pick-name">{e.fullName}</span>
+                    <span className="pick-sub">{e.employeeCode} · {e.email}</span>
+                  </span>
+                  {reason !== null && (
+                    <span className={`badge ${reason === "assigned to this system" ? "check" : "error"}`}>{reason}</span>
+                  )}
+                  <span className="badge neutral">{e.department ?? "No department"}</span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
 
         {error && <p className="error-text">{error}</p>}

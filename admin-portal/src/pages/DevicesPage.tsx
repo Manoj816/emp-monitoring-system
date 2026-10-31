@@ -23,7 +23,10 @@ export default function DevicesPage(props: { title: string; hint: string }) {
     try {
       const [d, e] = await Promise.all([api.listDevices(), api.listEmployees()]);
       setDevices(d);
-      setEmployees(e.filter((x) => x.status === "ACTIVE"));
+      // All employees: the assign popup shows non-selectable ones (offboarded,
+      // already assigned here) disabled with the reason, so a search never
+      // looks broken just because somebody is filtered out.
+      setEmployees(e);
       setError(null);
     } catch (e) {
       setError((e as Error).message);

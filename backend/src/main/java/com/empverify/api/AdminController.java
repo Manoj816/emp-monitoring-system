@@ -159,6 +159,43 @@ public class AdminController {
         return employees.findAll().stream().map(this::toResponse).toList();
     }
 
+    public record UpdateEmployeeRequest(String employeeCode, String fullName, String email, String department) {}
+
+    /**
+     * Corrects an employee's details — a name change, a department move, a typo in
+     * the email or code. The ID/photo and the status have their own actions; none
+     * of these fields affect verification, so nothing is re-enrolled.
+     */
+    @org.springframework.web.bind.annotation.PutMapping("/employees/{employeeId}")
+    public EmployeeResponse updateEmployee(
+            @PathVariable UUID employeeId, @RequestBody UpdateEmployeeRequest request) {
+        var employee = employees.findById(employeeId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "employee not found"));
+        String employeeCode = required(request.employeeCode(), "Employee code is required");
+        String fullName = required(request.fullName(), "Full name is required");
+        String email = required(request.email(), "Email is required");
+        String department = required(request.department(), "Department is required");
+        if (!EMAIL.matcher(email).matches()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Email address is not valid");
+        }
+        // Uniqueness, excluding the employee themselves (a pure case change is fine).
+        if (!employeeCode.equalsIgnoreCase(employee.getEmployeeCode())
+                && employees.existsByEmployeeCodeIgnoreCase(employeeCode)) {
+            throw new ApiException(HttpStatus.CONFLICT, "An employee with code " + employeeCode + " already exists");
+        }
+        if (!email.equalsIgnoreCase(employee.getEmail())
+                && employees.existsByEmailIgnoreCase(email)) {
+            throw new ApiException(HttpStatus.CONFLICT, "An employee with email " + email + " already exists");
+        }
+        employee.setEmployeeCode(employeeCode);
+        employee.setFullName(fullName);
+        employee.setEmail(email);
+        employee.setDepartment(department);
+        employees.save(employee);
+        audit.record("admin", "EMPLOYEE_UPDATED", "employee", employeeId.toString(), null);
+        return toResponse(employee);
+    }
+
     /** One-time token the employee enters in the agent's registration screen. */
     @PostMapping("/employees/{employeeId}/enrollment-tokens")
     public EnrollmentTokenResponse issueEnrollmentToken(@PathVariable UUID employeeId) {

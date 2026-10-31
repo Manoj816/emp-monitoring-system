@@ -145,6 +145,85 @@ class AdminControllerTest {
         verify(storage, never()).store(anyString(), any());
     }
 
+    // ---- editing details -------------------------------------------------------
+
+    private static Employee existingEmployee() {
+        var e = new Employee();
+        e.setEmployeeCode("E-100");
+        e.setFullName("Pat Example");
+        e.setEmail("pat@example.com");
+        e.setDepartment("Engineering");
+        return e;
+    }
+
+    @Test
+    void updateChangesDetailsAndAudits() {
+        var employee = existingEmployee();
+        when(employees.findById(employee.getId())).thenReturn(Optional.of(employee));
+        when(referenceImages.findByEmployeeIdAndStatusAndSource(any(), any(), any())).thenReturn(Optional.empty());
+
+        var response = controller.updateEmployee(employee.getId(),
+                new AdminController.UpdateEmployeeRequest(" E-200 ", "Pat Married-Name", "pat.new@example.com", "Sales"));
+
+        assertEquals("E-200", employee.getEmployeeCode());
+        assertEquals("Pat Married-Name", employee.getFullName());
+        assertEquals("pat.new@example.com", employee.getEmail());
+        assertEquals("Sales", employee.getDepartment());
+        assertEquals("Sales", response.department());
+        verify(employees).save(employee);
+        verify(audit).record(eq("admin"), eq("EMPLOYEE_UPDATED"), eq("employee"), eq(employee.getId().toString()), any());
+    }
+
+    @Test
+    void updateKeepingOwnCodeAndEmailIsNotAConflict() {
+        var employee = existingEmployee();
+        when(employees.findById(employee.getId())).thenReturn(Optional.of(employee));
+        when(referenceImages.findByEmployeeIdAndStatusAndSource(any(), any(), any())).thenReturn(Optional.empty());
+
+        // Same code and email (so the uniqueness check must not fire), new name only.
+        controller.updateEmployee(employee.getId(),
+                new AdminController.UpdateEmployeeRequest("e-100", "Pat Renamed", "PAT@example.com", "Engineering"));
+
+        assertEquals("Pat Renamed", employee.getFullName());
+        verify(employees, never()).existsByEmployeeCodeIgnoreCase(any());
+        verify(employees, never()).existsByEmailIgnoreCase(any());
+    }
+
+    @Test
+    void updateRejectsAnotherEmployeesCodeOrEmail() {
+        var employee = existingEmployee();
+        when(employees.findById(employee.getId())).thenReturn(Optional.of(employee));
+        when(employees.existsByEmailIgnoreCase("taken@example.com")).thenReturn(true);
+
+        var e = assertThrows(ApiException.class, () -> controller.updateEmployee(employee.getId(),
+                new AdminController.UpdateEmployeeRequest("E-100", "Pat", "taken@example.com", "Sales")));
+
+        assertEquals(HttpStatus.CONFLICT, e.getStatus());
+        verify(employees, never()).save(any());
+    }
+
+    @Test
+    void updateRequiresAllDetailsAndAValidEmail() {
+        var employee = existingEmployee();
+        when(employees.findById(employee.getId())).thenReturn(Optional.of(employee));
+
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class, () -> controller.updateEmployee(
+                employee.getId(), new AdminController.UpdateEmployeeRequest("E-100", "Pat", "not-an-email", "Sales"))).getStatus());
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class, () -> controller.updateEmployee(
+                employee.getId(), new AdminController.UpdateEmployeeRequest("E-100", "Pat", "pat@example.com", " "))).getStatus());
+        verify(employees, never()).save(any());
+    }
+
+    @Test
+    void updateUnknownEmployeeIs404() {
+        var id = UUID.randomUUID();
+        when(employees.findById(id)).thenReturn(Optional.empty());
+
+        var e = assertThrows(ApiException.class, () -> controller.updateEmployee(id,
+                new AdminController.UpdateEmployeeRequest("E-1", "Pat", "pat@example.com", "Sales")));
+        assertEquals(HttpStatus.NOT_FOUND, e.getStatus());
+    }
+
     @Test
     void requestingReEnrollmentRetiresTheLiveReferenceAndResetsTheSystems() {
         var employeeId = UUID.randomUUID();

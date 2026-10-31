@@ -1,20 +1,29 @@
+/* Graphik is Gainwell's licensed brand font; Inter is the closest free match. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+/* Palette and type taken from gainwelltechnologies.com (brand reference chosen
+   by the user): magenta #cb1ac6 primary, deep indigo #1c145e, purple #55206e,
+   blue #1931e3, mint #00eeae accent, pill buttons, magenta-to-blue gradient. */
 :root {
-  --bg: #f3f5f9;
+  --bg: #ebedf5;
   --panel: #ffffff;
-  --border: #e3e8ef;
-  --text: #1c2733;
-  --muted: #64748b;
-  --accent: #2e5aac;
-  --accent-strong: #244a90;
-  --accent-soft: #e8eefb;
-  --ok: #1a7f37;
+  --border: #e3e6ef;
+  --text: #2b3a44;
+  --muted: #5b6770;
+  --accent: #cb1ac6;
+  --accent-strong: #a515a1;
+  --accent-soft: #fbe9fa;
+  --accent-2: #1931e3;
+  --mint: #00eeae;
+  --brand-gradient: linear-gradient(89deg, #cb1ac6 9%, #1931e3 94%);
+  --ok: #0b7a58;
   --warn: #b45309;
   --bad: #b42318;
-  --nav-bg: #15213a;
-  --nav-bg-2: #1b2a4a;
-  --nav-text: #c7d2e5;
+  --nav-bg: #1c145e;
+  --nav-bg-2: #2a1e7a;
+  --nav-text: #c9cee4;
   --nav-active: #ffffff;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 20px -8px rgba(16, 24, 40, 0.18);
+  --shadow: 0 1px 2px rgba(28, 20, 94, 0.05), 0 6px 20px -8px rgba(28, 20, 94, 0.16);
   --radius: 12px;
   --sidenav-width: 256px;
 }
@@ -26,9 +35,9 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.5 "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font: 14px/1.6 Graphik, Inter, "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
-h1, h2, h3 { letter-spacing: -0.01em; }
+h1, h2, h3 { letter-spacing: -0.02em; font-weight: 600; }
 
 /* ------------------------------------------------------------ shell */
 :root { --appbar-height: 62px; }
@@ -40,9 +49,9 @@ h1, h2, h3 { letter-spacing: -0.01em; }
   height: var(--appbar-height);
   display: flex; align-items: center; gap: 14px;
   padding: 0 22px;
-  background: linear-gradient(90deg, var(--nav-bg-2), #22365f 60%, #2a4578);
+  background: linear-gradient(90deg, var(--nav-bg), #38176a 55%, #55206e);
   color: #fff;
-  box-shadow: 0 2px 10px rgba(16, 24, 40, 0.25);
+  box-shadow: 0 2px 10px rgba(28, 20, 94, 0.35);
 }
 .appbar .spacer { flex: 1; }
 .appbar-divider { width: 1px; height: 28px; background: rgba(255, 255, 255, 0.2); margin: 0 4px; }
@@ -55,8 +64,8 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark {
   width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
-  background: linear-gradient(135deg, #5b8af0, #2e5aac); color: #fff; font-weight: 700; letter-spacing: 0.02em;
-  box-shadow: 0 6px 16px -6px rgba(46, 90, 172, 0.9);
+  background: var(--brand-gradient); color: #fff; font-weight: 700; letter-spacing: 0.02em;
+  box-shadow: 0 6px 16px -6px rgba(203, 26, 198, 0.8);
 }
 .brand-name { display: block; color: #fff; font-weight: 700; font-size: 16px; line-height: 1.2; }
 .brand-sub { display: block; font-size: 12px; color: var(--nav-text); opacity: 0.85; }
@@ -68,7 +77,7 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .user-chip { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .avatar {
   width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 32px;
-  background: #5b8af0; color: #fff; font-weight: 700; font-size: 14px;
+  background: var(--accent-2); color: #fff; font-weight: 700; font-size: 14px;
 }
 .user-email { font-size: 13px; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 
@@ -94,9 +103,9 @@ h1, h2, h3 { letter-spacing: -0.01em; }
   font: inherit; cursor: pointer; transition: background 0.15s, color 0.15s;
 }
 .sidenav-item:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
-.sidenav-item.active { background: rgba(255, 255, 255, 0.14); color: var(--nav-active); box-shadow: inset 3px 0 0 #6ea0ff; }
+.sidenav-item.active { background: rgba(255, 255, 255, 0.12); color: var(--nav-active); box-shadow: inset 3px 0 0 var(--mint); }
 .sidenav-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); flex: 0 0 30px; }
-.sidenav-item.active .sidenav-icon { background: #3b6fd1; color: #fff; }
+.sidenav-item.active .sidenav-icon { background: var(--brand-gradient); color: #fff; }
 .sidenav-label { display: block; font-weight: 600; font-size: 14px; }
 .sidenav-hint { display: block; font-size: 11.5px; opacity: 0.7; }
 .sidenav-footer { margin-top: auto; padding: 14px 12px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); font-size: 11.5px; }
@@ -114,7 +123,7 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .info-tip::after {
   content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 8px); z-index: 40;
   width: max-content; max-width: 520px; padding: 10px 14px; border-radius: 8px;
-  background: #1c2733; color: #fff; font: 13px/1.45 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  background: var(--nav-bg); color: #fff; font: 13px/1.45 Graphik, Inter, "Segoe UI", system-ui, sans-serif;
   font-style: normal; font-weight: 400; text-align: left; white-space: normal;
   box-shadow: 0 10px 24px -10px rgba(16, 24, 40, 0.5); opacity: 0; pointer-events: none;
   transform: translateY(-4px); transition: opacity 0.12s, transform 0.12s;
@@ -232,9 +241,9 @@ button.action.toolbar-action { padding: 8px 16px; font-size: 14px; font-weight: 
 .stat.warn .stat-value { color: var(--warn); }
 .stat.bad .stat-value { color: var(--bad); }
 
-.chips { display: inline-flex; gap: 4px; padding: 4px; background: #eef2f8; border-radius: 10px; }
+.chips { display: inline-flex; gap: 4px; padding: 4px; background: #ebedf5; border-radius: 999px; }
 .chip {
-  border: none; background: transparent; color: var(--muted); padding: 6px 14px; border-radius: 8px;
+  border: none; background: transparent; color: var(--muted); padding: 6px 14px; border-radius: 999px;
   cursor: pointer; font-size: 13px; font-weight: 600; transition: background 0.15s, color 0.15s;
 }
 .chip:hover { color: var(--text); }
@@ -245,11 +254,11 @@ table { width: 100%; border-collapse: separate; border-spacing: 0; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
 th {
   color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em;
-  background: #f8fafc;
+  background: #f5f6fb;
 }
 thead tr:first-child th:first-child { border-top-left-radius: 8px; }
 thead tr:first-child th:last-child { border-top-right-radius: 8px; }
-tbody tr:hover td { background: #f9fbff; }
+tbody tr:hover td { background: #faf7fc; }
 
 /* Uniform rows: one line per cell, long text cut with an ellipsis (full text in the tooltip).
    A table wider than the card scrolls sideways inside it instead of being clipped. */
@@ -260,7 +269,7 @@ tbody tr:hover td { background: #f9fbff; }
 }
 .data-table td.no-truncate { max-width: none; overflow: visible; text-overflow: clip; }
 .truncate { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.data-table .filter-row th { padding: 6px 8px 10px; background: #f8fafc; }
+.data-table .filter-row th { padding: 6px 8px 10px; background: #f5f6fb; }
 .data-table .filter-row input, .data-table .filter-row select {
   width: 100%; min-width: 70px; font-size: 12px; padding: 5px 8px; border-radius: 7px; background: #fff;
 }
@@ -276,15 +285,16 @@ tbody tr:hover td { background: #f9fbff; }
 .badge {
   display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.5;
 }
-.badge.match { background: #e3f4e8; color: var(--ok); }
+.badge.match { background: #d8fbee; color: var(--ok); }
 .badge.check { background: #fdf0e3; color: var(--warn); }
 .badge.error { background: #fdebe9; color: var(--bad); }
-.badge.neutral { background: #eef2f8; color: var(--muted); }
+.badge.neutral { background: #ebedf5; color: var(--muted); }
 
 button { font: inherit; }
+/* Gainwell buttons are pill-shaped, weight 600. */
 button.action {
   border: 1px solid var(--border); background: var(--panel); color: var(--text);
-  padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px;
+  padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 500;
   transition: border-color 0.15s, color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 button.action:hover { border-color: var(--accent); color: var(--accent); background: #fff; }
@@ -293,10 +303,10 @@ button.action.ghost { background: transparent; color: var(--nav-text); border-co
 button.action.ghost:hover { color: #fff; border-color: rgba(255, 255, 255, 0.5); background: rgba(255, 255, 255, 0.06); }
 button.primary, button.action.primary {
   background: var(--accent); border: 1px solid var(--accent); color: #fff;
-  padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600;
-  box-shadow: 0 6px 14px -8px rgba(46, 90, 172, 0.9);
+  padding: 8px 18px; border-radius: 999px; cursor: pointer; font-weight: 600;
+  box-shadow: 0 6px 14px -8px rgba(203, 26, 198, 0.9);
 }
-button.primary:hover, button.action.primary:hover { background: var(--accent-strong); color: #fff; }
+button.primary:hover, button.action.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
 button:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 /* Standard vertical-dots row menu trigger */
 button.kebab {
@@ -370,7 +380,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .photo-pick-body { display: flex; gap: 14px; align-items: flex-start; }
 .photo-pick .photo-preview { width: 160px; height: 160px; object-fit: cover; border-radius: 8px; background: #000; }
 .photo-placeholder {
-  width: 160px; height: 160px; border-radius: 8px; background: #eef2f8;
+  width: 160px; height: 160px; border-radius: 8px; background: #ebedf5;
   color: var(--muted); font-size: 12px; display: flex; align-items: center; justify-content: center; text-align: center;
 }
 .photo-actions { display: flex; flex-direction: column; gap: 8px; }
@@ -410,8 +420,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
   flex: 1 1 52%; display: flex; flex-direction: column; justify-content: space-between;
   padding: 40px 48px; color: #fff;
   background:
-    radial-gradient(900px 500px at 80% -10%, rgba(91, 138, 240, 0.35), transparent 60%),
-    linear-gradient(160deg, var(--nav-bg-2), var(--nav-bg));
+    radial-gradient(900px 500px at 80% -10%, rgba(203, 26, 198, 0.4), transparent 60%),
+    radial-gradient(700px 420px at -10% 110%, rgba(25, 49, 227, 0.35), transparent 60%),
+    linear-gradient(160deg, #55206e, var(--nav-bg));
 }
 .login-hero .brand-name { font-size: 18px; }
 .login-hero h2 { font-size: 32px; line-height: 1.15; margin: 0 0 12px; max-width: 520px; }
@@ -420,7 +431,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .login-hero li { display: flex; gap: 10px; align-items: flex-start; color: #e6ecf7; font-size: 14px; }
 .login-hero li::before {
   content: "✓"; flex: 0 0 22px; height: 22px; display: grid; place-items: center;
-  background: rgba(91, 138, 240, 0.35); border-radius: 6px; font-size: 12px; font-weight: 700;
+  background: rgba(0, 238, 174, 0.28); color: var(--mint); border-radius: 6px; font-size: 12px; font-weight: 700;
 }
 .login-hero .fine { color: var(--nav-text); opacity: 0.7; font-size: 12px; margin: 0; }
 .login-side { flex: 1 1 48%; display: grid; place-items: center; padding: 32px 24px; }
@@ -462,11 +473,13 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
   padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
   background: #fff; cursor: pointer; font: inherit;
 }
-.pick-item:hover { border-color: #5b8af0; }
+.pick-item:hover:not(:disabled) { border-color: var(--accent); }
 .pick-item.selected {
-  border-color: #2f6fed; background: #f3f7ff;
-  box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.18);
+  border-color: var(--accent); background: #fdf4fd;
+  box-shadow: 0 0 0 2px rgba(203, 26, 198, 0.16);
 }
+/* Not selectable (offboarded, already assigned here): shown with the reason, never hidden. */
+.pick-item:disabled { opacity: 0.6; cursor: default; }
 .pick-main { flex: 1; display: grid; gap: 1px; min-width: 0; }
 .pick-name { font-weight: 600; }
 .pick-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

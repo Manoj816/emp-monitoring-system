@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
 import ActionMenu from "../components/ActionMenu";
 import AddEmployeeDialog from "../components/AddEmployeeDialog";
-import CameraCapture from "../components/CameraCapture";
 import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
+import EditEmployeeDialog from "../components/EditEmployeeDialog";
 import EmployeeDetailsDialog from "../components/EmployeeDetailsDialog";
 import { useStatsBar } from "../components/StatsBar";
 
@@ -13,8 +13,8 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [cameraFor, setCameraFor] = useState<Employee | null>(null);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Employee | null>(null);
   const [details, setDetails] = useState<Employee | null>(null);
   const fileTargetRef = useRef<Employee | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -184,8 +184,8 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
                 label={`Actions for ${emp.fullName}`}
                 items={[
                   { label: "Details", onClick: () => setDetails(emp), title: "Record, pictures and assigned systems" },
+                  { label: "Edit details", onClick: () => setEditing(emp), title: "Correct name, code, email or department" },
                   { label: "Replace ID / photo", onClick: () => pickFile(emp) },
-                  { label: "Replace with webcam", onClick: () => setCameraFor(emp) },
                   {
                     label: "Request first scan again", onClick: () => requestFirstScan(emp),
                     disabled: emp.status !== "ACTIVE", title: "Keep the photo; the employee enrolls again at the next check",
@@ -221,13 +221,13 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
         />
       )}
 
-      {cameraFor && (
-        <CameraCapture
-          onCancel={() => setCameraFor(null)}
-          onCapture={(blob) => {
-            const target = cameraFor;
-            setCameraFor(null);
-            void run(() => api.uploadReferenceImage(target.id, blob).then(() => undefined));
+      {editing && (
+        <EditEmployeeDialog
+          employee={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            void refresh();
           }}
         />
       )}
