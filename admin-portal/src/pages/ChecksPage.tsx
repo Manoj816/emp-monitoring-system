@@ -3,7 +3,8 @@ import { api, type AdminCheckRow, type ReviewResolution } from "../api";
 import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
 import { useStatsBar } from "../components/StatsBar";
-import { inDateRange } from "../utils/dates";
+import { useTableFilters } from "../components/TableFilters";
+import { inDateRange, serializeRange } from "../utils/dates";
 
 const FILTERS = ["ALL", "CHECK", "MATCH", "MISSED", "ERRORS"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -103,13 +104,22 @@ export default function ChecksPage(props: { title: string; hint: string }) {
     }
   }
 
+  const tableFilters = useTableFilters();
+
   const stats = useStatsBar({
     dated: true,
     title: "Check stats",
-    // Each tile jumps to its tab on the page (the popup closes itself first).
+    // Each tile opens its tab AND narrows the table to the period the number was
+    // read for, so the rows on screen are exactly the ones the tile counted.
     compute: (range) => {
       const set = range ? rows.filter((r) => inDateRange(r.requestedAt, range)) : rows;
-      const goTo = (f: Filter) => ({ onClick: () => setFilter(f), title: `Open the ${FILTER_LABELS[f]} tab` });
+      const goTo = (f: Filter) => ({
+        onClick: () => {
+          setFilter(f);
+          if (range) tableFilters.apply({ when: serializeRange(range) });
+        },
+        title: `Open the ${FILTER_LABELS[f]} tab for this period`,
+      });
       return [
         { label: "Checks", value: set.length, ...goTo("ALL") },
         { label: "Needs review", value: set.filter((r) => (r.status === "CHECK" || r.status === "MULTIPLE_FACES") && !r.reviewResolution).length, tone: "warn" as const, ...goTo("CHECK") },
@@ -133,6 +143,7 @@ export default function ChecksPage(props: { title: string; hint: string }) {
       <div className="toolbar">
         <CardTitle title={props.title} hint={props.hint} />
         <span className="toolbar-right">
+          {tableFilters.control}
           {stats.controls}
           <span className="muted">Auto-refreshes every 20s</span>
         </span>
@@ -157,6 +168,7 @@ export default function ChecksPage(props: { title: string; hint: string }) {
       {error && <p className="error-text">{error}</p>}
 
       <DataTable
+        {...tableFilters.tableProps}
         rows={visible}
         rowKey={(row) => row.checkId}
         emptyText="No checks match this filter."

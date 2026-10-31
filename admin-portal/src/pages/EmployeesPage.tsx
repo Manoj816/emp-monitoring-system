@@ -6,6 +6,7 @@ import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
 import EmployeeDetailsDialog from "../components/EmployeeDetailsDialog";
 import { useStatsBar } from "../components/StatsBar";
+import { useTableFilters } from "../components/TableFilters";
 
 export default function EmployeesPage(props: { title: string; hint: string }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -67,6 +68,8 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
     });
   }
 
+  const tableFilters = useTableFilters();
+
   const stats = useStatsBar({
     title: "Employee stats",
     compute: () => [
@@ -111,6 +114,7 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
       <div className="toolbar">
         <CardTitle title={props.title} hint={props.hint} />
         <span className="toolbar-right">
+          {tableFilters.control}
           {stats.controls}
           <button className="primary" disabled={busy} onClick={() => setAdding(true)}>+ Add employee</button>
         </span>
@@ -120,6 +124,7 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
       {error && <p className="error-text">{error}</p>}
 
       <DataTable
+        {...tableFilters.tableProps}
         rows={employees}
         rowKey={(emp) => emp.id}
         emptyText="No employees yet — click “Add employee” to create the first one."

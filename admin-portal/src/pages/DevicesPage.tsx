@@ -5,6 +5,7 @@ import AssignEmployeeDialog from "../components/AssignEmployeeDialog";
 import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
 import { useStatsBar } from "../components/StatsBar";
+import { useTableFilters } from "../components/TableFilters";
 
 function statusBadge(status: string): string {
   if (status === "ACTIVE") return "badge match";
@@ -49,6 +50,8 @@ export default function DevicesPage(props: { title: string; hint: string }) {
     }
   }
 
+  const tableFilters = useTableFilters();
+
   const stats = useStatsBar({
     title: "System stats",
     compute: () => [
@@ -82,12 +85,13 @@ export default function DevicesPage(props: { title: string; hint: string }) {
     <>
       <div className="toolbar">
         <CardTitle title={props.title} hint={props.hint} />
-        <span className="toolbar-right">{stats.controls}</span>
+        <span className="toolbar-right">{tableFilters.control}{stats.controls}</span>
       </div>
       {stats.panel}
       {error && <p className="error-text">{error}</p>}
 
       <DataTable
+        {...tableFilters.tableProps}
         rows={devices}
         rowKey={(d) => d.id}
         emptyText="No systems registered yet."

@@ -33,9 +33,18 @@ export default function DataTable<T>(props: {
   rowKey: (row: T) => string;
   pageSize?: number;
   emptyText?: string;
+  /** Show the per-column filter row; off unless the page's Filters button is on. */
+  showFilters?: boolean;
+  /** Controlled filter values, so a page can set one itself (see useTableFilters). */
+  filters?: Record<string, string>;
+  onFiltersChange?: (filters: Record<string, string>) => void;
 }) {
   const { columns, rows, rowKey } = props;
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  // Uncontrolled by default; a page that needs to set a filter passes both props.
+  const [ownFilters, setOwnFilters] = useState<Record<string, string>>({});
+  const filters = props.filters ?? ownFilters;
+  const setFilters = props.onFiltersChange ?? setOwnFilters;
+  const showFilters = props.showFilters ?? false;
   const [pageSize, setPageSize] = useState(props.pageSize ?? 25);
   const [page, setPage] = useState(1);
 
@@ -90,6 +99,7 @@ export default function DataTable<T>(props: {
               <th key={c.key} style={c.headerStyle}>{c.header}</th>
             ))}
           </tr>
+          {showFilters && (
           <tr className="filter-row">
             {columns.map((c) => (
               <th key={c.key}>
@@ -122,6 +132,7 @@ export default function DataTable<T>(props: {
               </th>
             ))}
           </tr>
+          )}
         </thead>
         <tbody>
           {visible.map((row) => (
