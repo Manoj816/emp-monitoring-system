@@ -128,9 +128,13 @@ public partial class MainWindow : Window
         if (credentials is null)
         {
             // No stored identity and no deploy-time token: the installer did not
-            // configure this machine. Nothing the employee can type fixes that.
+            // configure this machine. Nothing the employee can type fixes that. The
+            // window stays closed, so the tray balloon is the only way this is seen.
             Log("This system is not set up for EmpVerify (no provisioning token found). Contact your administrator.");
             SetStatus("Not set up — contact your administrator.");
+            _trayIcon?.ShowBalloonTip(6000, "EmpVerify Agent",
+                "This system is not set up for EmpVerify. Contact your administrator.",
+                WinForms.ToolTipIcon.Warning);
             return;
         }
         await ConnectAsync(credentials);

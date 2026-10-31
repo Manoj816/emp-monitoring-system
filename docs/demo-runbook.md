@@ -25,7 +25,7 @@ deploys, not for the demo).
 ## 2. Remove the current agent (start from scratch)
 
 1. Right-click the EmpVerify tray icon → **Exit**.
-2. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.12.0.0`
+2. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.13.0.0`
    and double-click **`Uninstall-EmpVerify.cmd`** (accept the administrator prompt).
    This removes the app for all users, the run-at-sign-in entry, and keeps the
    provisioning token so the next install registers again without typing anything.
@@ -49,15 +49,17 @@ them stops the servers.
 
 ## 5. Install the agent (one double-click)
 
-1. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.12.0.0`.
+1. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.13.0.0`.
    It already contains `provisioning.json` (backend address + tenant token), so
    nothing has to be typed.
 2. Double-click **`Install-EmpVerify.cmd`** and accept the administrator prompt.
    A window shows the six steps (PC check, certificate, WebView2 runtime,
    provisioning, package install, launch) and stays open so you can read it.
-3. The agent appears in the tray and registers this PC as **Unassigned**.
+3. The agent starts in the background: no window opens, only a tray icon and a
+   short notification. It registers this PC as **Unassigned** on its own.
+   Double-click the tray icon to see its activity log.
 
-To install on another PC: copy the whole `setup-0.12.0.0` folder there (or the
+To install on another PC: copy the whole `setup-0.13.0.0` folder there (or the
 zip next to it plus a `provisioning.json`) and do the same two clicks. The
 other PC needs Windows 10 1809+ / Windows 11, 64-bit, internet access, and a
 webcam. Nothing else. Note: until the two web apps are hosted in AWS, checks

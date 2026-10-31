@@ -22,10 +22,12 @@ present on Windows 11 and most Windows 10 PCs) when it is missing.
 1. Copy the bundle to the PC and unzip it to a folder (for example `C:\EmpVerify-Setup`).
 2. Rename `provisioning.sample.json` to `provisioning.json` and paste the tenant
    **provisioning token** into it. Keep `backendUrl` as the EmpVerify server address.
-   Without this file the agent asks for a per-employee enrollment token on first launch instead.
+   Without this file the agent cannot set itself up and says so in a tray notification.
 3. Double-click **`Install-EmpVerify.cmd`** and accept the administrator prompt.
    A window shows each step; it stays open so you can read the result.
-4. The agent starts in the system tray and registers this PC as **Unassigned**.
+4. The agent starts in the background and registers this PC as **Unassigned**. It
+   never opens a window of its own — there is only a tray icon and a short
+   notification; double-click the tray icon to see its activity log.
 5. In the admin portal, open **Devices**, find the PC by its hostname and **Assign** it
    to the employee. From then on the agent runs the daily check at a random time
    inside the work window; the first check is the enrollment scan.
