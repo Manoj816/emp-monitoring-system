@@ -447,3 +447,26 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
   .login-wrap { flex-direction: column; }
   .login-hero { padding: 28px 24px; }
 }
+
+/* Assign-employee picker (Devices tab): searchable, department-filterable list. */
+.pick-controls { display: flex; gap: 8px; margin-bottom: 10px; }
+.pick-controls input { flex: 1; min-width: 0; }
+.pick-list {
+  list-style: none; margin: 0; display: grid; gap: 6px; align-content: start;
+  max-height: 320px; overflow-y: auto; border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px; background: #fbfcfe;
+}
+.pick-empty { color: var(--muted); padding: 18px; text-align: center; }
+.pick-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: #fff; cursor: pointer; font: inherit;
+}
+.pick-item:hover { border-color: #5b8af0; }
+.pick-item.selected {
+  border-color: #2f6fed; background: #f3f7ff;
+  box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.18);
+}
+.pick-main { flex: 1; display: grid; gap: 1px; min-width: 0; }
+.pick-name { font-weight: 600; }
+.pick-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

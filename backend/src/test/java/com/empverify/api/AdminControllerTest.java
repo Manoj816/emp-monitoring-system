@@ -64,13 +64,13 @@ class AdminControllerTest {
         when(referenceImages.findByEmployeeIdAndStatusAndSource(any(), eq(ReferenceImageStatus.ACTIVE),
                 eq(ReferenceImageSource.LIVE_ENROLLMENT))).thenReturn(Optional.empty());
 
-        var response = controller.createEmployee(" E-100 ", "Pat Example", "pat@example.com", "", PHOTO);
+        var response = controller.createEmployee(" E-100 ", "Pat Example", "pat@example.com", " Engineering ", PHOTO);
 
         var saved = ArgumentCaptor.forClass(Employee.class);
         verify(employees).save(saved.capture());
         assertEquals("E-100", saved.getValue().getEmployeeCode());
         assertEquals("pat@example.com", saved.getValue().getEmail());
-        assertEquals(null, saved.getValue().getDepartment());
+        assertEquals("Engineering", saved.getValue().getDepartment());
 
         var reference = ArgumentCaptor.forClass(ReferenceImage.class);
         verify(referenceImages).save(reference.capture());
@@ -88,7 +88,7 @@ class AdminControllerTest {
     @Test
     void createWithoutPhotoIsRefusedAndNothingIsSaved() {
         var e = assertThrows(ApiException.class,
-                () -> controller.createEmployee("E-100", "Pat Example", "pat@example.com", null, null));
+                () -> controller.createEmployee("E-100", "Pat Example", "pat@example.com", "Engineering", null));
 
         assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
         assertTrue(e.getMessage().contains("photo or ID image is required"));
@@ -101,7 +101,7 @@ class AdminControllerTest {
         var empty = new MockMultipartFile("image", "id.jpg", "image/jpeg", new byte[0]);
 
         var e = assertThrows(ApiException.class,
-                () -> controller.createEmployee("E-100", "Pat Example", "pat@example.com", null, empty));
+                () -> controller.createEmployee("E-100", "Pat Example", "pat@example.com", "Engineering", empty));
 
         assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
         verify(employees, never()).save(any());
@@ -112,7 +112,7 @@ class AdminControllerTest {
         var pdf = new MockMultipartFile("image", "id.pdf", "application/pdf", new byte[] {1});
 
         var e = assertThrows(ApiException.class,
-                () -> controller.createEmployee("E-100", "Pat Example", "pat@example.com", null, pdf));
+                () -> controller.createEmployee("E-100", "Pat Example", "pat@example.com", "Engineering", pdf));
 
         assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
         assertTrue(e.getMessage().contains("JPEG or PNG"));
@@ -122,11 +122,14 @@ class AdminControllerTest {
     @Test
     void createWithMissingDetailsOrBadEmailIsRefused() {
         assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class,
-                () -> controller.createEmployee("", "Pat", "pat@example.com", null, PHOTO)).getStatus());
+                () -> controller.createEmployee("", "Pat", "pat@example.com", "Engineering", PHOTO)).getStatus());
         assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class,
-                () -> controller.createEmployee("E-1", "  ", "pat@example.com", null, PHOTO)).getStatus());
+                () -> controller.createEmployee("E-1", "  ", "pat@example.com", "Engineering", PHOTO)).getStatus());
         assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class,
-                () -> controller.createEmployee("E-1", "Pat", "not-an-email", null, PHOTO)).getStatus());
+                () -> controller.createEmployee("E-1", "Pat", "not-an-email", "Engineering", PHOTO)).getStatus());
+        // Department is mandatory too: employees are segregated by it when assigning systems.
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class,
+                () -> controller.createEmployee("E-1", "Pat", "pat@example.com", "  ", PHOTO)).getStatus());
         verify(employees, never()).save(any());
     }
 
@@ -135,7 +138,7 @@ class AdminControllerTest {
         when(employees.existsByEmployeeCodeIgnoreCase("E-100")).thenReturn(true);
 
         var e = assertThrows(ApiException.class,
-                () -> controller.createEmployee("E-100", "Pat Example", "pat@example.com", null, PHOTO));
+                () -> controller.createEmployee("E-100", "Pat Example", "pat@example.com", "Engineering", PHOTO));
 
         assertEquals(HttpStatus.CONFLICT, e.getStatus());
         verify(employees, never()).save(any());

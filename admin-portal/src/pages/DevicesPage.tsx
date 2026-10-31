@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
 import ActionMenu from "../components/ActionMenu";
+import AssignEmployeeDialog from "../components/AssignEmployeeDialog";
 import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
 import { useStatsBar } from "../components/StatsBar";
@@ -14,8 +15,7 @@ function statusBadge(status: string): string {
 export default function DevicesPage(props: { title: string; hint: string }) {
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [choice, setChoice] = useState<Record<string, string>>({}); // deviceId -> employeeId
-  const [reassigning, setReassigning] = useState<string | null>(null); // deviceId with the picker open
+  const [assigning, setAssigning] = useState<DeviceSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -75,50 +75,6 @@ export default function DevicesPage(props: { title: string; hint: string }) {
     void run(() => api.deleteDevice(device.id));
   }
 
-  function assign(device: DeviceSummary) {
-    const employeeId = choice[device.id];
-    if (!employeeId) return;
-    const target = employees.find((e) => e.id === employeeId);
-    if (
-      device.employeeId !== null &&
-      !confirm(
-        `Reassign ${device.hostname ?? device.id} from ${device.employeeName ?? "its employee"} to ` +
-          `${target?.fullName ?? "the selected employee"}? The agent switches on its next poll; if the new ` +
-          `employee has no live enrollment yet, their first check is the enrollment scan.`,
-      )
-    ) {
-      return;
-    }
-    void run(async () => {
-      await api.assignDevice(device.id, employeeId);
-      setReassigning(null);
-      setChoice({ ...choice, [device.id]: "" });
-    });
-  }
-
-  function picker(device: DeviceSummary) {
-    const candidates = employees.filter((e) => e.id !== device.employeeId);
-    return (
-      <>
-        <select
-          value={choice[device.id] ?? ""}
-          onChange={(e) => setChoice({ ...choice, [device.id]: e.target.value })}
-          disabled={busy}
-        >
-          <option value="">Select employee…</option>
-          {candidates.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.fullName} ({e.employeeCode})
-            </option>
-          ))}
-        </select>{" "}
-        <button className="action" disabled={busy || !choice[device.id]} onClick={() => assign(device)}>
-          {device.employeeId === null ? "Assign" : "Confirm reassign"}
-        </button>{" "}
-      </>
-    );
-  }
-
   return (
     <>
       <div className="toolbar">
@@ -133,6 +89,7 @@ export default function DevicesPage(props: { title: string; hint: string }) {
         rowKey={(d) => d.id}
         emptyText="No systems registered yet."
         columns={[
+          { key: "hostname", header: "Hostname", value: (d) => d.hostname ?? "—" },
           {
             key: "employee", header: "Employee",
             value: (d) => (d.employeeId === null ? "Unassigned" : (d.employeeName ?? d.employeeId.slice(0, 8))),
@@ -141,7 +98,6 @@ export default function DevicesPage(props: { title: string; hint: string }) {
                 ? <span className="badge check">Unassigned</span>
                 : (d.employeeName ?? d.employeeId.slice(0, 8)),
           },
-          { key: "hostname", header: "Hostname", value: (d) => d.hostname ?? "—" },
           {
             key: "status", header: "Status", filter: "select",
             value: (d) => d.status,
@@ -173,12 +129,10 @@ export default function DevicesPage(props: { title: string; hint: string }) {
             cellStyle: { whiteSpace: "nowrap", textAlign: "right" },
             render: (d) => (
               <>
-                {d.status !== "REVOKED" && d.employeeId === null && picker(d)}
-                {d.status !== "REVOKED" && d.employeeId !== null && reassigning === d.id && (
+                {d.status !== "REVOKED" && d.employeeId === null && (
                   <>
-                    {picker(d)}
-                    <button className="action" disabled={busy} onClick={() => setReassigning(null)}>
-                      Cancel
+                    <button className="action" disabled={busy} onClick={() => setAssigning(d)}>
+                      Assign employee
                     </button>{" "}
                   </>
                 )}
@@ -187,7 +141,7 @@ export default function DevicesPage(props: { title: string; hint: string }) {
                   label={`Actions for ${d.hostname ?? d.id}`}
                   items={[
                     {
-                      label: "Reassign to another employee", onClick: () => setReassigning(d.id),
+                      label: "Reassign to another employee", onClick: () => setAssigning(d),
                       disabled: d.employeeId === null || d.status === "REVOKED",
                       title: "Hand this system to a different employee",
                     },
@@ -206,6 +160,18 @@ export default function DevicesPage(props: { title: string; hint: string }) {
           },
         ]}
       />
+
+      {assigning && (
+        <AssignEmployeeDialog
+          device={assigning}
+          employees={employees}
+          onClose={() => setAssigning(null)}
+          onAssigned={() => {
+            setAssigning(null);
+            void refresh();
+          }}
+        />
+      )}
     </>
   );
 }

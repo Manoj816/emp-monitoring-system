@@ -38,7 +38,8 @@ import org.springframework.transaction.annotation.Transactional;
  * progress), every active employee with an active system that existed during
  * the window and no check of any outcome that day gets one NO_CHECK row, dated
  * at the end of the window, which the portal lists under Missed. Weekends are
- * skipped. The day is judged in the configured zone (empverify.verification.zone),
+ * skipped unless empverify.verification.weekends is on (WORK_WEEKENDS, used for
+ * testing). The day is judged in the configured zone (empverify.verification.zone),
  * since the server has no zone of its own.
  */
 @Component
@@ -58,6 +59,7 @@ public class NoCheckService {
     private final PolicyService policyService;
     private final AuditService audit;
     private final ZoneId zone;
+    private final boolean weekends;
 
     public NoCheckService(
             EmployeeRepository employees,
@@ -65,18 +67,21 @@ public class NoCheckService {
             VerificationCheckRepository checks,
             PolicyService policyService,
             AuditService audit,
-            @Value("${empverify.verification.zone:UTC}") String zone) {
+            @Value("${empverify.verification.zone:UTC}") String zone,
+            @Value("${empverify.verification.weekends:false}") boolean weekends) {
         this.employees = employees;
         this.devices = devices;
         this.checks = checks;
         this.policyService = policyService;
         this.audit = audit;
         this.zone = ZoneId.of(zone);
+        this.weekends = weekends;
     }
 
     @PostConstruct
     void announce() {
-        log.info("No-check sweep active: work days are judged in {} once the window has closed", zone);
+        log.info("No-check sweep active: work days are judged in {} once the window has closed{}",
+                zone, weekends ? ", weekends included" : "");
     }
 
     @Scheduled(fixedDelayString = "${empverify.verification.no-check-sweep-ms:300000}")
@@ -101,7 +106,7 @@ public class NoCheckService {
     @Transactional
     public int recordNoCheckDays(Instant now) {
         LocalDate day = now.atZone(zone).toLocalDate();
-        if (day.getDayOfWeek() == DayOfWeek.SATURDAY || day.getDayOfWeek() == DayOfWeek.SUNDAY) {
+        if (!weekends && (day.getDayOfWeek() == DayOfWeek.SATURDAY || day.getDayOfWeek() == DayOfWeek.SUNDAY)) {
             return 0;
         }
         int recorded = 0;

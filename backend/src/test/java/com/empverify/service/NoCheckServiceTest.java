@@ -50,7 +50,7 @@ class NoCheckServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new NoCheckService(employees, devices, checks, policyService, audit, ZONE.getId());
+        service = new NoCheckService(employees, devices, checks, policyService, audit, ZONE.getId(), false);
         employee = new Employee();
         employee.setEmployeeCode("E-1");
         employee.setFullName("Test");
@@ -126,6 +126,17 @@ class NoCheckServiceTest {
 
         assertEquals(0, recorded);
         verify(checks, never()).save(any());
+    }
+
+    @Test
+    void weekendsAreJudgedWhenTheWeekendFlagIsOn() {
+        service = new NoCheckService(employees, devices, checks, policyService, audit, ZONE.getId(), true);
+        when(checks.existsByEmployeeIdAndRequestedAtGreaterThanEqualAndRequestedAtLessThan(
+                eq(employee.getId()), any(), any())).thenReturn(false);
+
+        int recorded = service.recordNoCheckDays(at(SUNDAY, LocalTime.of(18, 0)));
+
+        assertEquals(1, recorded, "testing mode: Saturdays and Sundays get a NO_CHECK record too");
     }
 
     @Test

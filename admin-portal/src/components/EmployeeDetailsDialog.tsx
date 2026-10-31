@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
-import CameraCapture from "./CameraCapture";
 
 /**
  * Employee details popup: identity references (uploaded ID/photo and the
@@ -22,7 +21,6 @@ export default function EmployeeDetailsDialog(props: {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [camera, setCamera] = useState(false);
   const [version, setVersion] = useState(0); // bump to reload the pictures
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -200,7 +198,6 @@ export default function EmployeeDetailsDialog(props: {
                     title="Upload a new ID/photo; the employee enrolls again against it">
               Replace ID / photo
             </button>
-            <button className="action" disabled={busy} onClick={() => setCamera(true)}>Replace with webcam</button>
             <button className="action" disabled={busy || employee.status !== "ACTIVE"} onClick={requestReEnrollment}
                     title="Keep the photo, but ask the employee for the enrollment scan again">
               Request first scan again
@@ -211,16 +208,6 @@ export default function EmployeeDetailsDialog(props: {
 
         <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={onFileChosen} />
       </div>
-
-      {camera && (
-        <CameraCapture
-          onCancel={() => setCamera(false)}
-          onCapture={(blob) => {
-            setCamera(false);
-            replacePhoto(blob);
-          }}
-        />
-      )}
     </div>
   );
 }

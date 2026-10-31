@@ -16,9 +16,13 @@ import com.empverify.domain.Employee;
 import com.empverify.domain.EnrollmentToken;
 import com.empverify.domain.Enums.DeviceStatus;
 import com.empverify.domain.Enums.EmployeeStatus;
+import com.empverify.domain.Enums.ReferenceImageSource;
+import com.empverify.domain.Enums.ReferenceImageStatus;
+import com.empverify.domain.ReferenceImage;
 import com.empverify.repo.DeviceRepository;
 import com.empverify.repo.EmployeeRepository;
 import com.empverify.repo.EnrollmentTokenRepository;
+import com.empverify.repo.ReferenceImageRepository;
 import com.empverify.security.DeviceTokenService;
 import java.time.Instant;
 import java.util.List;
@@ -38,6 +42,7 @@ class DeviceServiceTest {
     @Mock private DeviceRepository devices;
     @Mock private EmployeeRepository employees;
     @Mock private EnrollmentTokenRepository enrollmentTokens;
+    @Mock private ReferenceImageRepository referenceImages;
     @Mock private DeviceTokenService deviceTokens;
     @Mock private AuditService audit;
 
@@ -46,7 +51,8 @@ class DeviceServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DeviceService(devices, employees, enrollmentTokens, deviceTokens, audit, 24, "tenant-token");
+        service = new DeviceService(
+                devices, employees, enrollmentTokens, referenceImages, deviceTokens, audit, 24, "tenant-token");
     }
 
     private static Employee activeEmployee() {
@@ -420,6 +426,34 @@ class DeviceServiceTest {
         service.markEnrolled(device.getId());
 
         assertNotNull(device.getEnrolledAt());
+    }
+
+    @Test
+    void assigningRetiresTheEmployeesLiveScanSoTheFirstScanRunsAgain() {
+        // The employee enrolled on another system before. Assigning them to this
+        // (re)installed system must reset the first scan: the old live reference
+        // is retired, and the next check is judged against the uploaded ID/photo.
+        var employee = activeEmployee();
+        var device = new Device();
+        device.setPlatform(com.empverify.domain.Enums.DevicePlatform.WINDOWS);
+        device.setStatus(DeviceStatus.PENDING);
+        var live = new ReferenceImage();
+        live.setEmployeeId(employee.getId());
+        live.setSource(ReferenceImageSource.LIVE_ENROLLMENT);
+        when(devices.findById(device.getId())).thenReturn(Optional.of(device));
+        when(employees.findById(employee.getId())).thenReturn(Optional.of(employee));
+        when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(referenceImages.findByEmployeeIdAndStatusAndSource(
+                employee.getId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT))
+                .thenReturn(Optional.of(live));
+        when(referenceImages.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service.assignDevice(device.getId(), employee.getId(), "admin");
+
+        assertEquals(ReferenceImageStatus.REPLACED, live.getStatus(),
+                "the previous live scan no longer vouches for the employee");
+        verify(audit).record(eq("admin"), eq("LIVE_REFERENCE_RETIRED"), eq("employee"),
+                eq(employee.getId().toString()), any());
     }
 
     @Test

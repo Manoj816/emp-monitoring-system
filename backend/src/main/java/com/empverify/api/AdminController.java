@@ -92,6 +92,7 @@ public class AdminController {
         employeeCode = required(employeeCode, "Employee code is required");
         fullName = required(fullName, "Full name is required");
         email = required(email, "Email is required");
+        department = required(department, "Department is required");
         if (!EMAIL.matcher(email).matches()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Email address is not valid");
         }
@@ -111,7 +112,7 @@ public class AdminController {
         employee.setEmployeeCode(employeeCode);
         employee.setFullName(fullName);
         employee.setEmail(email);
-        employee.setDepartment(department == null || department.isBlank() ? null : department.trim());
+        employee.setDepartment(department);
         employees.save(employee);
 
         saveAdminUpload(employee.getId(), image);

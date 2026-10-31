@@ -2,6 +2,9 @@
 // signed-in admin's Cognito ID token as a Bearer JWT (see auth.ts).
 import { idToken } from "./auth";
 
+/** Departments an employee can belong to (fixed list for now; also the assign popup's filter). */
+export const DEPARTMENTS = ["Engineering", "Sales", "Human Resources", "Finance"] as const;
+
 export interface Employee {
   id: string;
   employeeCode: string;

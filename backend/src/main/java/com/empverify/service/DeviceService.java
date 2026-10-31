@@ -5,9 +5,12 @@ import com.empverify.domain.EnrollmentToken;
 import com.empverify.domain.Enums.DevicePlatform;
 import com.empverify.domain.Enums.DeviceStatus;
 import com.empverify.domain.Enums.EmployeeStatus;
+import com.empverify.domain.Enums.ReferenceImageSource;
+import com.empverify.domain.Enums.ReferenceImageStatus;
 import com.empverify.repo.DeviceRepository;
 import com.empverify.repo.EmployeeRepository;
 import com.empverify.repo.EnrollmentTokenRepository;
+import com.empverify.repo.ReferenceImageRepository;
 import com.empverify.security.DeviceTokenService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -32,6 +35,7 @@ public class DeviceService {
     private final DeviceRepository devices;
     private final EmployeeRepository employees;
     private final EnrollmentTokenRepository enrollmentTokens;
+    private final ReferenceImageRepository referenceImages;
     private final DeviceTokenService deviceTokens;
     private final AuditService audit;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
@@ -42,6 +46,7 @@ public class DeviceService {
             DeviceRepository devices,
             EmployeeRepository employees,
             EnrollmentTokenRepository enrollmentTokens,
+            ReferenceImageRepository referenceImages,
             DeviceTokenService deviceTokens,
             AuditService audit,
             @Value("${empverify.security.enrollment-token-ttl-hours}") long enrollmentTokenTtlHours,
@@ -49,6 +54,7 @@ public class DeviceService {
         this.devices = devices;
         this.employees = employees;
         this.enrollmentTokens = enrollmentTokens;
+        this.referenceImages = referenceImages;
         this.deviceTokens = deviceTokens;
         this.audit = audit;
         this.enrollmentTokenTtlHours = enrollmentTokenTtlHours;
@@ -193,9 +199,11 @@ public class DeviceService {
 
     /**
      * Admin: links a registered system to an employee and activates it. Also the
-     * way to hand a system to a different employee (reassign): the agent notices
-     * the new employee on its next state poll and, if that employee has no live
-     * enrollment yet, runs the enrollment scan first.
+     * way to hand a system to a different employee (reassign). Every assignment
+     * resets the employee's first scan: their current live reference (if any) is
+     * retired, so the next check on this system is the enrollment scan, judged
+     * against the uploaded ID/photo alone. A MATCH stores that scan as the new
+     * live reference and counts as the day's verification.
      */
     @Transactional
     public Device assignDevice(UUID deviceId, UUID employeeId, String actor) {
@@ -217,6 +225,17 @@ public class DeviceService {
         device.setStatus(DeviceStatus.ACTIVE);
         device.setEnrolledAt(null); // every (re)assignment starts with the enrollment scan
         devices.save(device);
+
+        // Reset the first scan (user rule 2026-10-31): a live scan enrolled on a
+        // previous system or assignment no longer vouches for the employee here.
+        referenceImages.findByEmployeeIdAndStatusAndSource(
+                employeeId, ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT)
+                .ifPresent(live -> {
+                    live.setStatus(ReferenceImageStatus.REPLACED);
+                    referenceImages.save(live);
+                    audit.record(actor, "LIVE_REFERENCE_RETIRED", "employee", employeeId.toString(),
+                            "{\"reason\":\"DEVICE_ASSIGNED\",\"deviceId\":\"" + deviceId + "\"}");
+                });
 
         audit.record(actor, previous == null ? "DEVICE_ASSIGNED" : "DEVICE_REASSIGNED", "device",
                 deviceId.toString(),

@@ -89,3 +89,6 @@ empverify:
     zone: ${WORK_ZONE:UTC}
     # How often the server looks for employees whose systems opened no check today.
     no-check-sweep-ms: 300000
+    # Judge Saturdays/Sundays too (the agent itself schedules checks every day).
+    # Turned on for testing (WORK_WEEKENDS=true); off for normal operation.
+    weekends: ${WORK_WEEKENDS:false}

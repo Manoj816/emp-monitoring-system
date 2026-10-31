@@ -1,17 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../api";
-import CameraCapture from "./CameraCapture";
+import { api, DEPARTMENTS } from "../api";
 
 /**
  * "Add employee" popup. The ID/photo is mandatory: it is the reference every
  * verification is compared against, so the employee is created together with it
- * in a single request (the server refuses a record without an image).
+ * in a single request (the server refuses a record without an image). The
+ * department is mandatory too — the assign-system popup filters by it.
  */
 export default function AddEmployeeDialog(props: { onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState({ employeeCode: "", fullName: "", email: "", department: "" });
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [camera, setCamera] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,7 +26,8 @@ export default function AddEmployeeDialog(props: { onClose: () => void; onCreate
   }, [photo]);
 
   const detailsComplete =
-    form.employeeCode.trim() !== "" && form.fullName.trim() !== "" && form.email.trim() !== "";
+    form.employeeCode.trim() !== "" && form.fullName.trim() !== "" && form.email.trim() !== "" &&
+    form.department !== "";
   const canSubmit = detailsComplete && photo !== null && !busy;
 
   function onFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
@@ -57,7 +57,7 @@ export default function AddEmployeeDialog(props: { onClose: () => void; onCreate
           employeeCode: form.employeeCode.trim(),
           fullName: form.fullName.trim(),
           email: form.email.trim(),
-          department: form.department.trim() || undefined,
+          department: form.department,
         },
         photo,
       );
@@ -97,8 +97,17 @@ export default function AddEmployeeDialog(props: { onClose: () => void; onCreate
               />
             </label>
             <label>
-              Department
-              <input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+              Department *
+              <select
+                required
+                value={form.department}
+                onChange={(e) => setForm({ ...form, department: e.target.value })}
+              >
+                <option value="">Select department…</option>
+                {DEPARTMENTS.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
             </label>
           </div>
 
@@ -116,9 +125,6 @@ export default function AddEmployeeDialog(props: { onClose: () => void; onCreate
               <div className="photo-actions">
                 <button type="button" className="action" disabled={busy} onClick={() => fileInputRef.current?.click()}>
                   Upload photo / ID
-                </button>
-                <button type="button" className="action" disabled={busy} onClick={() => setCamera(true)}>
-                  Use webcam
                 </button>
                 {photo && (
                   <button type="button" className="action" disabled={busy} onClick={() => setPhoto(null)}>
@@ -144,17 +150,6 @@ export default function AddEmployeeDialog(props: { onClose: () => void; onCreate
 
         <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={onFileChosen} />
       </div>
-
-      {camera && (
-        <CameraCapture
-          onCancel={() => setCamera(false)}
-          onCapture={(blob) => {
-            setCamera(false);
-            setError(null);
-            setPhoto(blob);
-          }}
-        />
-      )}
     </div>
   );
 }

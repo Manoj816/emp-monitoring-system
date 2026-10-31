@@ -27,7 +27,8 @@ const SECTIONS: { id: Section; label: string; hint: string; description: string;
     hint: "Registered systems",
     description:
       "Systems that registered themselves on install. A system shows as Unassigned until you link it to an employee; " +
-      "that activates verification on it, and the first check after any assignment is the enrollment scan. A reinstalled " +
+      "that activates verification on it, and the first check after any assignment is the enrollment scan, judged " +
+      "against the uploaded ID/photo (an earlier live scan is retired). A reinstalled " +
       "system comes back as Unassigned (same row, history kept) and must be assigned again. Reassign hands a system to a " +
       "different employee, and offboarding an employee deregisters their systems back to Unassigned. Revoking immediately " +
       "blocks a device from verifying and from re-authenticating (lost or retired machine). Delete removes a row for good " +
