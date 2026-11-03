@@ -136,14 +136,17 @@ public class CheckController {
      * The agent reports that a pending check ended without a scan (the employee
      * closed the window, or the response window elapsed). Recorded as EXPIRED with
      * the reason, so administrators see a missed check rather than a stale one.
+     * The optional note carries what the agent observed, which is what makes an
+     * UNATTENDED miss readable ("held from 15:10 until the window closed at 17:00").
      */
     @PostMapping("/checks/{checkId}/cancel")
     public CheckResultResponse cancel(
             @PathVariable UUID checkId,
             @RequestParam(required = false) String reason,
+            @RequestParam(required = false) String note,
             Authentication auth) {
         return toResult(verificationService.cancel(
-                deviceId(auth), checkId, VerificationService.CancelReason.parse(reason)));
+                deviceId(auth), checkId, VerificationService.CancelReason.parse(reason), note));
     }
 
     private static UUID deviceId(Authentication auth) {

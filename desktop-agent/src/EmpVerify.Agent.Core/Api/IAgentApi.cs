@@ -35,5 +35,9 @@ public interface IAgentApi
     /// the window, "timeout" = response window elapsed). The server records it as
     /// EXPIRED with that reason.
     /// </summary>
-    Task CancelCheckAsync(string checkId, string reason, CancellationToken ct);
+    /// <param name="note">
+    /// Optional: what the agent actually observed, appended to the stored reason so
+    /// the administrator reads the facts instead of a one-word category.
+    /// </param>
+    Task CancelCheckAsync(string checkId, string reason, CancellationToken ct, string? note = null);
 }

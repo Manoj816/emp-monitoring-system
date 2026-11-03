@@ -339,4 +339,56 @@ class VerificationServiceTest {
         assertEquals(VerificationService.CancelReason.LOCKED.detail(), result.getErrorDetail());
         verify(audit).record(any(), org.mockito.ArgumentMatchers.eq("CHECK_ABANDONED"), any(), any(), any());
     }
+
+    // ---- a check nobody was ever there to answer --------------------------------
+
+    @Test
+    void unattendedIsAboutNobodyBeingThereNotAboutARefusal() {
+        assertEquals(
+                VerificationService.CancelReason.UNATTENDED,
+                VerificationService.CancelReason.parse("unattended"));
+        String detail = VerificationService.CancelReason.UNATTENDED.detail().toLowerCase();
+        assertTrue(detail.contains("nobody"), detail);
+        assertTrue(detail.contains("work window"), detail);
+    }
+
+    @Test
+    void theAgentsNoteIsKeptSoTheAdministratorReadsWhatWasObserved() {
+        var check = pendingCheck("n", Instant.now().plusSeconds(60));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        var result = service.cancel(
+                deviceId, check.getId(), VerificationService.CancelReason.UNATTENDED,
+                "It came due at 15:10 and the work window closed at 17:00 first.");
+
+        assertTrue(result.getErrorDetail().startsWith(
+                VerificationService.CancelReason.UNATTENDED.detail()));
+        assertTrue(result.getErrorDetail().contains("came due at 15:10"), result.getErrorDetail());
+    }
+
+    @Test
+    void anOverlongNoteIsTrimmedRatherThanStored() {
+        var check = pendingCheck("n", Instant.now().plusSeconds(60));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        var result = service.cancel(
+                deviceId, check.getId(), VerificationService.CancelReason.UNATTENDED, "x".repeat(5000));
+
+        int reason = VerificationService.CancelReason.UNATTENDED.detail().length();
+        assertTrue(result.getErrorDetail().length() <= reason + 1 + 400, "note was not trimmed");
+    }
+
+    @Test
+    void noNoteLeavesTheReasonAlone() {
+        var check = pendingCheck("n", Instant.now().plusSeconds(60));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        var result = service.cancel(
+                deviceId, check.getId(), VerificationService.CancelReason.UNATTENDED, "   ");
+
+        assertEquals(VerificationService.CancelReason.UNATTENDED.detail(), result.getErrorDetail());
+    }
 }

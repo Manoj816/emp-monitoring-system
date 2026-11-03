@@ -195,6 +195,8 @@ public class VerificationService {
         ERROR("face scan could not run"),
         TIMEOUT("no response at the workstation within the allowed time (the screen was open but nobody completed the scan)"),
         LOCKED("the workstation was locked at the scheduled time, so the identity check could not be shown"),
+        UNATTENDED("nobody was at an unlocked workstation between the check coming due and the work window "
+                + "closing, so the identity check was never shown to anybody"),
         ASLEEP("the machine went to sleep during the identity check, so it was not completed"),
         SHUTDOWN("the machine was shutting down or the user was signing out, so the identity check was not completed");
 
@@ -230,7 +232,17 @@ public class VerificationService {
     /** Agent-initiated: the employee closed the check window, or the window elapsed. */
     @Transactional
     public VerificationCheck cancel(UUID deviceId, UUID checkId, CancelReason reason) {
-        return abandon(getOwnedCheck(deviceId, checkId), reason);
+        return cancel(deviceId, checkId, reason, null);
+    }
+
+    /**
+     * @param note what the agent observed, appended to the reason. Trusted only as
+     *             text for a human to read: it is trimmed to {@link #MAX_NOTE} and
+     *             never parsed or acted on.
+     */
+    @Transactional
+    public VerificationCheck cancel(UUID deviceId, UUID checkId, CancelReason reason, String note) {
+        return abandon(getOwnedCheck(deviceId, checkId), reason, note);
     }
 
     /**
@@ -271,17 +283,35 @@ public class VerificationService {
     }
 
     /** Ends a pending check without a verdict. Idempotent: a check that already has an outcome is left alone. */
+    /** How much agent-supplied note text is kept on a check. */
+    private static final int MAX_NOTE = 400;
+
     private VerificationCheck abandon(VerificationCheck check, CancelReason reason) {
+        return abandon(check, reason, null);
+    }
+
+    private VerificationCheck abandon(VerificationCheck check, CancelReason reason, String note) {
         if (check.getStatus() != CheckStatus.PENDING) {
             return check;
         }
         check.setStatus(CheckStatus.EXPIRED);
-        check.setErrorDetail(reason.detail());
+        check.setErrorDetail(detailWithNote(reason, note));
         check.setCompletedAt(Instant.now());
         var saved = checks.save(check);
         audit.record("device:" + check.getDeviceId(), "CHECK_ABANDONED", "check",
                 check.getId().toString(), "{\"reason\":\"" + reason.name() + "\"}");
         return saved;
+    }
+
+    private static String detailWithNote(CancelReason reason, String note) {
+        if (note == null || note.isBlank()) {
+            return reason.detail();
+        }
+        String trimmed = note.strip();
+        if (trimmed.length() > MAX_NOTE) {
+            trimmed = trimmed.substring(0, MAX_NOTE);
+        }
+        return reason.detail() + " " + trimmed;
     }
 
     /** The reference a captured frame resembled most, with the verifier's outcome against it. */

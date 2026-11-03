@@ -136,10 +136,14 @@ public sealed class AgentApiClient : IAgentApi
         return (await _http.GetFromJsonAsync<CheckResult>($"/api/v1/checks/{checkId}/result", JsonOptions, ct))!;
     }
 
-    public async Task CancelCheckAsync(string checkId, string reason, CancellationToken ct)
+    public async Task CancelCheckAsync(string checkId, string reason, CancellationToken ct, string? note = null)
     {
-        var response = await _http.PostAsync(
-            $"/api/v1/checks/{checkId}/cancel?reason={Uri.EscapeDataString(reason)}", content: null, ct);
+        var url = $"/api/v1/checks/{checkId}/cancel?reason={Uri.EscapeDataString(reason)}";
+        if (!string.IsNullOrWhiteSpace(note))
+        {
+            url += $"&note={Uri.EscapeDataString(note)}";
+        }
+        var response = await _http.PostAsync(url, content: null, ct);
         response.EnsureSuccessStatusCode();
     }
 

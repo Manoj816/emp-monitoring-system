@@ -54,6 +54,8 @@ public partial class MainWindow : Window
     private int _startupScanAttempts;
     private DateTimeOffset? _checkRetryAt;
     private bool _checkRetryIsDemo;
+    /// <summary>The day's check, held back because nobody was at an unlocked workstation.</summary>
+    private DeferredCheck? _deferred;
     private int _checkRetriesLeft;
     private DeviceState? _deviceState;
     private DateTime _planDate = DateTime.MinValue;
@@ -69,6 +71,12 @@ public partial class MainWindow : Window
     private static readonly TimeSpan PlanLead = TimeSpan.FromMinutes(1);
     /// <summary>A same-day retry after a miss is at least this far from the miss.</summary>
     private static readonly TimeSpan RetryLead = TimeSpan.FromMinutes(5);
+    /// <summary>
+    /// At most how long a held check waits after the employee is back at the machine.
+    /// Short enough to land inside a real return to the desk, random enough that the
+    /// scan is not simply "the moment I unlock".
+    /// </summary>
+    private static readonly TimeSpan ResumeJitter = TimeSpan.FromMinutes(3);
     private WinForms.NotifyIcon? _trayIcon;
 
     public MainWindow()
@@ -558,6 +566,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        // A check held back because nobody was at an unlocked workstation. Nothing
+        // else starts while one is being held: the employee owes one scan, not two.
+        if (_deferred is not null)
+        {
+            await HandleDeferredAsync(now);
+            return;
+        }
+
         // The one more attempt after a missed check.
         if (_checkRetryAt is { } again && now >= again)
         {
@@ -617,7 +633,7 @@ public partial class MainWindow : Window
             return;
         }
         var type = await ResolveScheduledCheckTypeAsync();
-        if (await TryRecordUnavailableMissAsync(type, demo))
+        if (TryDefer(type, demo))
         {
             return;
         }
@@ -625,45 +641,126 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// If the workstation is locked or shutting down, records the scheduled check as
-    /// a miss with that reason (open-then-cancel, so it shows under Missed with the
-    /// state explained) and schedules the retry, without opening a doomed scan
-    /// window. Returns true when it handled the miss; false to run the check normally.
+    /// The day's check, come due with nobody at an unlocked workstation to show it
+    /// to. Nothing is recorded while it waits — a locked screen is somebody away
+    /// from their desk, not a refusal to be checked.
     /// </summary>
-    private async Task<bool> TryRecordUnavailableMissAsync(CheckType type, bool demo)
+    private sealed class DeferredCheck
     {
-        string? reason = _workstation.Current switch
-        {
-            WorkstationState.Locked => "locked",
-            WorkstationState.ShuttingDown => "shutdown",
-            _ => null,
-        };
-        if (reason is null)
+        public required CheckType Type { get; init; }
+        public required bool Demo { get; init; }
+        /// <summary>When it came due.</summary>
+        public required DateTimeOffset Since { get; init; }
+        /// <summary>End of the work window it belongs to; after this it is the day's miss.</summary>
+        public required DateTimeOffset DueBy { get; init; }
+        /// <summary>When it is set to open, once the employee is back; null while waiting.</summary>
+        public DateTimeOffset? ArmedAt { get; set; }
+        /// <summary>How many times the workstation came back into use while it waited.</summary>
+        public int Returns { get; set; }
+    }
+
+    /// <summary>
+    /// Nobody is at an unlocked workstation, so the check is held rather than shown
+    /// to an empty chair and counted against the employee. Returns true when it was
+    /// held; false to run the check now.
+    /// </summary>
+    private bool TryDefer(CheckType type, bool demo)
+    {
+        if (_workstation.Current == WorkstationState.Active)
         {
             return false;
         }
+        var now = DateTimeOffset.Now;
+        _deferred = new DeferredCheck { Type = type, Demo = demo, Since = now, DueBy = WindowEnd(now) };
+        Log($"{Label(type)} came due while {StateDescription(_workstation.Current)} — holding it until the "
+            + "workstation is back in use. Nothing is recorded as missed yet.");
+        SetStatus("Check waiting for the workstation to be back in use.");
+        return true;
+    }
+
+    /// <summary>
+    /// Moves a held check along: opens it shortly after the employee is back, or
+    /// records the day's miss if the work window closes first. Nothing else starts
+    /// while a check is being held.
+    /// </summary>
+    private async Task HandleDeferredAsync(DateTimeOffset now)
+    {
+        var held = _deferred!;
+        switch (DeferredCheckPolicy.Next(now, held.DueBy, _workstation.Current, held.ArmedAt))
+        {
+            case DeferredCheckAction.Arm:
+                var wait = TimeSpan.FromTicks((long)(Random.Shared.NextDouble() * ResumeJitter.Ticks));
+                held.ArmedAt = now + wait < held.DueBy ? now + wait : held.DueBy;
+                held.Returns++;
+                break;
+
+            case DeferredCheckAction.Disarm:
+                held.ArmedAt = null; // away again before the scan: keep holding it
+                break;
+
+            case DeferredCheckAction.Run:
+                _deferred = null;
+                Log($"{Label(held.Type)}: the workstation is back in use — opening it now.");
+                await RunCheckAsync(held.Type, scheduled: true, demo: held.Demo);
+                break;
+
+            case DeferredCheckAction.RecordMiss:
+                _deferred = null;
+                await RecordHeldMissAsync(held, now);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// The work window closed on a check nobody was ever there to answer. This is
+    /// the one thing a held check is ever recorded as, and it says what was actually
+    /// observed rather than guessing why.
+    /// </summary>
+    private async Task RecordHeldMissAsync(DeferredCheck held, DateTimeOffset now)
+    {
+        if (now.Date != held.Since.Date)
+        {
+            // The machine was away past midnight. Recording it now would date
+            // yesterday's miss today; the server's end-of-day sweep describes that
+            // day from what it knows (when the system was last online).
+            Log($"{Label(held.Type)} was still held when the day ended — the server records that day.");
+            return;
+        }
+        var note = HeldMissNote(held);
         try
         {
             await EnsureAuthenticatedAsync(CancellationToken.None);
-            var check = await _api!.OpenCheckAsync(type, CancellationToken.None);
-            await _api.CancelCheckAsync(check.CheckId, reason, CancellationToken.None);
+            var check = await _api!.OpenCheckAsync(held.Type, CancellationToken.None);
+            await _api.CancelCheckAsync(check.CheckId, "unattended", CancellationToken.None, note);
             NetworkOk();
-            Log($"{Label(type)} not shown — {StateDescription(_workstation.Current)}. Recorded for the administrator.");
-            SetStatus($"Last check: missed ({reason}) at {DateTime.Now:HH:mm}.");
+            Log($"{Label(held.Type)} missed: {note}");
+            SetStatus($"Last check: missed (nobody at the workstation) at {DateTime.Now:HH:mm}.");
         }
         catch (Exception ex)
         {
-            if (NoteNetworkFailure(ex, $"{Label(type)}: could not record the '{reason}' state"))
-            {
-                // Nothing reached the server, so nothing was recorded: never claim it
-                // was, and do not spend one of the day's attempts on a failed call.
-                RearmAfterNetworkFailure(demo);
-                return true;
-            }
+            // Nothing reached the server, so nothing was recorded: never claim it was.
+            NoteNetworkFailure(ex, $"{Label(held.Type)}: could not record the missed check");
         }
-        ScheduleCheckRetry(type, demo);
-        return true;
     }
+
+    /// <summary>What the agent saw while it held the check, for the administrator.</summary>
+    private string HeldMissNote(DeferredCheck held)
+    {
+        var note = $"It came due at {held.Since:HH:mm} and was held back for the employee to be at an "
+            + $"unlocked workstation, but the work window closed at {held.DueBy:HH:mm} first.";
+        note += held.Returns == 0
+            ? " The workstation was not back in use at any point in between."
+            : $" It came back into use {held.Returns} time(s), but was away again before the scan could be shown.";
+        if (_workstation.HasSleptSince(held.Since))
+        {
+            note += " The machine also slept during that time.";
+        }
+        return note;
+    }
+
+    /// <summary>End of today's work window, in local time.</summary>
+    private DateTimeOffset WindowEnd(DateTimeOffset now) =>
+        new(now.Date + _policy!.WorkWindowEnd.ToTimeSpan(), now.Offset);
 
     private static string StateDescription(WorkstationState state) => state switch
     {
@@ -728,6 +825,7 @@ public partial class MainWindow : Window
         _checkRetryAt = null;
         _demoScheduledAt = null;
         _startupScanRetryAt = null;
+        _deferred = null;
         _ = SetCheckButtonsEnabled(false);
         DemoScheduleButton.IsEnabled = false;
         DemoClearButton.IsEnabled = false;

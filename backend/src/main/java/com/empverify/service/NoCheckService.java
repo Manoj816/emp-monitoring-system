@@ -151,9 +151,12 @@ public class NoCheckService {
                 .filter(Objects::nonNull)
                 .max(Comparator.naturalOrder())
                 .orElse(null);
+        // State what is known, not what it suggests: all the server can see is that
+        // nothing was opened, plus when the system last reached it. An administrator
+        // reads the last-online time and draws their own conclusion.
         String detail = String.format(Locale.ROOT,
                 "No check ran on %s: no system of this employee opened a check during the work window "
-                        + "(%s-%s %s), so the machine was most likely off or the agent was not running. %s",
+                        + "(%s-%s %s). %s",
                 day.format(DAY), policy.getWorkWindowStart(), policy.getWorkWindowEnd(), zone,
                 lastSeen == null
                         ? "The system has never been online."

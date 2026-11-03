@@ -44,7 +44,7 @@ public class VerificationFlowTests
             return Task.FromResult(new OpenCheck("c1", "nonce", DateTimeOffset.UtcNow.AddMinutes(2)));
         }
 
-        public Task CancelCheckAsync(string checkId, string reason, CancellationToken ct)
+        public Task CancelCheckAsync(string checkId, string reason, CancellationToken ct, string? note = null)
         {
             Cancels.Add(reason);
             return Task.CompletedTask;

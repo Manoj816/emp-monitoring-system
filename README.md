@@ -28,6 +28,11 @@ reference image. Independent of Teams/Zoom. Full design:
   **enrollment scan** (fresh install, or a re-enrollment an admin asked for). An
   enrolled system starts silently — signing in is not a reason to scan somebody;
   the day's check comes at its random time.
+- A scheduled check is **a debt due by the end of the work window**, not an
+  instant. Coming due while the screen is locked records nothing: the agent holds
+  the check and opens it shortly after the employee is back (after a short random
+  delay, so it is not simply "the moment I unlock"). It becomes a miss only if the
+  window closes first, and the record then states what was observed, never a guess.
 - Checks are **transparent**: visible prompt, OS camera indicator, no covert capture.
 - `CHECK` is a human-review status, never an automatic verdict.
 - Evidence is kept only for CHECK/flagged events; MATCH captures are discarded.
