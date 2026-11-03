@@ -1,35 +1,15 @@
 import { useEffect, useState } from "react";
-import { api, type AdminCheckRow, type ReviewResolution } from "../api";
+import { api, type AdminCheckRow, type DeviceSummary } from "../api";
 import CardTitle from "../components/CardTitle";
+import CheckDetailsDialog from "../components/CheckDetailsDialog";
 import DataTable from "../components/DataTable";
 import { useStatsBar } from "../components/StatsBar";
 import { useTableFilters } from "../components/TableFilters";
+import { checkBadgeClass as badgeClass, checkStatusLabel as statusLabel, isMissed, needsReview } from "../utils/checks";
 import { inDateRange, serializeRange } from "../utils/dates";
 
 const FILTERS = ["ALL", "CHECK", "MATCH", "MISSED", "ERRORS"] as const;
 type Filter = (typeof FILTERS)[number];
-
-function badgeClass(status: string): string {
-  if (status === "MATCH") return "badge match";
-  if (status === "CHECK" || status === "MULTIPLE_FACES") return "badge check";
-  if (status === "PENDING") return "badge neutral";
-  return "badge error";
-}
-
-/**
- * A check that ended without a scan is stored as EXPIRED; administrators read it
- * as a miss. NO_CHECK is the server's record of a work day on which no check was
- * opened at all (system off), listed under Missed as well.
- */
-function statusLabel(status: string): string {
-  if (status === "EXPIRED") return "MISSED";
-  if (status === "NO_CHECK") return "NO CHECK";
-  return status;
-}
-
-function isMissed(status: string): boolean {
-  return status === "EXPIRED" || status === "NO_CHECK";
-}
 
 const FILTER_LABELS: Record<Filter, string> = {
   ALL: "All", CHECK: "Needs review", MATCH: "Match", MISSED: "Missed", ERRORS: "Errors",
@@ -39,39 +19,18 @@ export default function ChecksPage(props: { title: string; hint: string }) {
   const [rows, setRows] = useState<AdminCheckRow[]>([]);
   const [filter, setFilter] = useState<Filter>("ALL");
   const [error, setError] = useState<string | null>(null);
-  const [reviewing, setReviewing] = useState<AdminCheckRow | null>(null);
-  const [resolution, setResolution] = useState<ReviewResolution>("CONFIRMED_EMPLOYEE");
-  const [notes, setNotes] = useState("");
+  const [details, setDetails] = useState<AdminCheckRow | null>(null);
   const [evidence, setEvidence] = useState<{ checkId: string; url: string } | null>(null);
-  // Side-by-side pictures for the review dialog: the enrolled photo and the frame
-  // captured during this check (when retained).
-  const [reviewImages, setReviewImages] = useState<{
-    reference?: string; enrolled?: string; captured?: string; loaded?: boolean;
-  }>({});
-
-  useEffect(() => {
-    if (!reviewing) {
-      setReviewImages({});
-      return;
-    }
-    let cancelled = false;
-    const row = reviewing;
-    (async () => {
-      const [reference, enrolled, captured] = await Promise.all([
-        api.loadReferenceImage(row.employeeId).catch(() => undefined),
-        api.loadEnrolledImage(row.employeeId).catch(() => undefined),
-        row.hasEvidence ? api.loadEvidence(row.checkId).catch(() => undefined) : Promise.resolve(undefined),
-      ]);
-      if (!cancelled) setReviewImages({ reference, enrolled, captured, loaded: true });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [reviewing]);
+  // Hostnames for the deviceId a check carries. Fetched once: a system is
+  // renamed far too rarely to re-read it on every 20s refresh.
+  const [devices, setDevices] = useState<DeviceSummary[]>([]);
 
   async function refresh() {
     try {
-      setRows(await api.listChecks(500));
+      const fresh = await api.listChecks(500);
+      setRows(fresh);
+      // Keep an open details popup on the fresh row (a review recorded elsewhere).
+      setDetails((current) => (current ? (fresh.find((r) => r.checkId === current.checkId) ?? current) : current));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -80,6 +39,7 @@ export default function ChecksPage(props: { title: string; hint: string }) {
 
   useEffect(() => {
     void refresh();
+    void api.listDevices().then(setDevices).catch(() => setDevices([]));
     const interval = setInterval(() => void refresh(), 20_000);
     return () => clearInterval(interval);
   }, []);
@@ -91,18 +51,6 @@ export default function ChecksPage(props: { title: string; hint: string }) {
     if (filter === "CHECK") return r.status === "CHECK" || r.status === "MULTIPLE_FACES";
     return r.status === filter;
   });
-
-  async function submitReview() {
-    if (!reviewing) return;
-    try {
-      await api.reviewCheck(reviewing.checkId, resolution, notes);
-      setReviewing(null);
-      setNotes("");
-      await refresh();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
 
   const tableFilters = useTableFilters();
 
@@ -122,7 +70,7 @@ export default function ChecksPage(props: { title: string; hint: string }) {
       });
       return [
         { label: "Checks", value: set.length, ...goTo("ALL") },
-        { label: "Needs review", value: set.filter((r) => (r.status === "CHECK" || r.status === "MULTIPLE_FACES") && !r.reviewResolution).length, tone: "warn" as const, ...goTo("CHECK") },
+        { label: "Needs review", value: set.filter(needsReview).length, tone: "warn" as const, ...goTo("CHECK") },
         { label: "Matches", value: set.filter((r) => r.status === "MATCH").length, tone: "ok" as const, ...goTo("MATCH") },
         { label: "Missed", value: set.filter((r) => isMissed(r.status)).length, tone: "bad" as const, ...goTo("MISSED") },
         { label: "Errors", value: set.filter((r) => r.status === "VERIFICATION_ERROR" || r.status === "NO_FACE").length, tone: "bad" as const, ...goTo("ERRORS") },
@@ -171,6 +119,8 @@ export default function ChecksPage(props: { title: string; hint: string }) {
         {...tableFilters.tableProps}
         rows={visible}
         rowKey={(row) => row.checkId}
+        onRowClick={(row) => setDetails(row)}
+        rowLabel={(row) => `Open the check for ${row.employeeName ?? row.employeeId.slice(0, 8)}`}
         emptyText="No checks match this filter."
         columns={[
           {
@@ -211,13 +161,12 @@ export default function ChecksPage(props: { title: string; hint: string }) {
           },
           {
             key: "review", header: "Review", filter: "select", headerStyle: { width: 120 },
-            value: (row) =>
-              row.reviewResolution ?? (row.status === "CHECK" || row.status === "MULTIPLE_FACES" ? "needs review" : "—"),
+            value: (row) => row.reviewResolution ?? (needsReview(row) ? "needs review" : "—"),
             render: (row) =>
               row.reviewResolution ? (
                 <span className="badge neutral">{row.reviewResolution}</span>
-              ) : row.status === "CHECK" || row.status === "MULTIPLE_FACES" ? (
-                <button className="action" onClick={() => setReviewing(row)}>Review</button>
+              ) : needsReview(row) ? (
+                <button className="action" onClick={() => setDetails(row)}>Review</button>
               ) : (
                 <span className="muted">—</span>
               ),
@@ -239,86 +188,16 @@ export default function ChecksPage(props: { title: string; hint: string }) {
         ]}
       />
 
-      {reviewing && (
-        <div className="overlay">
-          <div className="modal">
-            <h3 style={{ marginTop: 0 }}>Review check</h3>
-            <p className="muted">
-              {reviewing.employeeName} — {reviewing.checkType} at {new Date(reviewing.requestedAt).toLocaleString()}.
-              A CHECK result is a review request, never proof of misconduct.
-            </p>
-
-            <div style={{ display: "flex", gap: 24, marginBottom: 12, flexWrap: "wrap" }}>
-              <div>
-                <div className="muted" style={{ fontSize: 12 }}>Status</div>
-                <span className={badgeClass(reviewing.status)}>{statusLabel(reviewing.status)}</span>
-                {reviewing.mismatchFlag && <span className="badge error" style={{ marginLeft: 4 }}>mismatch?</span>}
-              </div>
-              <div>
-                <div className="muted" style={{ fontSize: 12 }}>Face similarity to reference</div>
-                <strong>{reviewing.similarityScore != null ? `${reviewing.similarityScore.toFixed(1)} / 100` : "not computed"}</strong>
-              </div>
-              <div>
-                <div className="muted" style={{ fontSize: 12 }}>Live-person confidence</div>
-                <strong>{reviewing.livenessConfidence != null ? `${reviewing.livenessConfidence.toFixed(1)} / 100` : "—"}</strong>
-              </div>
-            </div>
-            {reviewing.errorDetail && (
-              <p style={{ marginTop: 0, padding: "8px 12px", background: "#fff7e6", borderRadius: 6 }}>
-                <strong>What went wrong:</strong> {reviewing.errorDetail}
-              </p>
-            )}
-
-            <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-              <figure style={{ margin: 0, flex: 1, textAlign: "center" }}>
-                {reviewImages.reference
-                  ? <img src={reviewImages.reference} alt="uploaded ID or photo" style={{ maxWidth: "100%", maxHeight: 220 }} />
-                  : <div className="muted" style={{ padding: 24 }}>No ID/photo uploaded.</div>}
-                <figcaption className="muted" style={{ fontSize: 12 }}>Uploaded ID / photo</figcaption>
-              </figure>
-              <figure style={{ margin: 0, flex: 1, textAlign: "center" }}>
-                {reviewImages.enrolled
-                  ? <img src={reviewImages.enrolled} alt="enrolled live scan" style={{ maxWidth: "100%", maxHeight: 220 }} />
-                  : <div className="muted" style={{ padding: 24 }}>Not enrolled yet (no matching live scan so far).</div>}
-                <figcaption className="muted" style={{ fontSize: 12 }}>Enrolled live scan</figcaption>
-              </figure>
-              <figure style={{ margin: 0, flex: 1, textAlign: "center" }}>
-                {reviewImages.captured
-                  ? <img src={reviewImages.captured} alt="frame captured during this check" style={{ maxWidth: "100%", maxHeight: 220 }} />
-                  : <div className="muted" style={{ padding: 24 }}>
-                      {reviewing.hasEvidence
-                        ? (reviewImages.loaded
-                            ? "The retained frame could not be loaded (it is not a readable image)."
-                            : "Loading…")
-                        : reviewing.errorDetail?.includes("no usable frame")
-                          ? "The liveness service returned no picture for this scan — the camera most likely did not show a live face."
-                          : "No frame was retained for this check."}
-                    </div>}
-                <figcaption className="muted" style={{ fontSize: 12 }}>Captured during this check</figcaption>
-              </figure>
-            </div>
-            <label style={{ display: "block", marginBottom: 8 }}>
-              Resolution{" "}
-              <select value={resolution} onChange={(e) => setResolution(e.target.value as ReviewResolution)}>
-                <option value="CONFIRMED_EMPLOYEE">Confirmed: correct employee</option>
-                <option value="CONFIRMED_MISMATCH">Confirmed: identity mismatch</option>
-                <option value="TECHNICAL_ISSUE">Technical issue</option>
-                <option value="INCONCLUSIVE">Inconclusive</option>
-              </select>
-            </label>
-            <textarea
-              placeholder="Notes (optional)"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              style={{ width: "100%" }}
-            />
-            <div className="row">
-              <button className="action" onClick={() => setReviewing(null)}>Cancel</button>
-              <button className="primary" onClick={() => void submitReview()}>Record review</button>
-            </div>
-          </div>
-        </div>
+      {details && (
+        <CheckDetailsDialog
+          check={details}
+          deviceHostname={devices.find((d) => d.id === details.deviceId)?.hostname ?? null}
+          onClose={() => setDetails(null)}
+          onReviewed={() => {
+            setDetails(null);
+            void refresh();
+          }}
+        />
       )}
 
       {evidence && (

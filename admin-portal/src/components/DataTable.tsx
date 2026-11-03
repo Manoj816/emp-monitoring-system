@@ -27,6 +27,14 @@ export interface Column<T> {
 
 const PAGE_SIZES = [10, 25, 50, 100];
 
+/**
+ * A click that landed on a control inside the row (action button, menu, filter)
+ * belongs to that control, not to the row: it must not open the details popup.
+ */
+function onControl(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest("button, a, input, select, textarea, label") !== null;
+}
+
 export default function DataTable<T>(props: {
   columns: Column<T>[];
   rows: T[];
@@ -38,8 +46,12 @@ export default function DataTable<T>(props: {
   /** Controlled filter values, so a page can set one itself (see useTableFilters). */
   filters?: Record<string, string>;
   onFiltersChange?: (filters: Record<string, string>) => void;
+  /** Opens the row's details popup; the whole row becomes clickable and focusable. */
+  onRowClick?: (row: T) => void;
+  /** What a clickable row is called to a screen reader ("Open <name>"). */
+  rowLabel?: (row: T) => string;
 }) {
-  const { columns, rows, rowKey } = props;
+  const { columns, rows, rowKey, onRowClick } = props;
   // Uncontrolled by default; a page that needs to set a filter passes both props.
   const [ownFilters, setOwnFilters] = useState<Record<string, string>>({});
   const filters = props.filters ?? ownFilters;
@@ -136,7 +148,31 @@ export default function DataTable<T>(props: {
         </thead>
         <tbody>
           {visible.map((row) => (
-            <tr key={rowKey(row)}>
+            <tr
+              key={rowKey(row)}
+              className={onRowClick ? "clickable" : undefined}
+              tabIndex={onRowClick ? 0 : undefined}
+              aria-label={onRowClick ? (props.rowLabel?.(row) ?? "Open details") : undefined}
+              onClick={
+                onRowClick
+                  ? (e) => {
+                      if (!onControl(e.target)) onRowClick(row);
+                    }
+                  : undefined
+              }
+              onKeyDown={
+                onRowClick
+                  ? (e) => {
+                      // Only the row itself: Enter or Space inside a cell control is that control's.
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onRowClick(row);
+                      }
+                    }
+                  : undefined
+              }
+            >
               {columns.map((c) => (
                 // Every cell is one line; overflow is cut with an ellipsis and the full
                 // text is the tooltip, so all rows stay the same height.

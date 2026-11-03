@@ -13,7 +13,7 @@ const SECTIONS: { id: Section; label: string; hint: string; description: string;
     id: "employees",
     label: "Employees",
     hint: "People and their photos",
-    description: "Everyone enrolled for verification, their ID/photo and whether their first live scan has been matched.",
+    description: "Everyone enrolled for verification, their ID/photo and whether their first live scan has been matched. Click a row to open its details.",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="8" r="4" />
@@ -32,7 +32,7 @@ const SECTIONS: { id: Section; label: string; hint: string; description: string;
       "system comes back as Unassigned (same row, history kept) and must be assigned again. Reassign hands a system to a " +
       "different employee, and offboarding an employee deregisters their systems back to Unassigned. Revoking immediately " +
       "blocks a device from verifying and from re-authenticating (lost or retired machine). Delete removes a row for good " +
-      "(stale duplicate, retired machine); its check history stays with the employee.",
+      "(stale duplicate, retired machine); its check history stays with the employee. Click a row to open its details.",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="5" width="18" height="12" rx="2" />
@@ -48,7 +48,7 @@ const SECTIONS: { id: Section; label: string; hint: string; description: string;
       "Every scan with its live-person confidence, face match, review state and retained evidence. Missed covers " +
       "both a scan that was opened but not done and a work day on which an employee's system opened no check at " +
       "all (machine off); the latter is recorded by the server once the work window has closed. A missed scan says " +
-      "why the workstation was at the time — locked, asleep, shutting down, or open with no response.",
+      "why the workstation was at the time — locked, asleep, shutting down, or open with no response. Click a row to open its details.",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" />

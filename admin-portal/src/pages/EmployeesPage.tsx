@@ -134,6 +134,8 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
         {...tableFilters.tableProps}
         rows={employees}
         rowKey={(emp) => emp.id}
+        onRowClick={(emp) => setDetails(emp)}
+        rowLabel={(emp) => `Open ${emp.fullName}`}
         emptyText="No employees yet — click “Add employee” to create the first one."
         columns={[
           { key: "code", header: "Code", value: (emp) => emp.employeeCode },

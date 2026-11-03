@@ -4,6 +4,7 @@ import ActionMenu from "../components/ActionMenu";
 import AssignEmployeeDialog from "../components/AssignEmployeeDialog";
 import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
+import DeviceDetailsDialog from "../components/DeviceDetailsDialog";
 import { useStatsBar } from "../components/StatsBar";
 import { useTableFilters } from "../components/TableFilters";
 
@@ -17,6 +18,7 @@ export default function DevicesPage(props: { title: string; hint: string }) {
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [assigning, setAssigning] = useState<DeviceSummary | null>(null);
+  const [details, setDetails] = useState<DeviceSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -24,6 +26,8 @@ export default function DevicesPage(props: { title: string; hint: string }) {
     try {
       const [d, e] = await Promise.all([api.listDevices(), api.listEmployees()]);
       setDevices(d);
+      // Keep an open details popup on the fresh row; a deleted system closes it.
+      setDetails((current) => (current ? (d.find((x) => x.id === current.id) ?? null) : null));
       // All employees: the assign popup shows non-selectable ones (offboarded,
       // already assigned here) disabled with the reason, so a search never
       // looks broken just because somebody is filtered out.
@@ -94,6 +98,8 @@ export default function DevicesPage(props: { title: string; hint: string }) {
         {...tableFilters.tableProps}
         rows={devices}
         rowKey={(d) => d.id}
+        onRowClick={(d) => setDetails(d)}
+        rowLabel={(d) => `Open ${d.hostname ?? d.id}`}
         emptyText="No systems registered yet."
         columns={[
           { key: "hostname", header: "Hostname", value: (d) => d.hostname ?? "—" },
@@ -148,6 +154,10 @@ export default function DevicesPage(props: { title: string; hint: string }) {
                   label={`Actions for ${d.hostname ?? d.id}`}
                   items={[
                     {
+                      label: "Details", onClick: () => setDetails(d),
+                      title: "Registration record, assigned employee and the checks that ran on this system",
+                    },
+                    {
                       label: "Reassign to another employee", onClick: () => setAssigning(d),
                       disabled: d.employeeId === null || d.status === "REVOKED",
                       title: "Hand this system to a different employee",
@@ -167,6 +177,19 @@ export default function DevicesPage(props: { title: string; hint: string }) {
           },
         ]}
       />
+
+      {details && (
+        <DeviceDetailsDialog
+          device={details}
+          employee={employees.find((e) => e.id === details.employeeId) ?? null}
+          busy={busy}
+          onClose={() => setDetails(null)}
+          // The popup stays open behind the picker, so it shows the new assignment once it is made.
+          onAssign={() => setAssigning(details)}
+          onRevoke={() => revoke(details)}
+          onDelete={() => remove(details)}
+        />
+      )}
 
       {assigning && (
         <AssignEmployeeDialog
