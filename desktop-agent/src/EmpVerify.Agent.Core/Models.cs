@@ -1,6 +1,11 @@
 namespace EmpVerify.Agent.Core;
 
-/// <summary>Enrollment = the first live scan after assignment, matched against the uploaded ID/photo.</summary>
+/// <summary>
+/// Enrollment = the first live scan after assignment, matched against the uploaded
+/// ID/photo. SessionStart is part of the server contract but the Windows agent no
+/// longer opens one: signing in is not by itself a reason to scan an employee (see
+/// <see cref="Scheduling.StartupScan"/>).
+/// </summary>
 public enum CheckType { Enrollment, SessionStart, Periodic, Liveness, Escalation }
 
 public enum CheckStatus { Pending, Match, Check, NoFace, MultipleFaces, VerificationError, Expired }

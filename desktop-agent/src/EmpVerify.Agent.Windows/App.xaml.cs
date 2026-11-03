@@ -9,6 +9,11 @@ namespace EmpVerify.Agent.Windows;
 /// is open, and closing the window hides to tray rather than exiting. The window is
 /// never shown automatically — installing or signing in starts it silently in the
 /// background; the employee opens it from the tray icon if they want to.
+///
+/// An installed (packaged) agent runs for as long as the PC is on: it starts at
+/// every sign-in, the tray menu has no Exit, and the installer's scheduled task
+/// starts it again if the process goes away. Stopping it is an administrator
+/// action — uninstalling.
 /// </summary>
 public partial class App : System.Windows.Application
 {
@@ -43,8 +48,14 @@ public partial class App : System.Windows.Application
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.Add("Open", null, (_, _) => ShowWindow());
         menu.Items.Add("Verify now", null, async (_, _) => await _window!.VerifyNowFromTrayAsync());
-        menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("Exit", null, (_, _) => ExitApp());
+        // An installed agent has no Exit: an administrator installed it, and only an
+        // administrator stops it (by uninstalling). The dev exe keeps Exit so a
+        // developer can close the thing they just launched.
+        if (!Services.StartupManager.IsPackaged())
+        {
+            menu.Items.Add(new WinForms.ToolStripSeparator());
+            menu.Items.Add("Exit", null, (_, _) => ExitApp());
+        }
         _trayIcon.ContextMenuStrip = menu;
         _trayIcon.DoubleClick += (_, _) => ShowWindow();
 

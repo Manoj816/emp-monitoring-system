@@ -22,8 +22,12 @@ reference image. Independent of Teams/Zoom. Full design:
 - All verification decisions are **server-side**; the agent never computes or
   reports its own result.
 - Two check paths: **passive** periodic captures (DetectFaces + CompareFaces) and
-  **interactive** Face Liveness at session start/escalation. Liveness cannot run
-  silently; the agent must release the camera before the browser flow.
+  **interactive** Face Liveness. Liveness cannot run silently; the agent must
+  release the camera before the browser flow.
+- The agent opens a scan at start-up only for a system that still owes its
+  **enrollment scan** (fresh install, or a re-enrollment an admin asked for). An
+  enrolled system starts silently — signing in is not a reason to scan somebody;
+  the day's check comes at its random time.
 - Checks are **transparent**: visible prompt, OS camera indicator, no covert capture.
 - `CHECK` is a human-review status, never an automatic verdict.
 - Evidence is kept only for CHECK/flagged events; MATCH captures are discarded.

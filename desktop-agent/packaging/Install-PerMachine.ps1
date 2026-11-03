@@ -17,8 +17,9 @@
     4. Write the provisioning token + backend URL (HKLM\SOFTWARE\EmpVerify) so the
        agent registers this system by itself on first launch.
     5. Provision the MSIX for every user on the PC (a standard user cannot remove
-       a provisioned package), install it for the current user, and add a
-       machine-wide run-at-sign-in entry so it comes back after every restart.
+       a provisioned package), install it for the current user, and set it to run
+       at every sign-in (machine-wide Run entry plus a scheduled task that also
+       restarts it if the process is closed), so it comes back after every restart.
     6. Start the agent as the signed-in user.
 
   Defaults are picked up from the folder this script is in, so the bundle that
@@ -44,6 +45,9 @@ param(
 $ErrorActionPreference = "Stop"
 $PackageName = "EmpVerify.Agent"
 $AppId = "EmpVerifyAgent"
+$TaskName = "EmpVerify Agent"
+$TaskDescription = "Starts the EmpVerify identity-verification agent at sign-in and keeps it running."
+$WatchdogMinutes = 10
 $MinBuild = 17763
 $WebView2Bootstrapper = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"  # Microsoft Evergreen bootstrapper (permanent link)
 $WebView2ClientKey = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
@@ -210,14 +214,51 @@ Add-AppxPackage -Path $MsixPath -ForceApplicationShutdown -ForceUpdateFromAnyVer
 $pkg = Get-AppxPackage -Name $PackageName
 Write-Host "  installed for this user: $($pkg.PackageFullName)"
 
-# Run at every sign-in, for every user, after every restart. The package already
-# declares a startup task (Settings > Apps > Startup); this machine-wide entry is
-# the belt-and-braces a standard user cannot switch off. The agent is single
-# instance, so the two never run side by side.
+# Run at every sign-in, for every user, after every restart. Three mechanisms,
+# because each one alone can be switched off: the package's own startup task
+# (Settings > Apps > Startup), a machine-wide Run entry, and a scheduled task that
+# also re-launches the agent if it is ever killed. The agent is single instance,
+# so they never run side by side.
 $launch = "shell:AppsFolder\$($pkg.PackageFamilyName)!$AppId"
 $runKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
 Set-ItemProperty -Path $runKey -Name "EmpVerifyAgent" -Value "explorer.exe $launch"
 Write-Host "  run-at-sign-in entry set (HKLM Run: EmpVerifyAgent)"
+
+# The scheduled task is what makes "on whenever the PC is on" true rather than
+# hopeful: it starts the agent at sign-in for any user, and the repeating trigger
+# starts it again within $WatchdogMinutes if the process was closed (Task Manager,
+# a crash). It runs as the signed-in user, never elevated. Removed by Uninstall.ps1.
+# Launching through explorer.exe is how a packaged app is started from a task:
+# the WindowsApps path is version-stamped and ACL'd, the shell: alias is stable.
+$usersGroup = (New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-545")
+    ).Translate([System.Security.Principal.NTAccount]).Value
+$action = New-ScheduledTaskAction -Execute "explorer.exe" -Argument $launch
+$atLogon = New-ScheduledTaskTrigger -AtLogOn
+$atLogon.Delay = "PT30S"   # let the shell finish signing in first
+$watchdog = New-ScheduledTaskTrigger -Once -At (Get-Date).Date.AddMinutes(1) `
+    -RepetitionInterval (New-TimeSpan -Minutes $WatchdogMinutes) -RepetitionDuration ([TimeSpan]::MaxValue)
+$principal = New-ScheduledTaskPrincipal -GroupId $usersGroup -RunLevel Limited
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
+function Register-AgentTask($Triggers) {
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $Triggers `
+        -Principal $principal -Settings $settings -Description $TaskDescription -Force | Out-Null
+}
+try {
+    Register-AgentTask @($atLogon, $watchdog)
+    Write-Host "  scheduled task '$TaskName' registered (at sign-in, re-checked every $WatchdogMinutes min)"
+} catch {
+    # Some Task Scheduler builds reject an open-ended repetition. The sign-in
+    # trigger is the part that matters; register it without the watchdog.
+    $reason = $_.Exception.Message
+    try {
+        Register-AgentTask @($atLogon)
+        Write-Host "  scheduled task '$TaskName' registered (at sign-in)"
+        Write-Warning "The repeating watchdog trigger was refused ($reason); the agent still starts at every sign-in."
+    } catch {
+        Write-Warning "Could not register the scheduled task ($($_.Exception.Message)). The agent still starts at sign-in via the Run entry and the package's startup task."
+    }
+}
 
 # ---------------------------------------------------------------- 6. launch
 Write-Host "[6/6] Starting the agent..."

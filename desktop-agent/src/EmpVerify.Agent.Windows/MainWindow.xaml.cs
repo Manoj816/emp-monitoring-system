@@ -16,10 +16,13 @@ namespace EmpVerify.Agent.Windows;
 /// Agent window. Registration is either device-first (tenant provisioning token:
 /// the device self-registers as unassigned and waits for an admin to link it to an
 /// employee) or per-employee (enrollment token, manual or provisioned). Once
-/// assigned, it runs a full face scan at session start and one randomized
-/// interactive check per working day, plus on-demand/demo checks. Every check
-/// opens the agent's own browser window — nothing is captured silently. Closing
-/// the window hides to the tray; checks keep running.
+/// assigned, it runs one randomized interactive check per working day, plus
+/// on-demand/demo checks. The only scan the agent opens by itself at start-up is
+/// the enrollment scan of a system that still owes one (a fresh install, or a
+/// re-enrollment the administrator asked for); an enrolled system starts silently
+/// and is checked at the day's random time. Every check opens the agent's own
+/// browser window — nothing is captured silently. Closing the window hides to the
+/// tray; checks keep running.
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -45,9 +48,10 @@ public partial class MainWindow : Window
     private DateTimeOffset? _demoScheduledAt;
     private bool _awaitingAssignment;
     private bool _checkRunning;
-    private bool _sessionStartDone;
-    private DateTimeOffset? _sessionStartRetryAt;
-    private int _sessionStartAttempts;
+    /// <summary>The start-up enrollment scan has been completed (or was not due) in this run.</summary>
+    private bool _startupScanDone;
+    private DateTimeOffset? _startupScanRetryAt;
+    private int _startupScanAttempts;
     private DateTimeOffset? _checkRetryAt;
     private bool _checkRetryIsDemo;
     private int _checkRetriesLeft;
@@ -83,7 +87,16 @@ public partial class MainWindow : Window
     public void AttachTray(WinForms.NotifyIcon trayIcon) => _trayIcon = trayIcon;
 
     /// <summary>Connects and starts scheduling. Called once at startup (shown or background).</summary>
-    public async Task InitializeAsync() => await TryConnectAsync();
+    public async Task InitializeAsync()
+    {
+        // Come back at every sign-in whatever state this system is in — including
+        // registered-but-not-yet-assigned, and "the server was unreachable just now".
+        // Previously this waited until the system was assigned and active, so a PC
+        // restarted before an administrator got to it never started the agent again.
+        // No-op for the MSIX install, where the package and the installer own startup.
+        StartupManager.EnsureEnabled();
+        await TryConnectAsync();
+    }
 
     /// <summary>Tray "Verify now": the click is the consent.</summary>
     public async Task VerifyNowFromTrayAsync() => await RunCheckAsync(CheckType.Periodic);
@@ -228,7 +241,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        await ActivateAsync();
+        await ActivateAsync(atStartup: true);
     }
 
     /// <summary>Registered but not yet linked to an employee: poll until an admin assigns it.</summary>
@@ -242,16 +255,19 @@ public partial class MainWindow : Window
         _timer.Start();
     }
 
-    /// <summary>Assigned and active: load the policy, plan the day, and run the session-start scan.</summary>
-    private async Task ActivateAsync()
+    /// <summary>
+    /// Assigned and active: load the policy and plan the day. <paramref name="atStartup"/>
+    /// is true only for the agent's own start; an assignment or reassignment that
+    /// arrives while it is already running re-plans the day but opens nothing, because
+    /// the moment an administrator clicks Assign is not necessarily a moment the
+    /// employee is at the machine.
+    /// </summary>
+    private async Task ActivateAsync(bool atStartup = false)
     {
         try
         {
             _policy = await _api!.GetPolicyAsync(CancellationToken.None);
             _flow = new VerificationFlow(_api, _camera, _notifications, _browser, _workstation);
-
-            // Agent is active: make sure it starts at login (no-op when MSIX-packaged).
-            StartupManager.EnsureEnabled();
 
             // The day's check lands at a random time in what is left of the work window —
             // never at the moment of assignment, which may not be when the employee is there.
@@ -284,35 +300,39 @@ public partial class MainWindow : Window
             return;
         }
 
-        // First check of the session ("opening the laptop"): a full face scan. It is
-        // required, so it keeps reopening until a scan completes (see RunSessionStartAsync).
-        if (_policy is { LivenessOnSessionStart: true } && !_sessionStartDone)
+        // A system that still owes its enrollment scan is scanned now, so a freshly
+        // installed (or re-enrolled) machine does not sit unverified until the day's
+        // random check. An already enrolled system opens nothing at start-up: it is
+        // checked once at a random time during the work day, like every other day.
+        if (atStartup && StartupScan.IsDue(_policy, _deviceState, _startupScanDone))
         {
-            await RunSessionStartAsync();
+            await RunEnrollmentScanAsync();
         }
     }
 
     /// <summary>
-    /// The required session-start scan. If the employee closes the window, cancels,
-    /// or lets it time out, it reopens after RetryMinutes — and keeps doing so until
-    /// a scan completes. A closed window never silently satisfies the requirement.
+    /// The enrollment scan this system still owes, run at start-up. If the employee
+    /// closes the window, cancels, or lets it time out, it reopens after RetryMinutes —
+    /// and keeps doing so until a scan completes. A closed window never silently
+    /// satisfies the requirement. Once a scan has been done it is not asked again:
+    /// the system is enrolled, and later runs of the agent start silently.
     /// </summary>
-    private async Task RunSessionStartAsync()
+    private async Task RunEnrollmentScanAsync()
     {
-        _sessionStartRetryAt = null;
-        _sessionStartAttempts++;
-        Log(_sessionStartAttempts == 1
-            ? "Session start: full face scan required."
-            : $"Session start: full face scan still required (attempt {_sessionStartAttempts}).");
-        await RunCheckAsync(CheckType.SessionStart);
-        if (_sessionStartDone)
+        _startupScanRetryAt = null;
+        _startupScanAttempts++;
+        Log(_startupScanAttempts == 1
+            ? "This system still needs its enrollment scan — opening it now."
+            : $"Enrollment scan still required (attempt {_startupScanAttempts}).");
+        await RunCheckAsync(CheckType.Enrollment);
+        if (_startupScanDone)
         {
             return;
         }
         var retryAt = DateTimeOffset.Now.AddMinutes(Math.Max(1, _settings.RetryMinutes));
-        _sessionStartRetryAt = retryAt;
-        Log("Session-start scan not completed — it reopens shortly. Click 'Liveness check' to do it now.");
-        SetStatus("Face scan required — it reopens shortly.");
+        _startupScanRetryAt = retryAt;
+        Log("Enrollment scan not completed — it reopens shortly. Click 'Liveness check' to do it now.");
+        SetStatus("Enrollment scan required — it reopens shortly.");
     }
 
     /// <summary>
@@ -531,10 +551,10 @@ public partial class MainWindow : Window
             LogNextCheck();
         }
 
-        // A missed session-start scan is required: reopen it when its retry time arrives.
-        if (!_sessionStartDone && _sessionStartRetryAt is { } retryAt && now >= retryAt)
+        // A missed enrollment scan is required: reopen it when its retry time arrives.
+        if (!_startupScanDone && _startupScanRetryAt is { } retryAt && now >= retryAt)
         {
-            await RunSessionStartAsync();
+            await RunEnrollmentScanAsync();
             return;
         }
 
@@ -707,7 +727,7 @@ public partial class MainWindow : Window
         _planDate = DateTime.MinValue;
         _checkRetryAt = null;
         _demoScheduledAt = null;
-        _sessionStartRetryAt = null;
+        _startupScanRetryAt = null;
         _ = SetCheckButtonsEnabled(false);
         DemoScheduleButton.IsEnabled = false;
         DemoClearButton.IsEnabled = false;
@@ -759,8 +779,8 @@ public partial class MainWindow : Window
     /// reference); the photo capture is the opt-in fallback. The token is refreshed
     /// first so the agent never 403s mid-session. A check that ends without a scan
     /// (window closed, cancelled, timed out) is logged with why, and a scheduled
-    /// one is offered again; any completed scan also satisfies the session-start
-    /// requirement.
+    /// one is offered again; any completed scan also settles a start-up enrollment
+    /// scan that is still outstanding.
     /// </summary>
     private async Task<FlowResult?> RunCheckAsync(
         CheckType type, bool scheduled = false, bool forceLiveness = false, bool demo = false)
@@ -799,11 +819,13 @@ public partial class MainWindow : Window
                 {
                     Log("Enrollment complete: this scan is now the second reference for daily checks.");
                 }
-                if (!_sessionStartDone
-                    && (type == CheckType.SessionStart || result.Result.LivenessConfidence is not null))
+                // Any completed face scan settles the one the agent opened at start-up:
+                // the server has the result, so it is not asked for twice.
+                if (!_startupScanDone
+                    && (type == CheckType.Enrollment || result.Result.LivenessConfidence is not null))
                 {
-                    _sessionStartDone = true;
-                    _sessionStartRetryAt = null;
+                    _startupScanDone = true;
+                    _startupScanRetryAt = null;
                 }
             }
             else if (scheduled)

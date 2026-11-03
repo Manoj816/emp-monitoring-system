@@ -24,12 +24,13 @@ deploys, not for the demo).
 
 ## 2. Remove the current agent (start from scratch)
 
-1. Right-click the EmpVerify tray icon → **Exit**.
-2. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.14.0.0`
+1. Open `C:\EMP Monitoring System\desktop-agent\packaging\out\setup-0.14.0.0`
    and double-click **`Uninstall-EmpVerify.cmd`** (accept the administrator prompt).
-   This removes the app for all users, the run-at-sign-in entry, and keeps the
-   provisioning token so the next install registers again without typing anything.
-3. Nothing else to clean up: every run of the installer makes the agent discard
+   This removes the app for all users, the scheduled task and the run-at-sign-in
+   entry, then stops the agent, and keeps the provisioning token so the next
+   install registers again without typing anything. Do not look for Exit in the
+   tray menu — an installed agent has none; uninstalling is how it is stopped.
+2. Nothing else to clean up: every run of the installer makes the agent discard
    its stored device identity and register the system again, so it comes back
    as **Unassigned** in the Devices tab (same row, history kept), you assign the
    employee again, and the first check after that is the enrollment scan.

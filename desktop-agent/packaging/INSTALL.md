@@ -27,16 +27,26 @@ present on Windows 11 and most Windows 10 PCs) when it is missing.
    A window shows each step; it stays open so you can read the result.
 4. The agent starts in the background and registers this PC as **Unassigned**. It
    never opens a window of its own — there is only a tray icon and a short
-   notification; double-click the tray icon to see its activity log.
+   notification; double-click the tray icon to see its activity log. The tray menu
+   has no Exit: an administrator installed the agent, and uninstalling is how an
+   administrator stops it.
 5. In the admin portal, open **Devices**, find the PC by its hostname and **Assign** it
    to the employee. From then on the agent runs the daily check at a random time
    inside the work window; the first check is the enrollment scan.
 
-The agent runs in the background every day and comes back after every restart:
-it starts at sign-in through the package's startup task (Settings > Apps > Startup
-shows it) and through a machine-wide run entry the installer adds, which a standard
-user cannot switch off. Only one copy runs at a time. A standard user cannot
-uninstall a per-machine (provisioned) package.
+The agent runs in the background every day and comes back after every restart. It
+starts at sign-in three ways, so switching one off does not stop it: the package's
+own startup task (Settings > Apps > Startup shows it), a machine-wide run entry,
+and the **EmpVerify Agent** scheduled task, which also starts it again within ten
+minutes if the process is ever closed. Only one copy runs at a time — the extra
+triggers do nothing while it is already running. A standard user cannot uninstall
+a per-machine (provisioned) package, and `Uninstall.ps1` removes the task and the
+run entry before it stops the agent.
+
+Employees are scanned once a day at a random time inside the work window. A
+sign-in or a restart does not trigger a scan on its own; the one exception is a
+system that still owes its enrollment scan (a fresh install, or a re-enrollment an
+administrator asked for), which is scanned as soon as the agent starts.
 
 ## Command-line use (PowerShell, elevated or not — it elevates itself)
 
