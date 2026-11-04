@@ -144,6 +144,36 @@ public class NoCheckService {
         return recorded;
     }
 
+    /**
+     * What the server actually knows about that day, rather than what it suggests.
+     *
+     * The agent signs in roughly every minute while it runs, and every sign-in
+     * stamps the system's last-seen time, so the last contact answers the question
+     * that matters: was the agent alive during the work window? "The machine was
+     * off" and "the machine was in use with no agent running on it" look identical
+     * from here, and saying the first of those as though it were established is how
+     * an administrator ends up chasing the wrong thing.
+     */
+    private String whatIsKnown(Instant lastSeen, Instant windowStart, Instant windowEnd) {
+        if (lastSeen == null) {
+            return "The agent has never reached EmpVerify from this system, so it has never run on it.";
+        }
+        String moment = lastSeen.atZone(zone).format(MOMENT);
+        if (lastSeen.isBefore(windowStart)) {
+            return "The agent last reached EmpVerify " + moment + ", before the window opened, and not once "
+                    + "during it. It signs in about every minute while it runs, so either the machine was off "
+                    + "or the agent was not running on it. If the machine was in use that day, it is the agent "
+                    + "that was not running: check that it starts at sign-in.";
+        }
+        if (!lastSeen.isAfter(windowEnd)) {
+            return "The agent was in touch during the window, last at " + moment + ", so the machine was on and "
+                    + "the agent running on it. Something other than the machine being away stopped the check "
+                    + "from being opened.";
+        }
+        return "The agent was last in touch " + moment + ", after the window had closed. Whether it was also "
+                + "running during the window cannot be told from the last-contact time alone.";
+    }
+
     private void record(
             Employee employee, List<Device> systems, CheckPolicy policy, LocalDate day, Instant windowEnd, Instant now) {
         Instant lastSeen = systems.stream()
@@ -151,16 +181,12 @@ public class NoCheckService {
                 .filter(Objects::nonNull)
                 .max(Comparator.naturalOrder())
                 .orElse(null);
-        // State what is known, not what it suggests: all the server can see is that
-        // nothing was opened, plus when the system last reached it. An administrator
-        // reads the last-online time and draws their own conclusion.
+        Instant windowStart = day.atTime(policy.getWorkWindowStart()).atZone(zone).toInstant();
         String detail = String.format(Locale.ROOT,
                 "No check ran on %s: no system of this employee opened a check during the work window "
                         + "(%s-%s %s). %s",
                 day.format(DAY), policy.getWorkWindowStart(), policy.getWorkWindowEnd(), zone,
-                lastSeen == null
-                        ? "The system has never been online."
-                        : "The system was last online " + lastSeen.atZone(zone).format(MOMENT) + ".");
+                whatIsKnown(lastSeen, windowStart, windowEnd));
 
         var check = new VerificationCheck();
         check.setDeviceId(systems.get(0).getId());

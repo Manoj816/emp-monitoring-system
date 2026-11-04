@@ -197,6 +197,8 @@ public class VerificationService {
         LOCKED("the workstation was locked at the scheduled time, so the identity check could not be shown"),
         UNATTENDED("nobody was at an unlocked workstation between the check coming due and the work window "
                 + "closing, so the identity check was never shown to anybody"),
+        MACHINE_AWAY("the machine was asleep or the agent was not running at the moment planned for this "
+                + "check, and the work window had closed by the time it could have been shown"),
         ASLEEP("the machine went to sleep during the identity check, so it was not completed"),
         SHUTDOWN("the machine was shutting down or the user was signing out, so the identity check was not completed");
 

@@ -1,6 +1,7 @@
 package com.empverify.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -88,8 +89,66 @@ class NoCheckServiceTest {
         assertEquals(system.getId(), row.getDeviceId());
         assertEquals(at(MONDAY, LocalTime.of(17, 0)), row.getRequestedAt(), "dated at the end of the work window");
         assertTrue(row.getErrorDetail().contains("Mon, Nov 2, 2026"), row.getErrorDetail());
-        assertTrue(row.getErrorDetail().contains("last online Nov 1, 2026 4:12 PM"), row.getErrorDetail());
+        assertTrue(row.getErrorDetail().contains("Nov 1, 2026 4:12 PM"), row.getErrorDetail());
         verify(audit).record(eq("system"), eq("NO_CHECK_RECORDED"), eq("check"), eq(row.getId().toString()), any());
+    }
+
+    // ---- what the row says happened ------------------------------------------
+    //
+    // The agent signs in about every minute while it runs, so the last-seen time
+    // tells an administrator whether it was alive during the window. A machine in
+    // use with no agent on it must not be reported as a machine that was off.
+
+    private String detailAfterSweep() {
+        when(checks.existsByEmployeeIdAndRequestedAtGreaterThanEqualAndRequestedAtLessThan(
+                eq(employee.getId()), any(), any())).thenReturn(false);
+        service.recordNoCheckDays(at(MONDAY, LocalTime.of(17, 15)));
+        var saved = ArgumentCaptor.forClass(VerificationCheck.class);
+        verify(checks).save(saved.capture());
+        return saved.getValue().getErrorDetail();
+    }
+
+    @Test
+    void noContactDuringTheWindowDoesNotClaimTheMachineWasOff() {
+        system.setLastSeenAt(at(MONDAY.minusDays(1), LocalTime.of(21, 27))); // the evening before
+
+        String detail = detailAfterSweep();
+
+        assertTrue(detail.contains("before the window opened"), detail);
+        assertTrue(detail.contains("either the machine was off or the agent was not running on it"), detail);
+        // The point of the rewrite: an employee who used their PC all day is not
+        // told the machine was off, and the administrator is pointed at the agent.
+        assertTrue(detail.contains("check that it starts at sign-in"), detail);
+    }
+
+    @Test
+    void contactDuringTheWindowMeansTheAgentWasRunningAndSaysSo() {
+        system.setLastSeenAt(at(MONDAY, LocalTime.of(13, 40))); // mid-window
+
+        String detail = detailAfterSweep();
+
+        assertTrue(detail.contains("in touch during the window"), detail);
+        assertTrue(detail.contains("the machine was on and the agent running"), detail);
+        assertFalse(detail.contains("was off"), detail);
+    }
+
+    @Test
+    void contactOnlyAfterTheWindowIsNotTreatedAsContactDuringIt() {
+        system.setLastSeenAt(at(MONDAY, LocalTime.of(17, 12))); // after the window closed
+
+        String detail = detailAfterSweep();
+
+        assertTrue(detail.contains("after the window had closed"), detail);
+        assertTrue(detail.contains("cannot be told from the last-contact time alone"), detail);
+    }
+
+    @Test
+    void aSystemThatHasNeverBeenOnlineSaysThat() {
+        system.setLastSeenAt(null);
+
+        String detail = detailAfterSweep();
+
+        assertTrue(detail.contains("has never reached EmpVerify"), detail);
     }
 
     @Test

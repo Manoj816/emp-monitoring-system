@@ -132,10 +132,10 @@ public partial class MainWindow : Window
         if (credentials is not null && installId is not null
             && !string.Equals(installId, _settings.RegisteredInstallId, StringComparison.Ordinal))
         {
-            // The installer has run since this system registered. To the administrator
-            // a reinstall is a new system: it comes back as Unassigned and is assigned
-            // and enrolled again, so the stored identity is dropped here.
-            Log("The agent was reinstalled — registering this system again.");
+            // The id changes only when an administrator asks for it (the installer's
+            // -ResetIdentity, a re-image, a PC handed to someone else). A plain
+            // upgrade leaves it alone and this system keeps its employee.
+            Log("An administrator reset this system's registration — registering it again.");
             await _credentialStore.DeleteAsync(CancellationToken.None);
             credentials = null;
         }
@@ -612,6 +612,15 @@ public partial class MainWindow : Window
         }
         _lastHandled = now;
         _checkRetriesLeft = _settings.MissedCheckRetries;
+
+        // The slot is only now being reached because the machine slept through it.
+        // Inside the window the check simply runs late; past it, a scan would be
+        // outside the hours the employee is checked in, so record what happened.
+        if (LateSlot.TooLateToShow(now, WindowEnd(now)))
+        {
+            await RecordSleptThroughAsync(due[0], now);
+            return;
+        }
         await RunScheduledCheckAsync(demo: false);
     }
 
@@ -743,6 +752,37 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Today's check was planned for a moment the machine slept through, and by the
+    /// time the agent could act the work window had closed. The employee was not
+    /// asked anything and nothing was shown to an empty desk: this says exactly
+    /// that, instead of the day quietly becoming "no check ran, machine was off".
+    /// </summary>
+    private async Task RecordSleptThroughAsync(DateTimeOffset due, DateTimeOffset now)
+    {
+        var windowEnd = WindowEnd(now);
+        var note = $"The check was planned for {due:HH:mm}, but the agent was not running at that moment and "
+            + $"only got to it at {now:HH:mm}, after the work window closed at {windowEnd:HH:mm}.";
+        note += _workstation.HasSleptSince(WindowStart(now))
+            ? " The machine slept at some point after the window opened, which is what it missed the check in."
+            : " The machine did not report sleeping, so something else stopped the agent from running then.";
+        try
+        {
+            await EnsureAuthenticatedAsync(CancellationToken.None);
+            var type = await ResolveScheduledCheckTypeAsync();
+            var check = await _api!.OpenCheckAsync(type, CancellationToken.None);
+            await _api.CancelCheckAsync(check.CheckId, "machine_away", CancellationToken.None, note);
+            NetworkOk();
+            Log($"{Label(type)} missed: {note}");
+            SetStatus($"Last check: missed (the machine was away) at {DateTime.Now:HH:mm}.");
+        }
+        catch (Exception ex)
+        {
+            // Nothing reached the server, so nothing was recorded: never claim it was.
+            NoteNetworkFailure(ex, "Could not record the check the machine slept through");
+        }
+    }
+
     /// <summary>What the agent saw while it held the check, for the administrator.</summary>
     private string HeldMissNote(DeferredCheck held)
     {
@@ -757,6 +797,10 @@ public partial class MainWindow : Window
         }
         return note;
     }
+
+    /// <summary>Start of today's work window, in local time.</summary>
+    private DateTimeOffset WindowStart(DateTimeOffset now) =>
+        new(now.Date + _policy!.WorkWindowStart.ToTimeSpan(), now.Offset);
 
     /// <summary>End of today's work window, in local time.</summary>
     private DateTimeOffset WindowEnd(DateTimeOffset now) =>

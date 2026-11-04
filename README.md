@@ -33,6 +33,13 @@ reference image. Independent of Teams/Zoom. Full design:
   the check and opens it shortly after the employee is back (after a short random
   delay, so it is not simply "the moment I unlock"). It becomes a miss only if the
   window closes first, and the record then states what was observed, never a guess.
+- A slot the machine **slept through** is run late while the window is still open,
+  and recorded as the day's miss once it has closed. A face scan is never opened
+  outside the hours the employee is checked in.
+- A record never asserts what the server cannot see. "No check was opened" and
+  "the machine was off" are different claims: the agent signs in about every
+  minute, so the last-contact time is what separates a machine nobody used from a
+  machine that was in use with no agent running on it.
 - Checks are **transparent**: visible prompt, OS camera indicator, no covert capture.
 - `CHECK` is a human-review status, never an automatic verdict.
 - Evidence is kept only for CHECK/flagged events; MATCH captures are discarded.

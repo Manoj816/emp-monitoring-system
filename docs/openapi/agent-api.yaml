@@ -332,8 +332,10 @@ paths:
         but why: reason=closed (employee closed the window), reason=timeout (the
         screen was open but nobody completed the scan), reason=unattended (the check
         came due with nobody at an unlocked workstation and the work window closed
-        before anybody came back), reason=locked (the screen was locked at the
-        scheduled time), reason=asleep (the machine slept during the check),
+        before anybody came back), reason=machine_away (the machine slept through
+        the moment planned for the check and the work window had closed by the time
+        the agent could act), reason=locked (the screen was locked at the scheduled
+        time), reason=asleep (the machine slept during the check),
         reason=shutdown (the machine was shutting down or signing out). The check
         becomes EXPIRED with the reason recorded — never a check that silently never
         finished. A missed check is not, by itself, a finding against the employee.
@@ -343,13 +345,17 @@ paths:
 
         A screen that is merely locked when the check comes due is not reported here
         at all: the agent holds the check and opens it when the employee is back, so
-        a break away from the desk never becomes a missed check.
+        a break away from the desk never becomes a missed check. A slot the machine
+        slept through is run late while the window is still open; a face scan is
+        never opened outside the hours the employee is checked in.
       parameters:
         - { name: checkId, in: path, required: true, schema: { type: string, format: uuid } }
         - name: reason
           in: query
           required: false
-          schema: { type: string, enum: [closed, timeout, unattended, locked, asleep, shutdown, cancelled, error] }
+          schema:
+            type: string
+            enum: [closed, timeout, unattended, machine_away, locked, asleep, shutdown, cancelled, error]
         - name: note
           in: query
           required: false

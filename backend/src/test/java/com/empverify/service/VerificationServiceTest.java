@@ -353,6 +353,16 @@ class VerificationServiceTest {
     }
 
     @Test
+    void machineAwayIsAboutTheMomentBeingMissedNotTheEmployee() {
+        assertEquals(
+                VerificationService.CancelReason.MACHINE_AWAY,
+                VerificationService.CancelReason.parse("machine_away"));
+        String detail = VerificationService.CancelReason.MACHINE_AWAY.detail().toLowerCase();
+        assertTrue(detail.contains("asleep"), detail);
+        assertTrue(detail.contains("work window had closed"), detail);
+    }
+
+    @Test
     void theAgentsNoteIsKeptSoTheAdministratorReadsWhatWasObserved() {
         var check = pendingCheck("n", Instant.now().plusSeconds(60));
         when(checks.findById(check.getId())).thenReturn(Optional.of(check));
