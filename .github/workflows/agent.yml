@@ -43,16 +43,21 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      # No -Version: the package version is the one declared in AppxManifest.xml,
+      # so what CI builds is what the repo says the version is.
       - name: Build MSIX (dev-signed)
         working-directory: desktop-agent/packaging
         shell: pwsh
         run: ./build-msix.ps1
 
-      - name: Upload MSIX artifact
+      # The whole install bundle, not the bare .msix: on its own the package is
+      # not installable without the trust certificate and the install scripts
+      # that build-msix.ps1 zips alongside it.
+      - name: Upload install bundle
         uses: actions/upload-artifact@v4
         with:
-          name: empverify-agent-msix
-          path: desktop-agent/packaging/out/*.msix
+          name: empverify-agent-setup
+          path: desktop-agent/packaging/out/EmpVerify-Agent-Setup_*.zip
 
       # Production signing (uncomment once the code-signing certificate exists;
       # store it as base64 in secrets, never in the repo):
