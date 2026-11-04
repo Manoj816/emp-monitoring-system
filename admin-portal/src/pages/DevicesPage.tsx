@@ -5,7 +5,7 @@ import AssignEmployeeDialog from "../components/AssignEmployeeDialog";
 import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
 import DeviceDetailsDialog from "../components/DeviceDetailsDialog";
-import { useStatsBar } from "../components/StatsBar";
+import { useStatsBar, type StatItem } from "../components/StatsBar";
 import { useTableFilters } from "../components/TableFilters";
 
 function statusBadge(status: string): string {
@@ -13,6 +13,19 @@ function statusBadge(status: string): string {
   if (status === "PENDING") return "badge check";
   return "badge error"; // REVOKED
 }
+
+/**
+ * The plain text each filterable column holds for a row, in one place so the
+ * stat tiles count with the very expression the table filters on.
+ *
+ * Status carries the assignment too, which is why the tiles can go through it:
+ * the server only ever sets ACTIVE together with an employee and only ever
+ * clears the employee back to PENDING, so ACTIVE means assigned and PENDING
+ * means waiting for an administrator.
+ */
+const COLUMN_VALUE: Record<string, (d: DeviceSummary) => string> = {
+  status: (d) => d.status,
+};
 
 export default function DevicesPage(props: { title: string; hint: string }) {
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
@@ -58,12 +71,33 @@ export default function DevicesPage(props: { title: string; hint: string }) {
 
   const stats = useStatsBar({
     title: "System stats",
-    compute: () => [
-      { label: "Systems", value: devices.length },
-      { label: "Assigned", value: devices.filter((d) => d.employeeId !== null && d.status === "ACTIVE").length, tone: "ok" },
-      { label: "Unassigned", value: devices.filter((d) => d.employeeId === null && d.status !== "REVOKED").length, tone: "warn" },
-      { label: "Revoked", value: devices.filter((d) => d.status === "REVOKED").length, tone: "bad" },
-    ],
+    // Every tile opens the table on exactly the rows it counted, the way the
+    // check tiles do: the number and the list it leads to are the same query.
+    compute: () => {
+      const matching = (filters: Record<string, string>) =>
+        devices.filter((d) =>
+          Object.entries(filters).every(([column, want]) => COLUMN_VALUE[column](d) === want));
+
+      const tile = (label: string, filters: Record<string, string>, tone?: StatItem["tone"]): StatItem => {
+        const count = matching(filters).length;
+        return {
+          label,
+          value: count,
+          tone,
+          onClick: () => tableFilters.replace(filters),
+          title: Object.keys(filters).length === 0
+            ? "Clear the filters and show every system"
+            : `Show these ${count} in the table`,
+        };
+      };
+
+      return [
+        tile("Systems", {}),
+        tile("Assigned", { status: "ACTIVE" }, "ok"),
+        tile("Unassigned", { status: "PENDING" }, "warn"),
+        tile("Revoked", { status: "REVOKED" }, "bad"),
+      ];
+    },
   });
 
   function revoke(device: DeviceSummary) {
@@ -113,7 +147,7 @@ export default function DevicesPage(props: { title: string; hint: string }) {
           },
           {
             key: "status", header: "Status", filter: "select",
-            value: (d) => d.status,
+            value: COLUMN_VALUE.status,
             render: (d) => <span className={statusBadge(d.status)}>{d.status}</span>,
           },
           {

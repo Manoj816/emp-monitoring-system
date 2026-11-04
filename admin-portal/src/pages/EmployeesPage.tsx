@@ -6,8 +6,19 @@ import CardTitle from "../components/CardTitle";
 import ConfirmPhotoDialog from "../components/ConfirmPhotoDialog";
 import DataTable from "../components/DataTable";
 import EmployeeDetailsDialog from "../components/EmployeeDetailsDialog";
-import { useStatsBar } from "../components/StatsBar";
+import { useStatsBar, type StatItem } from "../components/StatsBar";
 import { useTableFilters } from "../components/TableFilters";
+
+/**
+ * The plain text each filterable column holds for a row, in one place so the
+ * stat tiles count with the very expression the table filters on. A tile then
+ * cannot show a number the rows it opens disagree with.
+ */
+const COLUMN_VALUE: Record<string, (emp: Employee) => string> = {
+  status: (emp) => emp.status,
+  photo: (emp) => (emp.hasReferenceImage ? "uploaded" : "missing"),
+  enrollment: (emp) => (emp.hasLiveEnrollment ? "done" : "pending first scan"),
+};
 
 export default function EmployeesPage(props: { title: string; hint: string }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -75,12 +86,33 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
 
   const stats = useStatsBar({
     title: "Employee stats",
-    compute: () => [
-      { label: "Employees", value: employees.length },
-      { label: "Active", value: employees.filter((e) => e.status === "ACTIVE").length, tone: "ok" },
-      { label: "Photo missing", value: employees.filter((e) => !e.hasReferenceImage).length, tone: "warn" },
-      { label: "Live enrollment done", value: employees.filter((e) => e.hasLiveEnrollment).length, tone: "ok" },
-    ],
+    // Every tile opens the table on exactly the rows it counted, the way the
+    // check tiles do: the number and the list it leads to are the same query.
+    compute: () => {
+      const matching = (filters: Record<string, string>) =>
+        employees.filter((emp) =>
+          Object.entries(filters).every(([column, want]) => COLUMN_VALUE[column](emp) === want));
+
+      const tile = (label: string, filters: Record<string, string>, tone?: StatItem["tone"]): StatItem => {
+        const count = matching(filters).length;
+        return {
+          label,
+          value: count,
+          tone,
+          onClick: () => tableFilters.replace(filters),
+          title: Object.keys(filters).length === 0
+            ? "Clear the filters and show every employee"
+            : `Show these ${count} in the table`,
+        };
+      };
+
+      return [
+        tile("Employees", {}),
+        tile("Active", { status: "ACTIVE" }, "ok"),
+        tile("Photo missing", { photo: "missing" }, "warn"),
+        tile("Live enrollment done", { enrollment: "done" }, "ok"),
+      ];
+    },
   });
 
   function requestFirstScan(employee: Employee) {
@@ -148,12 +180,12 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
           },
           {
             key: "status", header: "Status", filter: "select",
-            value: (emp) => emp.status,
+            value: COLUMN_VALUE.status,
             render: (emp) => <span className={`badge ${emp.status === "ACTIVE" ? "match" : "neutral"}`}>{emp.status}</span>,
           },
           {
             key: "photo", header: "ID / photo", filter: "select",
-            value: (emp) => (emp.hasReferenceImage ? "uploaded" : "missing"),
+            value: COLUMN_VALUE.photo,
             render: (emp) =>
               emp.hasReferenceImage
                 ? <span className="badge match">uploaded</span>
@@ -182,7 +214,7 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
           },
           {
             key: "enrollment", header: "Live enrollment", filter: "select",
-            value: (emp) => (emp.hasLiveEnrollment ? "done" : "pending first scan"),
+            value: COLUMN_VALUE.enrollment,
             render: (emp) => (
               <span title="The first live face scan that matches the uploaded ID/photo becomes the second reference.">
                 {emp.hasLiveEnrollment

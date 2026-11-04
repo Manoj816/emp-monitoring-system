@@ -11,6 +11,12 @@ export function useTableFilters(): {
   control: ReactNode;
   /** Merge filter values in and reveal the row (used by the stat tiles). */
   apply: (patch: Record<string, string>) => void;
+  /**
+   * Filter by exactly these and nothing else. What a stat tile needs: it counted
+   * across the whole table, so leaving an unrelated filter in place would show
+   * fewer rows than the number the reader just clicked. Empty clears.
+   */
+  replace: (filters: Record<string, string>) => void;
   tableProps: {
     showFilters: boolean;
     filters: Record<string, string>;
@@ -65,9 +71,18 @@ export function useTableFilters(): {
     }
   }
 
+  function replace(next: Record<string, string>) {
+    setFilters(next);
+    // Same rule as apply: clearing everything should not pop the filter row open.
+    if (Object.values(next).some((v) => v !== "")) {
+      setVisible(true);
+    }
+  }
+
   return {
     control,
     apply,
+    replace,
     tableProps: { showFilters: visible, filters, onFiltersChange: setFilters },
   };
 }
