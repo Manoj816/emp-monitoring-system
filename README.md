@@ -36,6 +36,13 @@ reference image. Independent of Teams/Zoom. Full design:
 - A slot the machine **slept through** is run late while the window is still open,
   and recorded as the day's miss once it has closed. A face scan is never opened
   outside the hours the employee is checked in.
+- **Reinstalling the agent never costs a PC its employee.** The install id marks
+  the machine, not the run; the installer keeps the registration it finds; and a
+  machine that re-registers from scratch (a re-image, a lost profile) keeps the
+  employee it was assigned to. It still gets a new secret and owes an enrollment
+  scan, so the employee's own face is judged against the stored reference before
+  that machine can produce an ordinary check. A revoked device is the exception
+  and comes back unassigned.
 - A check nobody answers can be **photographed once**, as the response window
   closes, and the frame kept with the missed check — so "the desk was empty" and
   "the employee ignored it" stop looking identical. It is off unless a deployment

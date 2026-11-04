@@ -160,10 +160,25 @@ public class DeviceService {
 
     /**
      * With a machine id, the same physical machine re-uses its existing row, so the
-     * fleet never lists a laptop twice and its check history stays together. The
-     * reinstall is otherwise a fresh start for the administrator: whatever the row
-     * was before (assigned, or revoked), it comes back as Unassigned, has to be
-     * assigned again, and the next check on it is the enrollment scan.
+     * fleet never lists a laptop twice and its check history stays together.
+     *
+     * <p>A machine that was already assigned <strong>keeps its employee</strong>.
+     * Reinstalling the agent is an IT action, not a change of who sits at the desk,
+     * and making an administrator re-assign every PC after every deployment is not
+     * something a fleet of any size can absorb. Only a machine that was never
+     * assigned stays unassigned.
+     *
+     * <p>A <strong>revoked</strong> device is the exception and comes back
+     * unassigned: revoking is a deliberate decision to stop trusting that machine,
+     * so re-admitting it has to be a deliberate decision too. It returns as PENDING
+     * rather than staying REVOKED because re-provisioning is the only route back —
+     * there is no un-revoke, and {@link #assignDevice} refuses a revoked device.
+     *
+     * <p>The device still gets a new secret and {@code enrolledAt} is still cleared,
+     * so the next check on it is the enrollment scan. That is what keeps the
+     * assignment safe to carry over: a re-provisioned machine has to put the
+     * employee's own face in front of the camera, judged here against the stored
+     * reference, before it can produce an ordinary check.
      */
     @Transactional
     public Registration provision(
@@ -177,8 +192,16 @@ public class DeviceService {
         var device = existing.orElseGet(Device::new);
         String previousStatus = existing.map(d -> d.getStatus().name()).orElse(null);
         UUID previousEmployee = device.getEmployeeId();
-        device.setEmployeeId(null);
-        device.setStatus(DeviceStatus.PENDING);
+        // Only a machine that was genuinely in service keeps its employee. Anything
+        // else — never assigned, or revoked — comes back as PENDING for somebody to
+        // decide about.
+        boolean keepsAssignment = device.getStatus() == DeviceStatus.ACTIVE && previousEmployee != null;
+        if (keepsAssignment) {
+            device.setStatus(DeviceStatus.ACTIVE);   // employee left in place
+        } else {
+            device.setEmployeeId(null);
+            device.setStatus(DeviceStatus.PENDING);
+        }
         device.setPlatform(DevicePlatform.valueOf(platform));
         device.setHostname(hostname);
         device.setAgentVersion(agentVersion);
@@ -193,7 +216,8 @@ public class DeviceService {
                 "{\"platform\":\"" + platform + "\",\"previousStatus\":"
                         + (previousStatus == null ? "null" : "\"" + previousStatus + "\"")
                         + ",\"previousEmployeeId\":"
-                        + (previousEmployee == null ? "null" : "\"" + previousEmployee + "\"") + "}");
+                        + (previousEmployee == null ? "null" : "\"" + previousEmployee + "\"")
+                        + ",\"keptAssignment\":" + (device.getEmployeeId() != null) + "}");
         return new Registration(device.getId(), secret);
     }
 

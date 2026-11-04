@@ -253,7 +253,11 @@ class DeviceServiceTest {
     }
 
     @Test
-    void sameMachineReProvisioningReusesTheRowButComesBackUnassigned() {
+    void sameMachineReProvisioningKeepsItsEmployee() {
+        // Reinstalling the agent is an IT action, not a change of who sits at the
+        // desk. Dropping the assignment here meant an administrator had to re-assign
+        // every PC in the fleet after every deployment, which does not scale past a
+        // handful of machines.
         var employee = activeEmployee();
         var existing = new Device();
         existing.setEmployeeId(employee.getId());
@@ -267,15 +271,38 @@ class DeviceServiceTest {
         var registration = service.provision("tenant-token", "WINDOWS", "LAPTOP-1", "0.9.0.0", "MACHINE-GUID-1");
 
         assertEquals(existing.getId(), registration.deviceId(), "no duplicate row for the same machine");
-        assertEquals(null, existing.getEmployeeId(), "a reinstalled system must be assigned again");
-        assertEquals(DeviceStatus.PENDING, existing.getStatus());
-        assertEquals(null, existing.getEnrolledAt(), "the first check after assignment is the enrollment scan");
+        assertEquals(employee.getId(), existing.getEmployeeId(), "the PC keeps the employee it was assigned to");
+        assertEquals(DeviceStatus.ACTIVE, existing.getStatus());
+        // What makes carrying the assignment over safe: the machine has a new secret
+        // and owes an enrollment scan, so the employee's own face has to be judged
+        // against the stored reference before it can produce an ordinary check.
+        assertEquals(null, existing.getEnrolledAt(), "a re-provisioned machine re-enrolls before normal checks");
         assertEquals("0.9.0.0", existing.getAgentVersion());
+        assertNotNull(registration.deviceSecret());
         verify(audit).record(any(), eq("DEVICE_REPROVISIONED"), eq("device"), eq(existing.getId().toString()), any());
     }
 
     @Test
+    void aMachineThatWasNeverAssignedStaysUnassigned() {
+        var existing = new Device();
+        existing.setStatus(DeviceStatus.PENDING);
+        existing.setMachineId("MACHINE-GUID-3");
+        existing.setRegisteredAt(Instant.now().minusSeconds(3600));
+        when(devices.findByMachineIdOrderByRegisteredAtDesc("MACHINE-GUID-3")).thenReturn(List.of(existing));
+        when(devices.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service.provision("tenant-token", "WINDOWS", "LAPTOP-3", "0.9.0.0", "MACHINE-GUID-3");
+
+        assertEquals(null, existing.getEmployeeId());
+        assertEquals(DeviceStatus.PENDING, existing.getStatus());
+    }
+
+    @Test
     void revokedMachineComesBackUnassigned() {
+        // Revoking is a decision to stop trusting a machine, so reinstalling the
+        // agent on it must not quietly put the employee back. It returns PENDING
+        // rather than staying REVOKED because this is the only route back: there is
+        // no un-revoke, and assignDevice refuses a revoked device outright.
         var revoked = new Device();
         revoked.setEmployeeId(UUID.randomUUID());
         revoked.setStatus(DeviceStatus.REVOKED);
