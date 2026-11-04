@@ -141,7 +141,11 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
           { key: "code", header: "Code", value: (emp) => emp.employeeCode },
           { key: "name", header: "Name", value: (emp) => emp.fullName },
           { key: "email", header: "Email", value: (emp) => emp.email },
-          { key: "department", header: "Department", value: (emp) => emp.department ?? "—" },
+          {
+            // A fixed list on the employee form, so it is a fixed list to filter by.
+            key: "department", header: "Department", filter: "select",
+            value: (emp) => emp.department ?? "—",
+          },
           {
             key: "status", header: "Status", filter: "select",
             value: (emp) => emp.status,

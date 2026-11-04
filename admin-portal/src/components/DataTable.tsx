@@ -203,13 +203,9 @@ export default function DataTable<T>(props: {
           {filtered.length === 0
             ? "0 rows"
             : `Showing ${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}`}
+          {/* Clearing them is a toolbar action (next to the Filters button), so the
+              footer only says how much is being hidden. */}
           {activeFilters.length > 0 && ` (filtered from ${rows.length})`}
-          {activeFilters.length > 0 && (
-            <>
-              {" "}
-              <button className="link" onClick={() => setFilters({})}>Clear filters</button>
-            </>
-          )}
         </span>
         <span className="pager">
           <label className="muted">
