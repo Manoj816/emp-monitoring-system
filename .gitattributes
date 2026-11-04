@@ -1,0 +1,5 @@
+# cmd.exe reads a batch file line by line as it runs it; keep CRLF so the
+# parenthesised blocks in the installer launchers behave the same wherever the
+# bundle is unzipped.
+*.cmd text eol=crlf
+*.bat text eol=crlf

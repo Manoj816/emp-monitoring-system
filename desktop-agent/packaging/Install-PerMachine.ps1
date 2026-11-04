@@ -15,12 +15,18 @@
     2. Trust the package signing certificate (dev-signed packages only).
     3. Install the WebView2 runtime if absent (the locked check window needs it).
     4. Write the provisioning token + backend URL (HKLM\SOFTWARE\EmpVerify) so the
-       agent registers this system by itself on first launch.
+       agent registers this system by itself on first launch. An upgrade keeps the
+       registration it already has, so the PC stays assigned to its employee.
     5. Provision the MSIX for every user on the PC (a standard user cannot remove
        a provisioned package), install it for the current user, and set it to run
        at every sign-in (machine-wide Run entry plus a scheduled task that also
        restarts it if the process is closed), so it comes back after every restart.
     6. Start the agent as the signed-in user.
+
+  Upgrading is the common case and must be cheap: re-running this script keeps
+  the system's device identity, its employee assignment and its enrolment. Pass
+  -ResetIdentity to deliberately start a machine over (a re-image, or a PC handed
+  to a different employee); it then registers again as Unassigned and re-enrols.
 
   Defaults are picked up from the folder this script is in, so the bundle that
   build-msix.ps1 produces (out\ or the Setup zip) installs by double-clicking
@@ -31,6 +37,7 @@
   .\Install-PerMachine.ps1
   .\Install-PerMachine.ps1 -ProvisioningToken (Read-Host) -BackendUrl http://empverify-alb-....elb.amazonaws.com
   .\Install-PerMachine.ps1 -MsixPath .\EmpVerify.Agent_0.5.0.0_x64.msix -TrustCert .\empverify-dev.cer
+  .\Install-PerMachine.ps1 -ResetIdentity   # re-imaged PC, or handed to someone else
 #>
 [CmdletBinding()]
 param(
@@ -39,7 +46,8 @@ param(
     [string]$ProvisioningToken,   # default: provisioning.json next to this script
     [string]$BackendUrl,          # default: provisioning.json next to this script
     [switch]$SkipWebView2,        # do not install the WebView2 runtime when missing
-    [switch]$NoLaunch             # do not start the agent after installing
+    [switch]$NoLaunch,            # do not start the agent after installing
+    [switch]$ResetIdentity        # forget this system's registration; re-register as Unassigned
 )
 
 $ErrorActionPreference = "Stop"
@@ -193,13 +201,24 @@ if ($ProvisioningToken) {
 } else {
     Write-Warning "No provisioning token: the agent will ask for an enrollment token on first launch. Pass -ProvisioningToken/-BackendUrl or put provisioning.json next to this script."
 }
-# Every run of this installer is a (re)install to the server: the agent compares
-# this id with the one it registered under and, when they differ, discards its
-# stored device identity and registers the system again as Unassigned, so the
-# administrator assigns the employee again and the first check is the enrollment scan.
+# The install id marks *this machine's* enrolment, not this run of the installer.
+# It is written once and then left alone: the agent drops its stored identity only
+# when the id changes, so upgrading - or simply re-running this script - keeps the
+# employee assignment. Minting a fresh id every run meant every update cost an
+# administrator a re-assignment of every PC, which no fleet of any size can absorb.
 if (-not (Test-Path $regPath)) { New-Item -Path $regPath | Out-Null }
-Set-ItemProperty -Path $regPath -Name "InstallId" -Value ([guid]::NewGuid().ToString())
-Write-Host "  install id written; the agent registers this system again as 'Unassigned'"
+$knownInstallId = (Get-ItemProperty -Path $regPath -Name "InstallId" -ErrorAction SilentlyContinue).InstallId
+$registersAfresh = $ResetIdentity -or -not $knownInstallId
+if ($registersAfresh) {
+    Set-ItemProperty -Path $regPath -Name "InstallId" -Value ([guid]::NewGuid().ToString())
+    if ($ResetIdentity) {
+        Write-Host "  -ResetIdentity: this system registers again as 'Unassigned' and re-enrols"
+    } else {
+        Write-Host "  install id written; this system registers as 'Unassigned' on first launch"
+    }
+} else {
+    Write-Host "  keeping this system's registration, so it stays assigned to its employee"
+}
 
 # ---------------------------------------------------------------- 5. package
 Write-Host "[5/6] Installing the package for all users..."
@@ -235,29 +254,50 @@ $usersGroup = (New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32
 $action = New-ScheduledTaskAction -Execute "explorer.exe" -Argument $launch
 $atLogon = New-ScheduledTaskTrigger -AtLogOn
 $atLogon.Delay = "PT30S"   # let the shell finish signing in first
-$watchdog = New-ScheduledTaskTrigger -Once -At (Get-Date).Date.AddMinutes(1) `
-    -RepetitionInterval (New-TimeSpan -Minutes $WatchdogMinutes) -RepetitionDuration ([TimeSpan]::MaxValue)
 $principal = New-ScheduledTaskPrincipal -GroupId $usersGroup -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
+
+# "Repeat for as long as the PC is on" is an empty <Duration> in the task XML,
+# which is what leaving -RepetitionDuration off produces. Passing
+# [TimeSpan]::MaxValue writes P99999999DT23H59M59S instead, and Task Scheduler
+# rejects that outright - which left the watchdog silently unregistered.
+function New-WatchdogTrigger([switch]$Bounded) {
+    $at = (Get-Date).Date.AddMinutes(1)
+    $every = New-TimeSpan -Minutes $WatchdogMinutes
+    if ($Bounded) {
+        New-ScheduledTaskTrigger -Once -At $at -RepetitionInterval $every -RepetitionDuration (New-TimeSpan -Days 9999)
+    } else {
+        New-ScheduledTaskTrigger -Once -At $at -RepetitionInterval $every
+    }
+}
+
+# Register-ScheduledTask reports a rejected trigger as a *non-terminating* error:
+# without -ErrorAction Stop the catch never runs and the fallbacks are dead code.
 function Register-AgentTask($Triggers) {
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $Triggers `
-        -Principal $principal -Settings $settings -Description $TaskDescription -Force | Out-Null
+        -Principal $principal -Settings $settings -Description $TaskDescription `
+        -Force -ErrorAction Stop | Out-Null
 }
-try {
-    Register-AgentTask @($atLogon, $watchdog)
+
+$lastError = "none"
+foreach ($triggers in @(
+        @($atLogon, (New-WatchdogTrigger)),
+        @($atLogon, (New-WatchdogTrigger -Bounded)),   # builds that insist on a duration
+        @($atLogon))) {                                # last resort: sign-in only
+    try { Register-AgentTask $triggers; break }
+    catch { $lastError = $_.Exception.Message.Split([char]10)[0].Trim() }
+}
+
+# Read the task back: report what is on the machine, not what was asked for.
+$task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+if (-not $task) {
+    Write-Warning "Could not register the scheduled task ($lastError). The agent still starts at sign-in via the Run entry and the package's startup task, but nothing will start it again if it is ever closed."
+} elseif ($task.Triggers | Where-Object { $_.Repetition.Interval }) {
     Write-Host "  scheduled task '$TaskName' registered (at sign-in, re-checked every $WatchdogMinutes min)"
-} catch {
-    # Some Task Scheduler builds reject an open-ended repetition. The sign-in
-    # trigger is the part that matters; register it without the watchdog.
-    $reason = $_.Exception.Message
-    try {
-        Register-AgentTask @($atLogon)
-        Write-Host "  scheduled task '$TaskName' registered (at sign-in)"
-        Write-Warning "The repeating watchdog trigger was refused ($reason); the agent still starts at every sign-in."
-    } catch {
-        Write-Warning "Could not register the scheduled task ($($_.Exception.Message)). The agent still starts at sign-in via the Run entry and the package's startup task."
-    }
+} else {
+    Write-Host "  scheduled task '$TaskName' registered (at sign-in)"
+    Write-Warning "The repeating watchdog trigger was refused ($lastError); the agent still starts at every sign-in."
 }
 
 # ---------------------------------------------------------------- 6. launch
@@ -271,5 +311,9 @@ if ($NoLaunch) {
 }
 
 Write-Host ""
-Write-Host "Done. Next: in the admin portal, open Devices, find '$env:COMPUTERNAME' (Unassigned) and assign it to the employee."
+if ($registersAfresh) {
+    Write-Host "Done. Next: in the admin portal, open Devices, find '$env:COMPUTERNAME' (Unassigned) and assign it to the employee."
+} else {
+    Write-Host "Done. '$env:COMPUTERNAME' keeps the employee it was already assigned to - there is nothing to do in the admin portal."
+}
 Write-Host "Managed fleets: deploy the same .msix via Intune (line-of-business app) for central control and auto-update."

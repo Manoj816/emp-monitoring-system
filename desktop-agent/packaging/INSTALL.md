@@ -19,7 +19,10 @@ present on Windows 11 and most Windows 10 PCs) when it is missing.
 
 ## Steps
 
-1. Copy the bundle to the PC and unzip it to a folder (for example `C:\EmpVerify-Setup`).
+1. Copy the bundle to the PC and **extract the whole zip** to a folder (for example
+   `C:\EmpVerify-Setup`) — right-click the zip > Extract All. Do not run anything
+   from inside the zip: Windows copies the one file you double-click to a temporary
+   folder and leaves the package behind, so the install has nothing to work with.
 2. Rename `provisioning.sample.json` to `provisioning.json` and paste the tenant
    **provisioning token** into it. Keep `backendUrl` as the EmpVerify server address.
    Without this file the agent cannot set itself up and says so in a tray notification.
@@ -62,10 +65,22 @@ administrator asked for), which is scanned as soon as the agent starts.
 
 Run the same installer with a newer package: the version in the file name must
 be higher than the installed one. Settings and the device identity are kept, so
-the PC stays assigned to its employee.
+the PC stays assigned to its employee and keeps its enrolment — an update never
+asks an administrator to assign anything again.
+
+To deliberately start a machine over — it was re-imaged, or handed to a different
+employee — run `.\Install-PerMachine.ps1 -ResetIdentity`. That PC comes back as
+**Unassigned**, and the next check on it is the enrollment scan.
 
 ## If something goes wrong
 
+- **A window flashes and disappears** — `Install-EmpVerify.cmd` was run from
+  inside the zip. Extract the zip and run it from the extracted folder. (The
+  launcher now says this instead of closing, but an older bundle will not.)
+- **"The publisher could not be verified"** — expected: the bundle came from the
+  internet and these scripts are not code-signed. Choose **Run**. To stop Windows
+  asking for each file, in the extracted folder run
+  `Get-ChildItem | Unblock-File` in PowerShell.
 - **"Windows 10 version 1809 ... is required"** — update Windows, or use a newer PC.
 - **"The package is 64-bit"** — the PC runs 32-bit Windows; it is not supported.
 - **"Could not download/install WebView2"** — the PC is offline. Install the
