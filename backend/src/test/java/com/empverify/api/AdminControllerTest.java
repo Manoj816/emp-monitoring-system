@@ -22,6 +22,8 @@ import com.empverify.repo.VerificationCheckRepository;
 import com.empverify.service.ApiException;
 import com.empverify.service.AuditService;
 import com.empverify.service.DeviceService;
+import com.empverify.service.EmployeeImportService;
+import com.empverify.service.ReferenceImageService;
 import com.empverify.storage.ImageStorage;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,6 +45,7 @@ class AdminControllerTest {
     @Mock private VerificationCheckRepository checks;
     @Mock private CheckReviewRepository reviews;
     @Mock private DeviceService deviceService;
+    @Mock private EmployeeImportService employeeImport;
     @Mock private ImageStorage storage;
     @Mock private AuditService audit;
 
@@ -53,7 +56,12 @@ class AdminControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new AdminController(employees, referenceImages, checks, reviews, deviceService, storage, audit);
+        // The real reference-image writer over the mocked repository and storage.
+        // The tests below assert on what lands in each of those, so moving the writer
+        // out of the controller must not turn them into assertions about a mock.
+        controller = new AdminController(
+                employees, referenceImages, checks, reviews, deviceService, employeeImport,
+                new ReferenceImageService(referenceImages, storage), storage, audit);
     }
 
     @Test

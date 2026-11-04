@@ -18,6 +18,24 @@ export interface Employee {
   hasLiveEnrollment: boolean;
 }
 
+/** One row the CSV import refused, numbered the way a spreadsheet numbers it. */
+export interface ImportRowProblem {
+  row: number;
+  employeeCode: string;
+  detail: string;
+}
+
+export interface ImportReport {
+  /** Employees created. Zero whenever any row had a problem: the file lands whole or not at all. */
+  imported: number;
+  /** How many of those arrived with their ID/photo attached. */
+  withPhoto: number;
+  rows: number;
+  problemRows: number;
+  /** The first 50, in file order; problemRows counts any beyond them. */
+  problems: ImportRowProblem[];
+}
+
 export interface AdminCheckRow {
   checkId: string;
   status: string;
@@ -97,6 +115,19 @@ export const api = {
     if (input.department) form.append("department", input.department);
     form.append("image", image, "reference.jpg");
     return request<Employee>("/api/v1/admin/employees", { method: "POST", body: form });
+  },
+
+  /**
+   * Bulk-creates employees from a CSV. A CSV holds text and cannot carry a
+   * picture, so each row names its ID/photo in the photoFile column and the
+   * pictures ride along as separate parts of the same request; the server pairs
+   * them up by file name.
+   */
+  importEmployees: (file: File, photos: File[]) => {
+    const form = new FormData();
+    form.append("file", file, file.name);
+    for (const photo of photos) form.append("photos", photo, photo.name);
+    return request<ImportReport>("/api/v1/admin/employees/import", { method: "POST", body: form });
   },
 
   /** Corrects name/code/email/department. The photo and status have their own actions; nothing re-enrolls. */

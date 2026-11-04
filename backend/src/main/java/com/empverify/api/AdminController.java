@@ -3,13 +3,14 @@ package com.empverify.api;
 import com.empverify.domain.Employee;
 import com.empverify.domain.Enums.ReferenceImageSource;
 import com.empverify.domain.Enums.ReferenceImageStatus;
-import com.empverify.domain.ReferenceImage;
 import com.empverify.repo.EmployeeRepository;
 import com.empverify.repo.ReferenceImageRepository;
 import com.empverify.repo.VerificationCheckRepository;
 import com.empverify.service.ApiException;
 import com.empverify.service.AuditService;
 import com.empverify.service.DeviceService;
+import com.empverify.service.EmployeeImportService;
+import com.empverify.service.ReferenceImageService;
 import com.empverify.storage.ImageStorage;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -42,6 +43,8 @@ public class AdminController {
     private final VerificationCheckRepository checks;
     private final com.empverify.repo.CheckReviewRepository reviews;
     private final DeviceService deviceService;
+    private final EmployeeImportService employeeImport;
+    private final ReferenceImageService referenceImageService;
     private final ImageStorage storage;
     private final AuditService audit;
 
@@ -51,6 +54,8 @@ public class AdminController {
             VerificationCheckRepository checks,
             com.empverify.repo.CheckReviewRepository reviews,
             DeviceService deviceService,
+            EmployeeImportService employeeImport,
+            ReferenceImageService referenceImageService,
             ImageStorage storage,
             AuditService audit) {
         this.employees = employees;
@@ -58,6 +63,8 @@ public class AdminController {
         this.checks = checks;
         this.reviews = reviews;
         this.deviceService = deviceService;
+        this.employeeImport = employeeImport;
+        this.referenceImageService = referenceImageService;
         this.storage = storage;
         this.audit = audit;
     }
@@ -121,6 +128,51 @@ public class AdminController {
         return toResponse(employee);
     }
 
+    /**
+     * Creates many employees from one CSV file, with their ID/photos alongside it.
+     *
+     * <p>A CSV cannot hold a picture, so each row names its picture in the
+     * optional photoFile column and the pictures come up as separate parts of the
+     * same request; the import pairs them by name. A row that names no picture
+     * still creates the employee - they show as "ID / photo: missing" until
+     * somebody uploads one, which is what makes onboarding a whole department in
+     * one go practical.
+     *
+     * <p>Always answers with a report rather than an error for a bad row: the
+     * upload itself succeeded, and the administrator needs the list of what the
+     * file got wrong, not one sentence about the first problem.
+     */
+    @PostMapping(value = "/employees/import", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public EmployeeImportService.ImportReport importEmployees(
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "photos", required = false) MultipartFile[] photos) {
+        if (file == null || file.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Choose a CSV file to import.");
+        }
+        var name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase();
+        if (!name.isEmpty() && !name.endsWith(".csv") && !name.endsWith(".txt")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "The import file has to be a .csv. Save the spreadsheet as CSV and upload that.");
+        }
+        try {
+            var pictures = new java.util.LinkedHashMap<String, byte[]>();
+            if (photos != null) {
+                for (var photo : photos) {
+                    if (photo != null && !photo.isEmpty() && photo.getOriginalFilename() != null) {
+                        // Browsers send the bare name for a multi-file pick, but a folder
+                        // pick sends a relative path; the CSV names the file either way.
+                        var fileName = photo.getOriginalFilename().replace('\\', '/');
+                        fileName = fileName.substring(fileName.lastIndexOf('/') + 1);
+                        pictures.put(fileName, photo.getBytes());
+                    }
+                }
+            }
+            return employeeImport.importCsv(file.getBytes(), pictures);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     private static String required(String value, String message) {
         if (value == null || value.isBlank()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, message);
@@ -141,17 +193,11 @@ public class AdminController {
 
     /** Stores the upload and records it as the employee's ACTIVE ADMIN_UPLOAD reference. */
     private void saveAdminUpload(UUID employeeId, MultipartFile image) {
-        var reference = new ReferenceImage();
-        reference.setEmployeeId(employeeId);
-        reference.setSource(ReferenceImageSource.ADMIN_UPLOAD);
-        reference.setCreatedBy("admin");
         try {
-            reference.setS3Key(storage.store(
-                    "reference/" + employeeId + "/" + reference.getId() + ".jpg", image.getBytes()));
+            referenceImageService.storeAdminUpload(employeeId, image.getBytes());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        referenceImages.save(reference);
     }
 
     @GetMapping("/employees")
@@ -426,7 +472,7 @@ public class AdminController {
             throw new ApiException(HttpStatus.NOT_FOUND, "no evidence retained for this check");
         }
         var bytes = storage.load(check.getEvidenceS3Key());
-        if (!looksLikeImage(bytes)) {
+        if (!ReferenceImageService.looksLikeImage(bytes)) {
             // Defensive: a retained frame that is not a picture (e.g. an empty frame
             // from the liveness service) is reported, not served as a broken image.
             throw new ApiException(HttpStatus.NOT_FOUND, "the retained frame for this check is not a readable image");
@@ -435,16 +481,6 @@ public class AdminController {
         return org.springframework.http.ResponseEntity.ok()
                 .header("Content-Type", "image/jpeg")
                 .body(bytes);
-    }
-
-    /** JPEG (FF D8 FF) or PNG (89 50 4E 47) magic bytes; anything else is not a picture a browser can show. */
-    private static boolean looksLikeImage(byte[] bytes) {
-        if (bytes == null || bytes.length < 8) {
-            return false;
-        }
-        boolean jpeg = (bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xD8 && (bytes[2] & 0xFF) == 0xFF;
-        boolean png = (bytes[0] & 0xFF) == 0x89 && bytes[1] == 'P' && bytes[2] == 'N' && bytes[3] == 'G';
-        return jpeg || png;
     }
 
     private EmployeeResponse toResponse(Employee employee) {

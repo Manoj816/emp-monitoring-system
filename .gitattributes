@@ -3,3 +3,7 @@
 # bundle is unzipped.
 *.cmd text eol=crlf
 *.bat text eol=crlf
+
+# Spreadsheets on Windows open a CSV most predictably with CRLF, and the import
+# template is meant to be downloaded and opened in Excel as-is.
+*.csv text eol=crlf

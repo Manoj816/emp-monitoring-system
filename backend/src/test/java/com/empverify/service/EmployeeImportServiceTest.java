@@ -1,0 +1,357 @@
+package com.empverify.service;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.empverify.domain.Employee;
+import com.empverify.repo.EmployeeRepository;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+/**
+ * A CSV import is only worth having if the administrator can trust what came
+ * back: either the whole file landed, or nothing did and every bad row is named.
+ */
+@ExtendWith(MockitoExtension.class)
+class EmployeeImportServiceTest {
+
+    @Mock private EmployeeRepository employees;
+    @Mock private ReferenceImageService referenceImages;
+    @Mock private AuditService audit;
+
+    @InjectMocks private EmployeeImportService service;
+
+    private static final String HEADER = "employeeCode,fullName,email,department\n";
+
+    private EmployeeImportService.ImportReport importing(String csv) {
+        return service.importCsv(csv.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private List<Employee> saved(int expected) {
+        var captor = ArgumentCaptor.forClass(Employee.class);
+        verify(employees, times(expected)).save(captor.capture());
+        return captor.getAllValues();
+    }
+
+    @Test
+    void importsEveryRowOfAWellFormedFile() {
+        var report = importing(HEADER
+                + "E-1001,Asha Menon,asha.menon@example.com,Engineering\n"
+                + "E-1002,Sam Price,sam.price@example.com,Finance\n");
+
+        assertEquals(2, report.imported());
+        assertEquals(2, report.rows());
+        assertEquals(0, report.problemRows());
+        assertTrue(report.problems().isEmpty());
+
+        var people = saved(2);
+        assertEquals("E-1001", people.get(0).getEmployeeCode());
+        assertEquals("Asha Menon", people.get(0).getFullName());
+        assertEquals("asha.menon@example.com", people.get(0).getEmail());
+        assertEquals("Engineering", people.get(0).getDepartment());
+        assertEquals("Finance", people.get(1).getDepartment());
+    }
+
+    @Test
+    void theImportIsRecordedAsWhereEachEmployeeCameFrom() {
+        importing(HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering\n");
+
+        verify(audit).record(eq("admin"), eq("EMPLOYEE_CREATED"), eq("employee"), anyString(),
+                eq("{\"source\":\"csv-import\"}"));
+    }
+
+    @Test
+    void oneBadRowStopsTheWholeFile() {
+        // Half an import is the worst outcome: the portal cannot show which half
+        // arrived, and the corrected file then collides with the rows that did.
+        var report = importing(HEADER
+                + "E-1001,Asha Menon,asha.menon@example.com,Engineering\n"
+                + "E-1002,,sam.price@example.com,Finance\n");
+
+        assertEquals(0, report.imported());
+        assertEquals(1, report.problemRows());
+        assertEquals(3, report.problems().get(0).row(), "the header is row 1, as a spreadsheet counts");
+        assertTrue(report.problems().get(0).detail().contains("fullName is empty"));
+        verify(employees, never()).save(any());
+    }
+
+    @Test
+    void everyProblemInTheFileIsReportedAtOnce() {
+        // So one round of corrections is enough, rather than one upload per fault.
+        var report = importing(HEADER
+                + ",Asha Menon,asha.menon@example.com,Engineering\n"
+                + "E-1002,Sam Price,not-an-email,Finance\n"
+                + "E-1003,Lee Chan,lee.chan@example.com,Wizardry\n");
+
+        assertEquals(3, report.problemRows());
+        assertEquals(List.of(2, 3, 4), report.problems().stream().map(p -> p.row()).toList());
+        assertTrue(report.problems().get(1).detail().contains("not a valid email address"));
+        assertTrue(report.problems().get(2).detail().contains("not one of"));
+    }
+
+    @Test
+    void aRowWithSeveralFaultsListsThemAllTogether() {
+        var report = importing(HEADER + ",Sam Price,nope,Finance\n");
+
+        var detail = report.problems().get(0).detail();
+        assertTrue(detail.contains("employeeCode is empty"), detail);
+        assertTrue(detail.contains("not a valid email address"), detail);
+    }
+
+    @Test
+    void aDuplicateInsideTheFileNamesTheRowItCollidesWith() {
+        var report = importing(HEADER
+                + "E-1001,Asha Menon,asha.menon@example.com,Engineering\n"
+                + "e-1001,Sam Price,sam.price@example.com,Finance\n");
+
+        assertEquals(1, report.problemRows());
+        assertEquals(3, report.problems().get(0).row());
+        assertTrue(report.problems().get(0).detail().contains("already used on row 2"),
+                report.problems().get(0).detail());
+    }
+
+    @Test
+    void anEmployeeTheSystemAlreadyHasIsRejectedRatherThanDuplicated() {
+        when(employees.existsByEmailIgnoreCase("asha.menon@example.com")).thenReturn(true);
+
+        var report = importing(HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering\n");
+
+        assertEquals(0, report.imported());
+        assertTrue(report.problems().get(0).detail().contains("already exists"));
+        assertEquals("E-1001", report.problems().get(0).employeeCode(),
+                "the report names the row by its code, so it can be found in the file");
+    }
+
+    @Test
+    void anUnknownDepartmentIsRefusedRatherThanInvented() {
+        // The assign-system popup filters by the fixed list, so a typo would create
+        // people that no filter ever finds.
+        var report = importing(HEADER + "E-1001,Asha Menon,asha.menon@example.com,Enginering\n");
+
+        assertEquals(0, report.imported());
+        assertTrue(report.problems().get(0).detail().contains("Enginering"));
+    }
+
+    @Test
+    void departmentCasingInTheFileDoesNotMatter() {
+        var report = importing(HEADER + "E-1001,Asha Menon,asha.menon@example.com,human resources\n");
+
+        assertEquals(1, report.imported());
+        assertEquals("Human Resources", saved(1).get(0).getDepartment(),
+                "stored as the one spelling the portal filters by");
+    }
+
+    @Test
+    void quotedFieldsKeepTheirCommasAndQuotes() {
+        var report = importing(HEADER
+                + "E-1001,\"Menon, Asha\",asha.menon@example.com,Engineering\n"
+                + "E-1002,\"Sam \"\"Sammy\"\" Price\",sam.price@example.com,Finance\n");
+
+        assertEquals(2, report.imported());
+        var people = saved(2);
+        assertEquals("Menon, Asha", people.get(0).getFullName());
+        assertEquals("Sam \"Sammy\" Price", people.get(1).getFullName());
+    }
+
+    @Test
+    void theBlankRowsASpreadsheetLeavesBehindAreNotFailedEmployees() {
+        var report = importing(HEADER
+                + "E-1001,Asha Menon,asha.menon@example.com,Engineering\r\n"
+                + "\r\n"
+                + ",,,\r\n");
+
+        assertEquals(1, report.imported());
+        assertEquals(1, report.rows());
+        assertEquals(0, report.problemRows());
+    }
+
+    @Test
+    void headerNamesDoNotHaveToBeSpeltExactly() {
+        var report = importing("Employee Code,Full Name,Email Address,Dept\n"
+                + "E-1001,Asha Menon,asha.menon@example.com,Engineering\n");
+
+        assertEquals(1, report.imported());
+    }
+
+    @Test
+    void columnsMayComeInAnyOrder() {
+        var report = importing("email,department,employeeCode,fullName\n"
+                + "asha.menon@example.com,Engineering,E-1001,Asha Menon\n");
+
+        assertEquals(1, report.imported());
+        var employee = saved(1).get(0);
+        assertEquals("E-1001", employee.getEmployeeCode());
+        assertEquals("asha.menon@example.com", employee.getEmail());
+    }
+
+    @Test
+    void aFileWithoutTheColumnsItNeedsSaysWhichOnesAreMissing() {
+        var thrown = assertThrows(ApiException.class,
+                () -> importing("employeeCode,fullName\nE-1001,Asha Menon\n"));
+
+        assertTrue(thrown.getMessage().contains("email"), thrown.getMessage());
+        assertTrue(thrown.getMessage().contains("department"), thrown.getMessage());
+    }
+
+    @Test
+    void aHeaderWithNoEmployeesUnderItSaysSo() {
+        var thrown = assertThrows(ApiException.class, () -> importing(HEADER));
+        assertTrue(thrown.getMessage().contains("no employees"), thrown.getMessage());
+    }
+
+    @Test
+    void aFileTooLongForOneUploadIsRefusedBeforeAnythingIsStored() {
+        var csv = new StringBuilder(HEADER);
+        for (int i = 0; i <= EmployeeImportService.MAX_ROWS; i++) {
+            csv.append("E-").append(i).append(",Person ").append(i)
+                    .append(",person").append(i).append("@example.com,Engineering\n");
+        }
+
+        var thrown = assertThrows(ApiException.class, () -> importing(csv.toString()));
+
+        assertTrue(thrown.getMessage().contains(String.valueOf(EmployeeImportService.MAX_ROWS)));
+        verify(employees, never()).save(any());
+    }
+
+    @Test
+    void aSpreadsheetSavedAsAnsiKeepsItsAccentedNames() {
+        // Excel on Windows writes the system codepage unless "CSV UTF-8" is picked
+        // by hand, which is not the obvious choice in the Save As dialog.
+        var csv = HEADER + "E-1001,Jose Munoz,jose@example.com,Engineering\n";
+        var ansi = csv.replace("Jose Munoz", "José Muñoz").getBytes(Charset.forName("windows-1252"));
+
+        var report = service.importCsv(ansi);
+
+        assertEquals(1, report.imported());
+        assertEquals("José Muñoz", saved(1).get(0).getFullName());
+    }
+
+    @Test
+    void theByteOrderMarkExcelWritesDoesNotHideTheFirstColumn() {
+        var withBom = ("﻿" + HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering\n")
+                .getBytes(StandardCharsets.UTF_8);
+
+        assertEquals(1, service.importCsv(withBom).imported());
+    }
+
+    @Test
+    void anEmptyFileIsRefused() {
+        assertThrows(ApiException.class, () -> service.importCsv(new byte[0]));
+    }
+
+    // --- pictures alongside the file ------------------------------------
+
+    private static final String PHOTO_HEADER = "employeeCode,fullName,email,department,photoFile\n";
+
+    /** Smallest thing that passes the magic-byte check: a JPEG starts FF D8 FF. */
+    private static byte[] jpeg() {
+        return new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 0, 0, 0, 1, 2};
+    }
+
+    @Test
+    void aRowThatNamesAPictureHasItStoredAsTheEmployeesReference() {
+        var report = service.importCsv(
+                (PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering,E-1001.jpg\n")
+                        .getBytes(StandardCharsets.UTF_8),
+                Map.of("E-1001.jpg", jpeg()));
+
+        assertEquals(1, report.imported());
+        assertEquals(1, report.withPhoto());
+        // Resolved before the next verify starts: a verify() nested inside another
+        // verify()'s arguments leaves Mockito mid-verification.
+        var employeeId = saved(1).get(0).getId();
+        verify(referenceImages).storeAdminUpload(eq(employeeId), eq(jpeg()));
+    }
+
+    @Test
+    void aRowMayLeaveThePictureForLater() {
+        var report = service.importCsv(
+                (PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering,\n")
+                        .getBytes(StandardCharsets.UTF_8),
+                Map.of());
+
+        assertEquals(1, report.imported(), "the record is worth having before the photo is");
+        assertEquals(0, report.withPhoto());
+        verify(referenceImages, never()).storeAdminUpload(any(), any());
+    }
+
+    @Test
+    void aPdfIsRefusedBecauseAFaceCannotBeComparedAgainstIt() {
+        // An ID card as a PDF is a document, not a picture the matcher can read.
+        var report = service.importCsv(
+                (PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering,id-card.pdf\n")
+                        .getBytes(StandardCharsets.UTF_8),
+                Map.of("id-card.pdf", "%PDF-1.7 not a picture".getBytes(StandardCharsets.UTF_8)));
+
+        assertEquals(0, report.imported());
+        assertTrue(report.problems().get(0).detail().contains(".jpg or .png"),
+                report.problems().get(0).detail());
+        verify(employees, never()).save(any());
+    }
+
+    @Test
+    void aFileRenamedToLookLikeAPictureIsStillRefused() {
+        var report = service.importCsv(
+                (PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering,id-card.jpg\n")
+                        .getBytes(StandardCharsets.UTF_8),
+                Map.of("id-card.jpg", "%PDF-1.7 renamed".getBytes(StandardCharsets.UTF_8)));
+
+        assertEquals(0, report.imported());
+        assertTrue(report.problems().get(0).detail().contains("not a readable JPEG or PNG"),
+                report.problems().get(0).detail());
+    }
+
+    @Test
+    void aPictureTheFileNamesButNobodyChoseIsReportedAgainstItsRow() {
+        var report = service.importCsv(
+                (PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering,missing.jpg\n")
+                        .getBytes(StandardCharsets.UTF_8),
+                Map.of("something-else.jpg", jpeg()));
+
+        assertEquals(0, report.imported());
+        assertTrue(report.problems().get(0).detail().contains("was not among the pictures you chose"),
+                report.problems().get(0).detail());
+    }
+
+    @Test
+    void thePictureNameDoesNotHaveToMatchTheFilesCasing() {
+        // Windows does not distinguish the two, so neither should the pairing.
+        var report = service.importCsv(
+                (PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering,e-1001.jpg\n")
+                        .getBytes(StandardCharsets.UTF_8),
+                Map.of("E-1001.JPG", jpeg()));
+
+        assertEquals(1, report.imported());
+        assertEquals(1, report.withPhoto());
+    }
+
+    @Test
+    void nothingIsStoredWhenOneRowOfAPhotoFileIsWrong() {
+        var report = service.importCsv(
+                (PHOTO_HEADER
+                        + "E-1001,Asha Menon,asha.menon@example.com,Engineering,E-1001.jpg\n"
+                        + "E-1002,Sam Price,sam.price@example.com,Finance,gone.jpg\n")
+                        .getBytes(StandardCharsets.UTF_8),
+                Map.of("E-1001.jpg", jpeg()));
+
+        assertEquals(0, report.imported());
+        verify(employees, never()).save(any());
+        verify(referenceImages, never()).storeAdminUpload(any(), any());
+    }
+}

@@ -6,6 +6,7 @@ import CardTitle from "../components/CardTitle";
 import ConfirmPhotoDialog from "../components/ConfirmPhotoDialog";
 import DataTable from "../components/DataTable";
 import EmployeeDetailsDialog from "../components/EmployeeDetailsDialog";
+import ImportEmployeesDialog from "../components/ImportEmployeesDialog";
 import { useStatsBar, type StatItem } from "../components/StatsBar";
 import { useTableFilters } from "../components/TableFilters";
 
@@ -26,6 +27,7 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [details, setDetails] = useState<Employee | null>(null);
   // Picked but not uploaded: the confirmation step shows it next to the current one.
   const [pendingPhoto, setPendingPhoto] = useState<{ employee: Employee; photo: Blob } | null>(null);
@@ -155,6 +157,14 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
         <span className="toolbar-right">
           {tableFilters.control}
           {stats.controls}
+          <button
+            className="action toolbar-action"
+            disabled={busy}
+            title="Create many employees at once from a CSV, with their ID/photos alongside it"
+            onClick={() => setImporting(true)}
+          >
+            Import CSV
+          </button>
           <button className="primary" disabled={busy} onClick={() => setAdding(true)}>+ Add employee</button>
         </span>
       </div>
@@ -258,6 +268,14 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
           employee={details}
           onClose={() => setDetails(null)}
           onChanged={() => void refresh()}
+        />
+      )}
+
+      {importing && (
+        <ImportEmployeesDialog
+          onClose={() => setImporting(false)}
+          // The popup stays open on the report; the table behind it is already fresh.
+          onImported={() => void refresh()}
         />
       )}
 

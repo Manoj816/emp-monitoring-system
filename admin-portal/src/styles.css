@@ -514,3 +514,26 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .pick-main { flex: 1; display: grid; gap: 1px; min-width: 0; }
 .pick-name { font-weight: 600; }
 .pick-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* "Import employees from a CSV" popup. */
+.import-pick { margin-top: 14px; border: 1px dashed var(--border); border-radius: 10px; padding: 12px 14px; }
+.import-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.import-row + .import-row { margin-top: 10px; }
+.import-label { width: 88px; flex: none; font-size: 12px; font-weight: 600; color: var(--muted); }
+.import-template { margin-left: auto; }
+.import-hint { margin: 12px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.import-hint code, .modal p code {
+  background: #eef1f7; border-radius: 4px; padding: 1px 5px; font-size: 11.5px;
+}
+.import-done {
+  margin: 14px 0 0; padding: 10px 12px; border-radius: 8px;
+  background: #d8fbee; color: var(--ok); font-weight: 600; font-size: 13px;
+}
+.import-problems { margin-top: 14px; max-height: 260px; overflow: auto; }
+.import-problems table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.import-problems th, .import-problems td {
+  text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top;
+}
+.import-problems th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: #fff; }
+.import-problems td:first-child, .import-problems th:first-child { width: 48px; }
+.import-problems td:nth-child(2) { white-space: nowrap; }
