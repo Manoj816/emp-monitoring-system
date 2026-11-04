@@ -50,14 +50,26 @@ jobs:
         shell: pwsh
         run: ./build-msix.ps1
 
-      # The whole install bundle, not the bare .msix: on its own the package is
-      # not installable without the trust certificate and the install scripts
-      # that build-msix.ps1 zips alongside it.
+      # Named with the version so a stale run cannot be mistaken for the current
+      # one: the artifact downloads as empverify-agent-setup-<version>.zip.
+      - name: Read package version
+        id: pkg
+        working-directory: desktop-agent/packaging
+        shell: pwsh
+        run: |
+          $v = ([xml](Get-Content AppxManifest.xml)).Package.Identity.Version
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      # The whole install bundle, not the bare .msix: on its own the package is not
+      # installable without the trust certificate and the install scripts. Uploading
+      # the staged folder's contents (never out\ itself, which holds the signing
+      # .pfx) means one zip to extract. Uploading a zip gave a zip inside a zip, and
+      # anyone who unwrapped it once ran the launcher with no package beside it.
       - name: Upload install bundle
         uses: actions/upload-artifact@v4
         with:
-          name: empverify-agent-setup
-          path: desktop-agent/packaging/out/EmpVerify-Agent-Setup_*.zip
+          name: empverify-agent-setup-${{ steps.pkg.outputs.version }}
+          path: desktop-agent/packaging/out/bundle/*
 
       # Production signing (uncomment once the code-signing certificate exists;
       # store it as base64 in secrets, never in the repo):

@@ -122,21 +122,26 @@ if ($PfxPath) {
     Write-Host "  exported trust cert: $cer (import to LocalMachine\TrustedPeople to install)"
 }
 
-# 5. Install bundle: everything an operator needs on the target PC, in out\ and
-#    zipped. Copy the zip to the employee's system and double-click
-#    Install-EmpVerify.cmd (after adding provisioning.json — see INSTALL.md).
+# 5. Install bundle: everything an operator needs on the target PC and nothing
+#    else, staged in out\bundle\. CI uploads that folder's *contents*, so the
+#    download is one zip holding the files - not a zip inside a zip, which anyone
+#    who unwraps it once ends up running with no package beside it. out\ itself is
+#    never shippable: it holds the signing .pfx. The local zip is made from the
+#    same folder, so the two can never disagree about what is in a bundle.
 Write-Host "[5/5] Assembling install bundle..."
-$bundleFiles = @($msix)
-if (-not $PfxPath) { $bundleFiles += (Join-Path $outDir "empverify-dev.cer") }
+$bundleDir = Join-Path $outDir "bundle"
+if (Test-Path $bundleDir) { Remove-Item $bundleDir -Recurse -Force }
+New-Item -ItemType Directory -Path $bundleDir | Out-Null
+Copy-Item $msix $bundleDir
+if (-not $PfxPath) { Copy-Item (Join-Path $outDir "empverify-dev.cer") $bundleDir }
 foreach ($name in @("Install-PerMachine.ps1", "Install-EmpVerify.cmd", "Uninstall.ps1", "Uninstall-EmpVerify.cmd",
                     "provisioning.sample.json", "INSTALL.md")) {
-    $dst = Join-Path $outDir $name
-    Copy-Item (Join-Path $PSScriptRoot $name) $dst -Force
-    $bundleFiles += $dst
+    Copy-Item (Join-Path $PSScriptRoot $name) $bundleDir -Force
 }
 $zip = Join-Path $outDir "EmpVerify-Agent-Setup_${pkgVersion}.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
-Compress-Archive -Path $bundleFiles -DestinationPath $zip
-Write-Host "  bundle: $zip"
+Compress-Archive -Path (Join-Path $bundleDir "*") -DestinationPath $zip
+Write-Host "  bundle folder: $bundleDir"
+Write-Host "  bundle zip   : $zip"
 
 Write-Host "`nDONE: $msix"
