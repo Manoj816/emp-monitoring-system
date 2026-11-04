@@ -50,6 +50,16 @@ public class VerificationFlowTests
             return Task.CompletedTask;
         }
 
+        public int UnansweredReports;
+        public CapturedFrame? LastUnansweredFrame;
+
+        public Task ReportUnansweredAsync(string checkId, CapturedFrame? frame, CancellationToken ct)
+        {
+            UnansweredReports++;
+            LastUnansweredFrame = frame;
+            return Task.CompletedTask;
+        }
+
         public Task<CheckResult> UploadCaptureAsync(OpenCheck check, CapturedFrame frame, CancellationToken ct)
         {
             Uploads++;
@@ -109,10 +119,22 @@ public class VerificationFlowTests
         public sealed class Session(FakeBrowser owner) : IBrowserSession
         {
             private readonly TaskCompletionSource _closed = new();
+            private bool _disposed;
             public Task Closed => _closed.Task;
             /// <summary>Simulates the employee closing the window themselves.</summary>
             public void CloseByEmployee() => _closed.TrySetResult();
-            public void Dispose() => owner.Closes++;
+
+            /// <summary>
+            /// Idempotent, like the real session: a flow that closes the window early
+            /// (to free the camera) still leaves it to `using` to dispose, and one
+            /// window must not count as two closes.
+            /// </summary>
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                owner.Closes++;
+            }
         }
     }
 
@@ -218,6 +240,109 @@ public class VerificationFlowTests
         Assert.Contains("checkId=c1", browser.LastUrl);
         Assert.Equal(1, browser.Closes);
         Assert.Empty(api.Cancels);
+    }
+
+    // ---- photographing a check nobody answered -----------------------------
+    //
+    // Off unless the tenant's policy asks for it. When it is on, the employee is
+    // told before the window starts, the window is closed before the camera is
+    // touched, and a camera that cannot be had costs nothing but the photo.
+
+    [Fact]
+    public async Task ByDefaultAnUnansweredCheckIsStillJustACancel()
+    {
+        var api = new FakeApi { PendingPolls = int.MaxValue };
+        var camera = new FakeCamera();
+        var flow = new VerificationFlow(api, camera, new FakeNotifications(), new FakeBrowser());
+
+        await flow.RunLivenessCheckAsync(
+            CheckType.Periodic, TimeSpan.Zero, CancellationToken.None, poll: (_, _) => Task.CompletedTask);
+
+        Assert.Equal(new[] { "timeout" }, api.Cancels);
+        Assert.Equal(0, api.UnansweredReports);
+    }
+
+    [Fact]
+    public async Task WithThePolicyOnTheUnansweredCheckCarriesAFrame()
+    {
+        var api = new FakeApi { PendingPolls = int.MaxValue };
+        var browser = new FakeBrowser();
+        var flow = new VerificationFlow(api, new FakeCamera(), new FakeNotifications(), browser);
+
+        var result = await flow.RunLivenessCheckAsync(
+            CheckType.Periodic, TimeSpan.Zero, CancellationToken.None,
+            poll: (_, _) => Task.CompletedTask, captureOnTimeout: true);
+
+        Assert.Equal(FlowOutcome.NotAccepted, result.Outcome);
+        Assert.Equal(1, api.UnansweredReports);
+        Assert.NotNull(api.LastUnansweredFrame);
+        // One report, not a cancel as well: two records of one miss would double-count it.
+        Assert.Empty(api.Cancels);
+        Assert.Equal(1, browser.Closes);
+    }
+
+    [Fact]
+    public async Task TheEmployeeIsToldBeforeTheWindowStartsCountingDown()
+    {
+        var api = new FakeApi { PendingPolls = int.MaxValue };
+        var browser = new FakeBrowser();
+        var flow = new VerificationFlow(api, new FakeCamera(), new FakeNotifications(), browser);
+
+        await flow.RunLivenessCheckAsync(
+            CheckType.Periodic, TimeSpan.Zero, CancellationToken.None,
+            poll: (_, _) => Task.CompletedTask, captureOnTimeout: true);
+
+        // The page reads this and shows the notice. Without it the photo would be
+        // taken from a window that never warned anybody.
+        Assert.Contains(VerificationFlow.TimeoutPhotoParam, browser.LastUrl);
+    }
+
+    [Fact]
+    public async Task NoNoticeIsShownOnACheckThatWillNotBePhotographed()
+    {
+        var api = new FakeApi { PendingPolls = int.MaxValue };
+        var browser = new FakeBrowser();
+        var flow = new VerificationFlow(api, new FakeCamera(), new FakeNotifications(), browser);
+
+        await flow.RunLivenessCheckAsync(
+            CheckType.Periodic, TimeSpan.Zero, CancellationToken.None, poll: (_, _) => Task.CompletedTask);
+
+        Assert.DoesNotContain(VerificationFlow.TimeoutPhotoParam, browser.LastUrl);
+    }
+
+    [Fact]
+    public async Task ACameraThatCannotBeHadStillRecordsTheMiss()
+    {
+        var api = new FakeApi { PendingPolls = int.MaxValue };
+        var flow = new VerificationFlow(
+            api, new FakeCamera { Busy = true }, new FakeNotifications(), new FakeBrowser());
+
+        await flow.RunLivenessCheckAsync(
+            CheckType.Periodic, TimeSpan.Zero, CancellationToken.None,
+            poll: (_, _) => Task.CompletedTask, captureOnTimeout: true);
+
+        Assert.Equal(1, api.UnansweredReports);
+        Assert.Null(api.LastUnansweredFrame);  // the miss is reported, the photo is not
+    }
+
+    [Fact]
+    public async Task ALockedMachineIsReportedAsLockedAndNeverPhotographed()
+    {
+        // The point of the photo is "the screen was open and nobody answered". A
+        // locked or sleeping machine already says why, and nobody chose to be in
+        // front of that camera.
+        var api = new FakeApi { PendingPolls = int.MaxValue };
+        var camera = new FakeCamera();
+        var workstation = new FakeWorkstation { State = WorkstationState.Locked };
+        var flow = new VerificationFlow(
+            api, camera, new FakeNotifications(), new FakeBrowser(), workstation);
+
+        await flow.RunLivenessCheckAsync(
+            CheckType.Periodic, TimeSpan.Zero, CancellationToken.None,
+            poll: (_, _) => Task.CompletedTask, captureOnTimeout: true);
+
+        Assert.Equal(new[] { "locked" }, api.Cancels);
+        Assert.Equal(0, api.UnansweredReports);
     }
 
     [Fact]

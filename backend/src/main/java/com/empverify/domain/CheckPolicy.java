@@ -42,6 +42,15 @@ public class CheckPolicy {
     @Column(name = "liveness_on_session_start", nullable = false)
     private boolean livenessOnSessionStart = true;
 
+    /**
+     * Take one frame when a check's response window closes unanswered, and keep it
+     * on the missed check. Off unless a deployment turns it on: with nobody at the
+     * desk the camera sees the room behind it, so this is a decision about other
+     * people's privacy as much as the employee's.
+     */
+    @Column(name = "capture_on_timeout", nullable = false)
+    private boolean captureOnTimeout = false;
+
     public UUID getId() { return id; }
     public String getName() { return name; }
     public void setName(String v) { this.name = v; }
@@ -53,4 +62,6 @@ public class CheckPolicy {
     public BigDecimal getMatchThreshold() { return matchThreshold; }
     public BigDecimal getReviewThreshold() { return reviewThreshold; }
     public boolean isLivenessOnSessionStart() { return livenessOnSessionStart; }
+    public boolean isCaptureOnTimeout() { return captureOnTimeout; }
+    public void setCaptureOnTimeout(boolean v) { this.captureOnTimeout = v; }
 }

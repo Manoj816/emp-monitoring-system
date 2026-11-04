@@ -9,6 +9,16 @@ const RESOLUTIONS: { value: ReviewResolution; label: string }[] = [
   { value: "INCONCLUSIVE", label: "Inconclusive" },
 ];
 
+/**
+ * A check nobody answered can carry a frame taken automatically as its window
+ * closed. It is evidence of an empty desk, not a scan the employee sat for, and
+ * nothing was compared against it — labelling it like a normal capture would
+ * invite exactly the wrong reading.
+ */
+function unanswered(check: AdminCheckRow): boolean {
+  return check.status === "EXPIRED" && check.hasEvidence;
+}
+
 /** Why no picture is shown for this check — the reason itself matters for a review. */
 function capturedPlaceholder(check: AdminCheckRow, loaded: boolean): string {
   if (check.hasEvidence) {
@@ -130,13 +140,22 @@ export default function CheckDetailsDialog(props: {
               ) : (
                 <div className="photo-placeholder">{capturedPlaceholder(check, images.loaded)}</div>
               )}
-              <figcaption>Captured during this check</figcaption>
+              <figcaption>
+                {unanswered(check) ? "Taken automatically when nobody answered" : "Captured during this check"}
+              </figcaption>
             </figure>
           </div>
           <p className="fine">
             The first two are the employee's current references; a frame is kept only for a check that was flagged
             or needs review. Opening a picture is recorded in the audit log.
           </p>
+          {unanswered(check) && (
+            <p className="fine">
+              Nobody completed this check, so this frame was taken by itself as the response window closed. It has
+              not been compared against the references above and is not a verdict about anybody — it only shows
+              what the camera saw at that moment.
+            </p>
+          )}
         </section>
 
         <div className="details-body">

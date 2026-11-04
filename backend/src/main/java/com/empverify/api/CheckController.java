@@ -48,7 +48,8 @@ public class CheckController {
 
     public record PolicyResponse(
             String workWindowStart, String workWindowEnd, String timezone,
-            int maxChecksPerDay, int responseTimeoutSeconds, boolean livenessOnSessionStart) {}
+            int maxChecksPerDay, int responseTimeoutSeconds, boolean livenessOnSessionStart,
+            boolean captureOnTimeout) {}
 
     public record OpenCheckResponse(String checkId, String nonce, OffsetDateTime expiresAt) {}
 
@@ -67,7 +68,8 @@ public class CheckController {
                 policy.getTimezone(),
                 policy.getMaxChecksPerDay(),
                 policy.getResponseTimeoutSeconds(),
-                policy.isLivenessOnSessionStart());
+                policy.isLivenessOnSessionStart(),
+                policy.isCaptureOnTimeout());
     }
 
     /** Opens a check: issues a one-time check ID + nonce with a short expiry. */
@@ -97,6 +99,29 @@ public class CheckController {
         }
         var check = verificationService.capture(deviceId(auth), checkId, nonce, bytes, cameraDeviceName);
         return toResult(check);
+    }
+
+    /**
+     * A check whose response window closed with nobody answering it, with the frame
+     * the agent took at that moment. The photo is kept only while this tenant's
+     * policy asks for it: the agent reports what it saw, the server decides what is
+     * retained. Sending it when the policy is off records the miss and drops the image.
+     */
+    @PostMapping("/checks/{checkId}/unanswered")
+    public CheckResultResponse unanswered(
+            @PathVariable UUID checkId,
+            @RequestParam(value = "image", required = false) MultipartFile image,
+            Authentication auth) {
+        var device = deviceService.requireActiveDevice(deviceId(auth));
+        byte[] bytes = null;
+        if (image != null && !image.isEmpty() && policyService.effectiveFor(device).isCaptureOnTimeout()) {
+            try {
+                bytes = image.getBytes();
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
+        return toResult(verificationService.recordUnanswered(device.getId(), checkId, bytes));
     }
 
     public record CaptureSessionResponse(String captureUrl, java.time.OffsetDateTime expiresAt) {}

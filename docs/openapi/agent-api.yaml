@@ -190,6 +190,13 @@ paths:
                   maxChecksPerDay: { type: integer, example: 4 }
                   responseTimeoutSeconds: { type: integer, example: 120 }
                   livenessOnSessionStart: { type: boolean }
+                  captureOnTimeout:
+                    type: boolean
+                    description: >
+                      When true, a check whose response window closes unanswered is
+                      photographed once and the frame is kept with the missed check.
+                      The agent uses this to show the employee the notice before the
+                      window starts; the server decides on its own what is retained.
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/checks:
@@ -371,6 +378,51 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CheckResult" }
+
+  /api/v1/checks/{checkId}/unanswered:
+    post:
+      tags: [checks]
+      summary: Report a check nobody answered, with the frame taken as it closed
+      description: >
+        The timeout case of /cancel, carrying the single frame the agent took as the
+        response window closed. The check is recorded EXPIRED with reason=timeout
+        exactly as it would be without the image.
+
+        The frame is evidence for a person to look at, never a verdict: no face
+        detection or comparison runs on it, no similarity or liveness score is
+        recorded, and the stored detail says where it came from so a reviewer cannot
+        mistake it for a scan the employee sat for.
+
+        Retention is the server's decision, not the agent's: the frame is kept only
+        while this tenant's policy has captureOnTimeout set, and dropped otherwise.
+        Sending no image at all is valid and normal — the agent has no camera, or it
+        was still held by the check window — and records the miss on its own.
+
+        Only a plain timeout reaches this endpoint. A locked, sleeping or shutting-down
+        machine goes to /cancel with the reason that describes it: nobody chose to be
+        in front of that camera, and the reason already says what happened.
+        Idempotent: a check that already has an outcome is returned unchanged and the
+        image is discarded.
+      parameters:
+        - { name: checkId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: JPEG taken as the window closed. Omitted when none could be taken.
+      responses:
+        "200":
+          description: The check's state after recording the miss.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CheckResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
 components:
   securitySchemes:

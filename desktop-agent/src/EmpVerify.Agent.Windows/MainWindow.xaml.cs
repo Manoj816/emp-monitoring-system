@@ -943,12 +943,14 @@ public partial class MainWindow : Window
                 Log(type == CheckType.Enrollment
                     ? "Enrollment scan: opening the face scan — matched against the photo on file."
                     : $"{Label(type)}: opening the face scan...");
-                result = await _flow.RunLivenessCheckAsync(type, window, CancellationToken.None);
+                result = await _flow.RunLivenessCheckAsync(
+                    type, window, CancellationToken.None, captureOnTimeout: _policy.CaptureOnTimeout);
             }
             else
             {
                 Log($"{Label(type)}: opening the photo capture prompt...");
-                result = await _flow.RunBrowserCaptureCheckAsync(type, window, CancellationToken.None);
+                result = await _flow.RunBrowserCaptureCheckAsync(
+                    type, window, CancellationToken.None, captureOnTimeout: _policy.CaptureOnTimeout);
             }
             Log(Describe(type, result));
             // A technical failure (scan did not complete, no reference enrolled) is a

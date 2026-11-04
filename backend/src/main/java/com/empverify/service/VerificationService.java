@@ -305,6 +305,39 @@ public class VerificationService {
         return saved;
     }
 
+    /**
+     * A check whose response window closed with nobody answering it, together with
+     * the frame the agent took at that moment.
+     *
+     * <p>The photo is evidence for a person to look at, never a verdict: no face
+     * detection or comparison runs on it, no similarity is recorded, and the check
+     * is stored as the missed check it is. That keeps the rule that a missed check
+     * is never by itself a finding against the employee.
+     *
+     * <p>{@code imageBytes} is null when the tenant's policy does not ask for the
+     * photo, or when the agent had no camera to take one with; the check is then
+     * recorded exactly as it would have been without this feature.
+     */
+    @Transactional
+    public VerificationCheck recordUnanswered(UUID deviceId, UUID checkId, byte[] imageBytes) {
+        var check = getOwnedCheck(deviceId, checkId);
+        if (check.getStatus() != CheckStatus.PENDING) {
+            // Already settled (a scan landed, or the sweep expired it): the frame is
+            // dropped rather than attached to a check it does not describe.
+            return check;
+        }
+        if (imageBytes == null || imageBytes.length == 0) {
+            return abandon(check, CancelReason.TIMEOUT);
+        }
+        check.setEvidenceS3Key(storage.store("evidence/" + check.getId() + ".jpg", imageBytes));
+        return abandon(check, CancelReason.TIMEOUT, UNANSWERED_PHOTO_NOTE);
+    }
+
+    /** Says where the photo came from, so nobody reads it as a scan the employee did. */
+    static final String UNANSWERED_PHOTO_NOTE =
+            "The photo on this record was taken automatically as the response window closed; "
+            + "nobody completed a scan, so it has not been compared against anything.";
+
     private static String detailWithNote(CancelReason reason, String note) {
         if (note == null || note.isBlank()) {
             return reason.detail();

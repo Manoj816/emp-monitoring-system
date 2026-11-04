@@ -85,7 +85,7 @@ public sealed class VerificationFlow
     /// </summary>
     public async Task<FlowResult> RunBrowserCaptureCheckAsync(
         CheckType type, TimeSpan responseWindow, CancellationToken ct,
-        Func<TimeSpan, CancellationToken, Task>? poll = null)
+        Func<TimeSpan, CancellationToken, Task>? poll = null, bool captureOnTimeout = false)
     {
         if (_browser is null)
         {
@@ -95,8 +95,10 @@ public sealed class VerificationFlow
         var check = await _api.OpenCheckAsync(type, ct);
         var session = await _api.CreateCaptureSessionAsync(check.CheckId, ct);
         // Disposed on every exit path, so the window closes as soon as the check is over.
-        using var window = _browser.Open(session.CaptureUrl);
-        return await AwaitVerdictAsync(check.CheckId, window, responseWindow, ct, poll ?? Task.Delay);
+        var url = captureOnTimeout ? WithTimeoutPhotoNotice(session.CaptureUrl) : session.CaptureUrl;
+        using var window = _browser.Open(url);
+        return await AwaitVerdictAsync(
+            check.CheckId, window, responseWindow, ct, poll ?? Task.Delay, captureOnTimeout);
     }
 
     /// <summary>How long the result stays on screen before the check window closes.</summary>
@@ -110,7 +112,7 @@ public sealed class VerificationFlow
     /// </summary>
     public async Task<FlowResult> RunLivenessCheckAsync(
         CheckType type, TimeSpan responseWindow, CancellationToken ct,
-        Func<TimeSpan, CancellationToken, Task>? poll = null)
+        Func<TimeSpan, CancellationToken, Task>? poll = null, bool captureOnTimeout = false)
     {
         if (_browser is null)
         {
@@ -119,8 +121,13 @@ public sealed class VerificationFlow
 
         var check = await _api.OpenCheckAsync(type, ct);
         var session = await _api.CreateLivenessSessionAsync(check.CheckId, ct);
-        using var window = _browser.Open(session.LivenessUrl);
-        return await AwaitVerdictAsync(check.CheckId, window, responseWindow, ct, poll ?? Task.Delay);
+        // The page tells the employee a photo will be taken if nobody answers. The
+        // notice travels with the window it applies to, so it cannot be shown on a
+        // check that will not take one.
+        var url = captureOnTimeout ? WithTimeoutPhotoNotice(session.LivenessUrl) : session.LivenessUrl;
+        using var window = _browser.Open(url);
+        return await AwaitVerdictAsync(
+            check.CheckId, window, responseWindow, ct, poll ?? Task.Delay, captureOnTimeout);
     }
 
     /// <summary>
@@ -129,9 +136,18 @@ public sealed class VerificationFlow
     /// a scan is reported to the server with its reason, so an administrator sees
     /// "missed: window closed" instead of a check that never finishes.
     /// </summary>
+    /// <summary>Query flag the check page reads to show the "a photo will be taken" line.</summary>
+    public const string TimeoutPhotoParam = "photoOnTimeout=1";
+
+    private static string WithTimeoutPhotoNotice(string url) =>
+        url.Contains(TimeoutPhotoParam, StringComparison.Ordinal)
+            ? url
+            : url + (url.Contains('?') ? "&" : "?") + TimeoutPhotoParam;
+
     private async Task<FlowResult> AwaitVerdictAsync(
         string checkId, IBrowserSession window, TimeSpan responseWindow,
-        CancellationToken ct, Func<TimeSpan, CancellationToken, Task> poll)
+        CancellationToken ct, Func<TimeSpan, CancellationToken, Task> poll,
+        bool captureOnTimeout = false)
     {
         var openedAt = DateTimeOffset.UtcNow;
         var deadline = openedAt + responseWindow;
@@ -159,8 +175,57 @@ public sealed class VerificationFlow
             }
             await poll(TimeSpan.FromSeconds(2), ct);
         }
+        if (captureOnTimeout && MissReason(windowClosed: false, openedAt) == "timeout")
+        {
+            // Only a plain timeout: the screen was open and nobody answered, which is
+            // the one case a photo can say something about. A locked or sleeping
+            // machine is reported as what it was, with no camera touched.
+            await ReportUnansweredAsync(checkId, window, ct, poll);
+            return new FlowResult(FlowOutcome.NotAccepted, null);
+        }
         await TryCancelAsync(checkId, MissReason(windowClosed: false, openedAt), ct);
         return new FlowResult(FlowOutcome.NotAccepted, null);
+    }
+
+    /// <summary>How long to let the check window hand the camera back before using it.</summary>
+    public static readonly TimeSpan CameraReleaseTime = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Ends an unanswered check with the frame taken as its window closed. The check
+    /// page owns the camera until its window is gone, and closing it is asynchronous,
+    /// so the window goes first and the camera is given a moment to come back. A
+    /// camera that is still busy, missing or blocked simply yields no frame, and the
+    /// miss is recorded exactly as it would have been without the photo.
+    /// </summary>
+    private async Task ReportUnansweredAsync(
+        string checkId, IBrowserSession window, CancellationToken ct,
+        Func<TimeSpan, CancellationToken, Task> poll)
+    {
+        CapturedFrame? frame = null;
+        try
+        {
+            window.Dispose();
+            await poll(CameraReleaseTime, ct);
+            if (!await _camera.IsCameraBusyAsync(ct))
+            {
+                frame = await _camera.CaptureFrameAsync(ct);
+            }
+        }
+        catch
+        {
+            // The photo is a nice-to-have on a check that is already missed; never
+            // let it be the reason the miss itself goes unrecorded.
+            frame = null;
+        }
+
+        try
+        {
+            await _api.ReportUnansweredAsync(checkId, frame, ct);
+        }
+        catch
+        {
+            // ignored: the server's own sweep expires a check the agent could not end
+        }
     }
 
     /// <summary>

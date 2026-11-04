@@ -43,7 +43,8 @@ public sealed class AgentApiClient : IAgentApi
     private sealed record AuthResponse(string AccessToken, long ExpiresInSeconds);
     private sealed record PolicyResponse(
         string WorkWindowStart, string WorkWindowEnd, string Timezone,
-        int MaxChecksPerDay, int ResponseTimeoutSeconds, bool LivenessOnSessionStart);
+        int MaxChecksPerDay, int ResponseTimeoutSeconds, bool LivenessOnSessionStart,
+        bool CaptureOnTimeout);
 
     public async Task<DeviceCredentials> RegisterAsync(
         string enrollmentToken, string platform, string? hostname, string? agentVersion, CancellationToken ct)
@@ -97,7 +98,8 @@ public sealed class AgentApiClient : IAgentApi
             body.Timezone,
             body.MaxChecksPerDay,
             body.ResponseTimeoutSeconds,
-            body.LivenessOnSessionStart);
+            body.LivenessOnSessionStart,
+            body.CaptureOnTimeout);
     }
 
     public async Task<OpenCheck> OpenCheckAsync(CheckType type, CancellationToken ct)
@@ -144,6 +146,19 @@ public sealed class AgentApiClient : IAgentApi
             url += $"&note={Uri.EscapeDataString(note)}";
         }
         var response = await _http.PostAsync(url, content: null, ct);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task ReportUnansweredAsync(string checkId, CapturedFrame? frame, CancellationToken ct)
+    {
+        using var form = new MultipartFormDataContent();
+        if (frame is not null)
+        {
+            var image = new ByteArrayContent(frame.Jpeg);
+            image.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+            form.Add(image, "image", "unanswered.jpg");
+        }
+        var response = await _http.PostAsync($"/api/v1/checks/{checkId}/unanswered", form, ct);
         response.EnsureSuccessStatusCode();
     }
 

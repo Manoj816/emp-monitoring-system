@@ -6,7 +6,10 @@ import { describeOutcome, livenessNote, type Outcome } from "./outcome";
 
 /**
  * Face Liveness page, opened by the desktop agent (in its own window):
- *   /?checkId=<id>&token=<nonce>&session=<rekognition session id>
+ *   /?checkId=<id>&token=<nonce>&session=<rekognition session id>[&photoOnTimeout=1]
+ *
+ * photoOnTimeout is set when the tenant photographs checks nobody answers; the
+ * page says so up front, before the response window starts running down.
  *
  * The AWS component runs the guided full-face scan and streams it to Rekognition
  * using guest credentials from the Cognito identity pool (scoped to
@@ -34,6 +37,10 @@ export default function App() {
   const checkId = params.get("checkId");
   const token = params.get("token");
   const [session, setSession] = useState(params.get("session"));
+  // Set by the agent when this tenant's policy says an unanswered check is
+  // photographed. The employee is told before the window starts counting down —
+  // a check is never a camera that watches without saying so.
+  const photoOnTimeout = params.get("photoOnTimeout") === "1";
   const [restarts, setRestarts] = useState(0);
   const [state, setState] = useState<State>("scan");
   const [message, setMessage] = useState("");
@@ -149,6 +156,13 @@ export default function App() {
         <p className="warning">
           Photosensitivity warning: the screen flashes different colors during the scan.
         </p>
+        {photoOnTimeout && (
+          <p className="warning">
+            If this check is not completed before the time runs out, a single photo will be
+            taken from this camera and attached to the missed check. It is not compared
+            against anything — an administrator looks at it.
+          </p>
+        )}
         {notice && <p className="notice">{notice}</p>}
         <div className="scan">
           {/* The camera opens straight away (no start screen to scroll to): the

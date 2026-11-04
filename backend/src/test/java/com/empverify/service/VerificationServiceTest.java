@@ -80,6 +80,78 @@ class VerificationServiceTest {
         when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
     }
 
+    // ---- a check nobody answered -------------------------------------------
+    //
+    // The photo is evidence of an empty desk for a person to look at. It must
+    // never become a verdict, and it must never be kept unless the deployment
+    // asked for it - the agent sends it, the server decides.
+
+    @Test
+    void anUnansweredCheckKeepsThePhotoAndSaysWhereItCameFrom() {
+        var check = pendingCheck("nonce-u", Instant.now().plusSeconds(60));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(storage.store(any(), any())).thenReturn("evidence/key.jpg");
+
+        var result = service.recordUnanswered(deviceId, check.getId(), new byte[] {7, 7, 7});
+
+        assertEquals(CheckStatus.EXPIRED, result.getStatus());
+        assertEquals("evidence/key.jpg", result.getEvidenceS3Key());
+        // Nothing was compared, so nothing may look like a comparison.
+        assertNull(result.getSimilarityScore());
+        assertNull(result.getLivenessConfidence());
+        assertFalse(result.isMismatchFlag());
+        verify(verifier, never()).verify(any(), any());
+        assertTrue(result.getErrorDetail().contains("taken automatically"), result.getErrorDetail());
+        assertTrue(result.getErrorDetail().contains("not been compared"), result.getErrorDetail());
+    }
+
+    @Test
+    void withoutAPhotoAnUnansweredCheckIsTheSameMissAsBefore() {
+        var check = pendingCheck("nonce-u", Instant.now().plusSeconds(60));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+        when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        // null is what the controller passes when the policy is off, or the agent
+        // had no camera: the miss is recorded exactly as it always was.
+        var result = service.recordUnanswered(deviceId, check.getId(), null);
+
+        assertEquals(CheckStatus.EXPIRED, result.getStatus());
+        assertNull(result.getEvidenceS3Key());
+        verify(storage, never()).store(any(), any());
+        assertTrue(result.getErrorDetail().contains("nobody completed the scan"), result.getErrorDetail());
+        assertFalse(result.getErrorDetail().contains("taken automatically"), result.getErrorDetail());
+    }
+
+    @Test
+    void aPhotoIsNotAttachedToACheckThatWasAlreadyAnswered() {
+        // The scan landed in the moment between the window closing and the agent
+        // reporting. Attaching the frame would caption a completed check with
+        // "nobody answered", which is a lie about the employee.
+        var check = pendingCheck("nonce-u", Instant.now().plusSeconds(60));
+        check.setStatus(CheckStatus.MATCH);
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+
+        var result = service.recordUnanswered(deviceId, check.getId(), new byte[] {7, 7, 7});
+
+        assertEquals(CheckStatus.MATCH, result.getStatus());
+        assertNull(result.getEvidenceS3Key());
+        verify(storage, never()).store(any(), any());
+        verify(checks, never()).save(any());
+    }
+
+    @Test
+    void anUnansweredCheckOnSomebodyElsesDeviceIsRefused() {
+        var check = pendingCheck("nonce-u", Instant.now().plusSeconds(60));
+        when(checks.findById(check.getId())).thenReturn(Optional.of(check));
+
+        var e = assertThrows(ApiException.class,
+                () -> service.recordUnanswered(UUID.randomUUID(), check.getId(), new byte[] {7}));
+
+        assertEquals(HttpStatus.FORBIDDEN, e.getStatus());
+        verify(storage, never()).store(any(), any());
+    }
+
     @Test
     void highSimilarityCaptureReturnsMatchAndDiscardsEvidence() {
         var check = pendingCheck("nonce-1", Instant.now().plusSeconds(60));

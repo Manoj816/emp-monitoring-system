@@ -18,7 +18,13 @@ public sealed record CheckPolicy(
     string Timezone,
     int MaxChecksPerDay,
     int ResponseTimeoutSeconds,
-    bool LivenessOnSessionStart);
+    bool LivenessOnSessionStart,
+    /// <summary>
+    /// Take one frame when a check's response window closes unanswered, so the
+    /// record shows whether the desk was empty. The server decides whether the
+    /// frame is kept; this only tells the agent whether to offer one.
+    /// </summary>
+    bool CaptureOnTimeout = false);
 
 public sealed record OpenCheck(string CheckId, string Nonce, DateTimeOffset ExpiresAt);
 

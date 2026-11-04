@@ -40,4 +40,13 @@ public interface IAgentApi
     /// the administrator reads the facts instead of a one-word category.
     /// </param>
     Task CancelCheckAsync(string checkId, string reason, CancellationToken ct, string? note = null);
+
+    /// <summary>
+    /// Reports that a check's response window closed with nobody answering it, with
+    /// the frame taken at that moment. The server records the miss either way and
+    /// keeps the frame only if the tenant's policy asks for it, so the agent never
+    /// decides what is retained.
+    /// </summary>
+    /// <param name="frame">Null when there was no camera, or it was in use.</param>
+    Task ReportUnansweredAsync(string checkId, CapturedFrame? frame, CancellationToken ct);
 }

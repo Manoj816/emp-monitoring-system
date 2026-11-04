@@ -36,6 +36,13 @@ reference image. Independent of Teams/Zoom. Full design:
 - A slot the machine **slept through** is run late while the window is still open,
   and recorded as the day's miss once it has closed. A face scan is never opened
   outside the hours the employee is checked in.
+- A check nobody answers can be **photographed once**, as the response window
+  closes, and the frame kept with the missed check — so "the desk was empty" and
+  "the employee ignored it" stop looking identical. It is off unless a deployment
+  turns it on (`check_policy.capture_on_timeout`), the employee is told in the
+  check window before the countdown starts, nothing is ever compared against the
+  frame, and only a plain timeout is photographed: a locked or sleeping machine
+  already says what happened, and nobody chose to be in front of that camera.
 - A record never asserts what the server cannot see. "No check was opened" and
   "the machine was off" are different claims: the agent signs in about every
   minute, so the last-contact time is what separates a machine nobody used from a
