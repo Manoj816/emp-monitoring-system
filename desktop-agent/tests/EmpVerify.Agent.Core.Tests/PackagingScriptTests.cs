@@ -115,6 +115,19 @@ public class PackagingScriptTests
     }
 
     [Fact]
+    public void SupplyingTheTokenAgainDoesNotWipeTheMachinesIdentity()
+    {
+        // New-Item -Force on an existing registry key replaces it rather than
+        // merging, deleting every value under it — InstallId with them. Handing the
+        // same provisioning.json to an upgrade therefore wiped this machine's
+        // identity and sent it back to the portal as Unassigned, which is exactly
+        // what the install-id guard above exists to prevent.
+        var script = ReadScript("Install-PerMachine.ps1");
+        Assert.DoesNotContain("New-Item -Path $regPath -Force", script);
+        Assert.Contains("if (-not $hadConfig) { New-Item -Path $regPath | Out-Null }", script);
+    }
+
+    [Fact]
     public void StartingAMachineOverIsStillPossibleButDeliberate()
     {
         var script = ReadScript("Install-PerMachine.ps1");

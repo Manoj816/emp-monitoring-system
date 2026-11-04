@@ -190,13 +190,20 @@ if ($wv2) {
 # ---------------------------------------------------------------- 4. provisioning
 Write-Host "[4/6] Provisioning..."
 $regPath = "HKLM:\SOFTWARE\EmpVerify"
+$hadConfig = Test-Path $regPath
+# -Force on a registry key that already exists does not merge into it, it replaces
+# it: every value underneath, InstallId included, is deleted. That made handing the
+# same provisioning.json to an upgrade wipe the machine's identity, so a PC came
+# back to the portal as Unassigned purely for having the token file next to the
+# installer. Create the key only when it is genuinely absent; write values into it
+# either way.
+if (-not $hadConfig) { New-Item -Path $regPath | Out-Null }
 if ($ProvisioningToken) {
-    New-Item -Path $regPath -Force | Out-Null
     Set-ItemProperty -Path $regPath -Name "ProvisioningToken" -Value $ProvisioningToken.Trim()
     if ($BackendUrl) { Set-ItemProperty -Path $regPath -Name "BackendUrl" -Value $BackendUrl.Trim() }
     Remove-ItemProperty -Path $regPath -Name "EnrollmentToken" -ErrorAction SilentlyContinue
-    Write-Host "  token stored; the agent registers this system as 'Unassigned' on first launch"
-} elseif (Test-Path $regPath) {
+    Write-Host "  provisioning token stored"
+} elseif ($hadConfig) {
     Write-Host "  keeping the existing HKLM\SOFTWARE\EmpVerify configuration"
 } else {
     Write-Warning "No provisioning token: the agent will ask for an enrollment token on first launch. Pass -ProvisioningToken/-BackendUrl or put provisioning.json next to this script."
@@ -206,7 +213,6 @@ if ($ProvisioningToken) {
 # when the id changes, so upgrading - or simply re-running this script - keeps the
 # employee assignment. Minting a fresh id every run meant every update cost an
 # administrator a re-assignment of every PC, which no fleet of any size can absorb.
-if (-not (Test-Path $regPath)) { New-Item -Path $regPath | Out-Null }
 $knownInstallId = (Get-ItemProperty -Path $regPath -Name "InstallId" -ErrorAction SilentlyContinue).InstallId
 $registersAfresh = $ResetIdentity -or -not $knownInstallId
 if ($registersAfresh) {
