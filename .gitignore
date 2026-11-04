@@ -42,3 +42,10 @@ Thumbs.db
 
 # Local deploy helper (has a machine-specific terraform path)
 infra/terraform/deploy.ps1
+
+# Employee-import test material. These are files you upload from your own
+# machine, not repo content: the portal's "Download template" button writes the
+# blank template, and a filled sample carries base64 photos that would bloat the
+# history for nothing.
+docs/employees-import-template.csv
+docs/employee-import-sample/

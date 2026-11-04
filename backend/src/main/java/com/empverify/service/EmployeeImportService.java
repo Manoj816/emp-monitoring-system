@@ -8,6 +8,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,25 +29,39 @@ import org.springframework.transaction.annotation.Transactional;
  * arrived, and re-uploading the corrected file then collides with the records
  * that did.
  *
- * <p>A CSV holds text, so it cannot carry the ID/photo itself. A row names its
- * picture in the optional {@code photoFile} column and the pictures are chosen
- * alongside the file; the import pairs them up by name. The picture has to be a
- * JPEG or PNG, because that is what the face matcher reads - a PDF of an ID card
- * is not something a face can be compared against, whatever it looks like to a
- * person.
+ * <p>A row carries its own ID/photo, base64-encoded, in the optional
+ * {@code photoBase64} column. Everything an employee needs is then in their row:
+ * nothing to pick alongside the file, nothing for the server to go and fetch,
+ * and no way for a picture to go missing between the file being written and
+ * being uploaded.
  *
- * <p>A row may leave {@code photoFile} empty, and then that employee arrives
- * with no reference. They are listed as "ID / photo: missing", counted by the
- * "Photo missing" tile, and cannot be verified until somebody uploads one - a
- * check needs a reference to compare the face against. Letting the photo come
- * later is the whole point of the bulk path; the single-employee form still
- * demands one, because there nothing is gained by deferring it.
+ * <p>The cost of that is size, and it is worth being plain about it: base64 is
+ * about a third larger than the picture it carries, so a row holding a 60 KB
+ * photo is an 80 KB row. A few hundred employees with pictures make a file of
+ * tens of megabytes - which is what {@code spring.servlet.multipart} is sized
+ * for - and tens of thousands would not fit in one upload at all. A file that
+ * large has to leave {@code photoBase64} empty and have the pictures uploaded
+ * per person afterwards, or be split.
+ *
+ * <p>{@code photoBase64} may be left empty, and that employee arrives with no
+ * reference: listed as "ID / photo: missing", counted by the "Photo missing"
+ * tile, and not verifiable until somebody uploads one, because a check needs
+ * something to compare a face against. The roster is worth having before the
+ * pictures are. The single-employee form still demands a photo, because there
+ * nothing is gained by deferring it.
  */
 @Service
 public class EmployeeImportService {
 
     /** Rows, not counting the header, that one upload may carry. */
-    public static final int MAX_ROWS = 500;
+    public static final int MAX_ROWS = 5000;
+
+    /**
+     * Decoded size of one row's picture. A reference image is a head-and-shoulders
+     * photo or a scan of an ID; past this it is something else, and a file full of
+     * them would not survive the upload limit anyway.
+     */
+    public static final int MAX_PICTURE_BYTES = 4 * 1024 * 1024;
 
     /** Bad rows listed individually; the report still counts the rest. */
     static final int MAX_PROBLEMS_LISTED = 50;
@@ -74,18 +89,15 @@ public class EmployeeImportService {
             Map.entry("emailaddress", "email"),
             Map.entry("department", "department"),
             Map.entry("dept", "department"),
-            Map.entry("photofile", "photoFile"),
-            Map.entry("photo", "photoFile"),
-            Map.entry("photofilename", "photoFile"),
-            Map.entry("idphoto", "photoFile"),
-            Map.entry("image", "photoFile"),
-            Map.entry("imagefile", "photoFile"));
+            Map.entry("photobase64", "photoBase64"),
+            Map.entry("photo", "photoBase64"),
+            Map.entry("photodata", "photoBase64"),
+            Map.entry("idphoto", "photoBase64"),
+            Map.entry("imagebase64", "photoBase64"));
 
-    /** photoFile is deliberately absent: a row may arrive without a picture. */
+    /** photoBase64 is deliberately absent: a row may arrive without a picture. */
     private static final List<String> REQUIRED =
             List.of("employeeCode", "fullName", "email", "department");
-
-    private static final Pattern PICTURE_NAME = Pattern.compile("(?i).*\\.(jpe?g|png)$");
 
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
@@ -94,7 +106,7 @@ public class EmployeeImportService {
 
     /**
      * @param imported    employees created (0 whenever anything was wrong)
-     * @param withPhoto   how many of those arrived with their ID/photo attached
+     * @param withPhoto   how many of those carried an ID/photo in their row
      * @param rows        employee rows found in the file
      * @param problemRows rows with a problem, including any beyond those listed
      * @param problems    the first {@value #MAX_PROBLEMS_LISTED} of them, in file order
@@ -113,17 +125,8 @@ public class EmployeeImportService {
         this.audit = audit;
     }
 
-    /** A file whose rows all leave photoFile empty; every employee arrives without a reference. */
-    public ImportReport importCsv(byte[] content) {
-        return importCsv(content, Map.of());
-    }
-
-    /**
-     * @param photos the pictures chosen alongside the file, by file name; the
-     *               {@code photoFile} column of a row picks one out of these
-     */
     @Transactional
-    public ImportReport importCsv(byte[] content, Map<String, byte[]> photos) {
+    public ImportReport importCsv(byte[] content) {
         if (content == null || content.length == 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "The file is empty.");
         }
@@ -144,13 +147,8 @@ public class EmployeeImportService {
                             + MAX_ROWS + ". Split it and import the parts.");
         }
 
-        // Windows file names are not case-sensitive and the CSV is typed by hand, so
-        // "E-1001.JPG" in the folder and "e-1001.jpg" in the file are the same picture.
-        var picturesByName = new HashMap<String, byte[]>();
-        photos.forEach((name, bytes) -> picturesByName.put(name.toLowerCase(Locale.ROOT), bytes));
-
         var problems = new ArrayList<RowProblem>();
-        var accepted = new ArrayList<NewEmployee>();
+        var accepted = new ArrayList<PendingEmployee>();
         // Lower-cased value -> the row that claimed it first, so the second one can
         // say which row it collides with instead of only "duplicate".
         var codesSeen = new HashMap<String, Integer>();
@@ -163,7 +161,7 @@ public class EmployeeImportService {
             String name = cell(fields, column, "fullName");
             String email = cell(fields, column, "email");
             String department = cell(fields, column, "department");
-            String photoFile = column.containsKey("photoFile") ? cell(fields, column, "photoFile") : "";
+            String photoData = column.containsKey("photoBase64") ? cell(fields, column, "photoBase64") : "";
 
             var faults = new ArrayList<String>();
             if (code.isEmpty()) {
@@ -202,17 +200,12 @@ public class EmployeeImportService {
             }
 
             byte[] picture = null;
-            if (!photoFile.isEmpty()) {
-                picture = picturesByName.get(photoFile.toLowerCase(Locale.ROOT));
-                if (!PICTURE_NAME.matcher(photoFile).matches()) {
-                    // A PDF or a scan of an ID card is not a picture a face can be
-                    // compared against, so it is refused here rather than stored and
-                    // found unusable at the employee's first scan.
-                    faults.add("photo \"" + photoFile + "\" has to be a .jpg or .png");
-                } else if (picture == null) {
-                    faults.add("photo \"" + photoFile + "\" was not among the pictures you chose");
-                } else if (!ReferenceImageService.looksLikeImage(picture)) {
-                    faults.add("photo \"" + photoFile + "\" is not a readable JPEG or PNG");
+            if (!photoData.isEmpty()) {
+                var decoded = decodePicture(photoData);
+                if (decoded.problem() != null) {
+                    faults.add("photoBase64 " + decoded.problem());
+                } else {
+                    picture = decoded.picture();
                 }
             }
 
@@ -222,7 +215,7 @@ public class EmployeeImportService {
                 employee.setFullName(name);
                 employee.setEmail(email);
                 employee.setDepartment(canonicalDepartment);
-                accepted.add(new NewEmployee(employee, picture));
+                accepted.add(new PendingEmployee(employee, picture));
             } else {
                 problems.add(new RowProblem(row, code, String.join("; ", faults)));
             }
@@ -249,8 +242,45 @@ public class EmployeeImportService {
         return new ImportReport(accepted.size(), withPhoto, rows.size(), 0, List.of());
     }
 
-    /** A row that passed, held until the whole file has, with the picture it named. */
-    private record NewEmployee(Employee employee, byte[] picture) {}
+    /** A row that passed, held until the whole file has, with the picture it carried. */
+    private record PendingEmployee(Employee employee, byte[] picture) {}
+
+    /** A decoded picture, or the reason the cell did not yield one. */
+    record Picture(byte[] picture, String problem) {}
+
+    /**
+     * Turns one {@code photoBase64} cell into image bytes.
+     *
+     * <p>Tolerates the two things real exports carry: a {@code data:image/...;base64,}
+     * prefix, and line breaks inside the base64. What it does not tolerate is
+     * something that decodes cleanly but is not a picture - that is judged by the
+     * leading bytes, so a stray PDF or a block of text cannot quietly become
+     * somebody's reference image.
+     */
+    static Picture decodePicture(String value) {
+        String data = value;
+        if (data.regionMatches(true, 0, "data:", 0, 5)) {
+            int comma = data.indexOf(',');
+            if (comma < 0) {
+                return new Picture(null, "looks like a data: URI but has no comma before the data");
+            }
+            data = data.substring(comma + 1);
+        }
+        data = data.replaceAll("\\s", "");
+        byte[] bytes;
+        try {
+            bytes = Base64.getDecoder().decode(data);
+        } catch (IllegalArgumentException e) {
+            return new Picture(null, "is not valid base64");
+        }
+        if (bytes.length > MAX_PICTURE_BYTES) {
+            return new Picture(null, "is bigger than " + (MAX_PICTURE_BYTES / (1024 * 1024)) + " MB");
+        }
+        if (!ReferenceImageService.looksLikeImage(bytes)) {
+            return new Picture(null, "is not a JPEG or PNG picture");
+        }
+        return new Picture(bytes, null);
+    }
 
     /** Maps each field this import needs onto the position it sits at in the file. */
     private static Map<String, Integer> headerColumns(List<String> header) {
@@ -266,7 +296,7 @@ public class EmployeeImportService {
             throw new ApiException(HttpStatus.BAD_REQUEST,
                     "The first row of the file has to name the columns, and this one is missing "
                             + String.join(", ", missing)
-                            + ". Expected: employeeCode,fullName,email,department");
+                            + ". Expected: employeeCode,fullName,email,department,photoBase64");
         }
         return column;
     }

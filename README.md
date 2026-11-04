@@ -50,14 +50,18 @@ reference image. Independent of Teams/Zoom. Full design:
   check window before the countdown starts, nothing is ever compared against the
   frame, and only a plain timeout is photographed: a locked or sleeping machine
   already says what happened, and nobody chose to be in front of that camera.
-- Employees can be created **in bulk from a CSV**, with their ID/photos chosen
-  alongside it and paired to the rows by file name. The file lands whole or not
-  at all: one bad row imports nothing and every bad row is reported at once, so
-  the portal never shows a half-imported list. A row may leave its photo for
-  later — those employees are listed as "ID / photo: missing" and cannot be
-  verified until one is uploaded, which is the honest state rather than a
-  blocked import. The picture has to be a JPEG or PNG; a PDF of an ID card is a
-  document, not something a face can be compared against.
+- Employees can be created **in bulk from a CSV**, each row carrying its own
+  ID/photo base64-encoded in a `photoBase64` column — so everything an employee
+  needs is in their row, with nothing to pick alongside the file and nothing for
+  the server to go and fetch. The file lands whole or not at all: one bad row
+  imports nothing and every bad row is reported at once, so the portal never
+  shows a half-imported list. A row may leave its photo for later — those
+  employees are listed as "ID / photo: missing" and cannot be verified until one
+  is uploaded, which is the honest state rather than a blocked import. The
+  picture has to be a JPEG or PNG, judged by its leading bytes: a PDF of an ID
+  card encodes perfectly well but is not something a face can be compared
+  against. Base64 costs about a third in size, so a very large roster is
+  imported without photos and given them per person afterwards.
 - A record never asserts what the server cannot see. "No check was opened" and
   "the machine was off" are different claims: the agent signs in about every
   minute, so the last-contact time is what separates a machine nobody used from a

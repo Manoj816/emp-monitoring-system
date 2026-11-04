@@ -15,8 +15,8 @@ import com.empverify.domain.Employee;
 import com.empverify.repo.EmployeeRepository;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -255,36 +255,37 @@ class EmployeeImportServiceTest {
         assertThrows(ApiException.class, () -> service.importCsv(new byte[0]));
     }
 
-    // --- pictures alongside the file ------------------------------------
+    // --- the picture the row carries -------------------------------------
 
-    private static final String PHOTO_HEADER = "employeeCode,fullName,email,department,photoFile\n";
+    private static final String PHOTO_HEADER =
+            "employeeCode,fullName,email,department,photoBase64\n";
 
     /** Smallest thing that passes the magic-byte check: a JPEG starts FF D8 FF. */
     private static byte[] jpeg() {
         return new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 0, 0, 0, 1, 2};
     }
 
+    private static String encoded() {
+        return Base64.getEncoder().encodeToString(jpeg());
+    }
+
+    private static String rowWith(String photoCell) {
+        return PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering," + photoCell + "\n";
+    }
+
     @Test
-    void aRowThatNamesAPictureHasItStoredAsTheEmployeesReference() {
-        var report = service.importCsv(
-                (PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering,E-1001.jpg\n")
-                        .getBytes(StandardCharsets.UTF_8),
-                Map.of("E-1001.jpg", jpeg()));
+    void theRowsOwnPictureIsStoredAsTheEmployeesReference() {
+        var report = importing(rowWith(encoded()));
 
         assertEquals(1, report.imported());
         assertEquals(1, report.withPhoto());
-        // Resolved before the next verify starts: a verify() nested inside another
-        // verify()'s arguments leaves Mockito mid-verification.
         var employeeId = saved(1).get(0).getId();
         verify(referenceImages).storeAdminUpload(eq(employeeId), eq(jpeg()));
     }
 
     @Test
     void aRowMayLeaveThePictureForLater() {
-        var report = service.importCsv(
-                (PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering,\n")
-                        .getBytes(StandardCharsets.UTF_8),
-                Map.of());
+        var report = importing(rowWith(""));
 
         assertEquals(1, report.imported(), "the record is worth having before the photo is");
         assertEquals(0, report.withPhoto());
@@ -292,66 +293,74 @@ class EmployeeImportServiceTest {
     }
 
     @Test
-    void aPdfIsRefusedBecauseAFaceCannotBeComparedAgainstIt() {
-        // An ID card as a PDF is a document, not a picture the matcher can read.
-        var report = service.importCsv(
-                (PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering,id-card.pdf\n")
-                        .getBytes(StandardCharsets.UTF_8),
-                Map.of("id-card.pdf", "%PDF-1.7 not a picture".getBytes(StandardCharsets.UTF_8)));
-
-        assertEquals(0, report.imported());
-        assertTrue(report.problems().get(0).detail().contains(".jpg or .png"),
-                report.problems().get(0).detail());
-        verify(employees, never()).save(any());
-    }
-
-    @Test
-    void aFileRenamedToLookLikeAPictureIsStillRefused() {
-        var report = service.importCsv(
-                (PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering,id-card.jpg\n")
-                        .getBytes(StandardCharsets.UTF_8),
-                Map.of("id-card.jpg", "%PDF-1.7 renamed".getBytes(StandardCharsets.UTF_8)));
-
-        assertEquals(0, report.imported());
-        assertTrue(report.problems().get(0).detail().contains("not a readable JPEG or PNG"),
-                report.problems().get(0).detail());
-    }
-
-    @Test
-    void aPictureTheFileNamesButNobodyChoseIsReportedAgainstItsRow() {
-        var report = service.importCsv(
-                (PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering,missing.jpg\n")
-                        .getBytes(StandardCharsets.UTF_8),
-                Map.of("something-else.jpg", jpeg()));
-
-        assertEquals(0, report.imported());
-        assertTrue(report.problems().get(0).detail().contains("was not among the pictures you chose"),
-                report.problems().get(0).detail());
-    }
-
-    @Test
-    void thePictureNameDoesNotHaveToMatchTheFilesCasing() {
-        // Windows does not distinguish the two, so neither should the pairing.
-        var report = service.importCsv(
-                (PHOTO_HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering,e-1001.jpg\n")
-                        .getBytes(StandardCharsets.UTF_8),
-                Map.of("E-1001.JPG", jpeg()));
+    void aDataUriPrefixIsToleratedBecauseExportsCarryOne() {
+        // Quoted, because a data: URI has a comma in it.
+        var report = importing(rowWith("\"data:image/jpeg;base64," + encoded() + "\""));
 
         assertEquals(1, report.imported());
         assertEquals(1, report.withPhoto());
     }
 
     @Test
-    void nothingIsStoredWhenOneRowOfAPhotoFileIsWrong() {
-        var report = service.importCsv(
-                (PHOTO_HEADER
-                        + "E-1001,Asha Menon,asha.menon@example.com,Engineering,E-1001.jpg\n"
-                        + "E-1002,Sam Price,sam.price@example.com,Finance,gone.jpg\n")
-                        .getBytes(StandardCharsets.UTF_8),
-                Map.of("E-1001.jpg", jpeg()));
+    void lineBreaksInsideTheBase64AreTolerated() {
+        var wrapped = encoded().substring(0, 4) + "\n" + encoded().substring(4);
+        var report = importing(rowWith("\"" + wrapped + "\""));
+
+        assertEquals(1, report.imported());
+        assertEquals(1, report.withPhoto());
+    }
+
+    @Test
+    void somethingThatIsNotBase64AtAllIsRefused() {
+        var report = importing(rowWith("not base64 $$$"));
+
+        assertEquals(0, report.imported());
+        assertTrue(report.problems().get(0).detail().contains("not valid base64"),
+                report.problems().get(0).detail());
+        verify(employees, never()).save(any());
+    }
+
+    @Test
+    void validBase64ThatIsNotAPictureIsRefused() {
+        // A PDF of an ID card encodes perfectly well; a face cannot be compared
+        // against it, so it must not become somebody's reference image.
+        var pdf = Base64.getEncoder().encodeToString("%PDF-1.7 an ID card".getBytes(StandardCharsets.UTF_8));
+        var report = importing(rowWith(pdf));
+
+        assertEquals(0, report.imported());
+        assertTrue(report.problems().get(0).detail().contains("not a JPEG or PNG"),
+                report.problems().get(0).detail());
+    }
+
+    @Test
+    void aPictureTooBigForARowIsRefused() {
+        var huge = new byte[EmployeeImportService.MAX_PICTURE_BYTES + 1];
+        huge[0] = (byte) 0xFF;
+        huge[1] = (byte) 0xD8;
+        huge[2] = (byte) 0xFF;
+        var report = importing(rowWith(Base64.getEncoder().encodeToString(huge)));
+
+        assertEquals(0, report.imported());
+        assertTrue(report.problems().get(0).detail().contains("bigger than"),
+                report.problems().get(0).detail());
+    }
+
+    @Test
+    void nothingIsStoredWhenOnlyOneRowsPictureIsBad() {
+        var report = importing(PHOTO_HEADER
+                + "E-1001,Asha Menon,asha.menon@example.com,Engineering," + encoded() + "\n"
+                + "E-1002,Sam Price,sam.price@example.com,Finance,@@@not base64@@@\n");
 
         assertEquals(0, report.imported());
         verify(employees, never()).save(any());
         verify(referenceImages, never()).storeAdminUpload(any(), any());
+    }
+
+    @Test
+    void aFileWithNoPhotoColumnAtAllStillImports() {
+        var report = importing(HEADER + "E-1001,Asha Menon,asha.menon@example.com,Engineering\n");
+
+        assertEquals(1, report.imported());
+        assertEquals(0, report.withPhoto());
     }
 }

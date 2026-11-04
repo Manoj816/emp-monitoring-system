@@ -5,19 +5,15 @@ import { api, DEPARTMENTS, type ImportReport } from "../api";
  * "Import employees" popup: one CSV creates many records at once, instead of
  * the Add-employee form once per person.
  *
- * A CSV holds text, so it cannot carry the ID/photo itself. A row names its
- * picture in the photoFile column and the pictures are chosen here alongside the
- * file; the server pairs them by name. A row may leave photoFile empty and the
- * employee is still created — they show as "ID / photo: missing" until somebody
- * uploads one. Deferring the photo is the point of the bulk path; the
- * single-employee form still demands one, where nothing is gained by waiting.
+ * Each row carries its own ID/photo, base64-encoded, in the optional
+ * photoBase64 column — so everything an employee needs is in their row and
+ * there is nothing to pick alongside the file. A row may leave it empty and the
+ * employee is still created, listed as "ID / photo: missing" until somebody
+ * uploads one.
  */
 
-/** Offered as a download, and the exact shape docs/employees-import-template.csv has. */
-const TEMPLATE = [
-  "employeeCode,fullName,email,department,photoFile",
-  "E-1001,Asha Menon,asha.menon@example.com,Engineering,E-1001.jpg",
-].join("\r\n") + "\r\n";
+/** The template is the header and nothing else: it is a form to fill in, not an example. */
+const TEMPLATE = "employeeCode,fullName,email,department,photoBase64\r\n";
 
 function downloadTemplate() {
   // The BOM is what makes Excel open it as UTF-8 rather than the system codepage,
@@ -33,12 +29,10 @@ function downloadTemplate() {
 
 export default function ImportEmployeesDialog(props: { onClose: () => void; onImported: () => void }) {
   const [file, setFile] = useState<File | null>(null);
-  const [photos, setPhotos] = useState<File[]>([]);
   const [report, setReport] = useState<ImportReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
-  const photoInputRef = useRef<HTMLInputElement>(null);
 
   function chooseCsv(e: React.ChangeEvent<HTMLInputElement>) {
     const chosen = e.target.files?.[0];
@@ -49,27 +43,13 @@ export default function ImportEmployeesDialog(props: { onClose: () => void; onIm
     setError(null);
   }
 
-  function choosePhotos(e: React.ChangeEvent<HTMLInputElement>) {
-    const chosen = Array.from(e.target.files ?? []);
-    e.target.value = "";
-    if (chosen.length === 0) return;
-    // Added to, not replaced: the pictures may well sit in more than one folder.
-    setPhotos((current) => {
-      const byName = new Map(current.map((p) => [p.name.toLowerCase(), p]));
-      for (const photo of chosen) byName.set(photo.name.toLowerCase(), photo);
-      return [...byName.values()];
-    });
-    setReport(null);
-    setError(null);
-  }
-
   async function submit() {
     if (!file) return;
     setBusy(true);
     setError(null);
     setReport(null);
     try {
-      const result = await api.importEmployees(file, photos);
+      const result = await api.importEmployees(file);
       setReport(result);
       if (result.imported > 0) props.onImported();
     } catch (e) {
@@ -88,7 +68,7 @@ export default function ImportEmployeesDialog(props: { onClose: () => void; onIm
 
         <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
           The first row names the columns: <code>employeeCode</code>, <code>fullName</code>,{" "}
-          <code>email</code>, <code>department</code>, and optionally <code>photoFile</code>.
+          <code>email</code>, <code>department</code>, and optionally <code>photoBase64</code>.
           Department has to be one of {DEPARTMENTS.join(", ")}.
         </p>
         <p className="muted" style={{ marginTop: -6, fontSize: 13 }}>
@@ -108,26 +88,13 @@ export default function ImportEmployeesDialog(props: { onClose: () => void; onIm
             </button>
           </div>
 
-          <div className="import-row">
-            <span className="import-label">ID / photos</span>
-            <button type="button" className="action" disabled={busy} onClick={() => photoInputRef.current?.click()}>
-              Choose pictures…
-            </button>
-            <span className={photos.length ? "" : "muted"}>
-              {photos.length === 0 ? "None chosen" : `${photos.length} chosen`}
-            </span>
-            {photos.length > 0 && (
-              <button type="button" className="link" disabled={busy} onClick={() => setPhotos([])}>
-                Clear
-              </button>
-            )}
-          </div>
-
           <p className="import-hint">
-            JPEG or PNG only — a face is compared against this picture, so a PDF or a scanned
-            document cannot stand in for it. A row that leaves <code>photoFile</code> empty still
-            creates the employee; they are listed as “ID / photo: missing” and cannot be verified
-            until a picture is uploaded for them.
+            <code>photoBase64</code> holds the employee's ID/photo itself, base64-encoded — a JPEG
+            or PNG, since a face is compared against it. Leave it empty and the employee is still
+            created; they are listed as “ID / photo: missing” and cannot be verified until a picture
+            is uploaded for them. Base64 is about a third larger than the picture, so a file of a
+            few hundred employees with photos runs to tens of megabytes; for a much larger roster,
+            import without photos and add them per person afterwards.
           </p>
         </div>
 
@@ -182,7 +149,6 @@ export default function ImportEmployeesDialog(props: { onClose: () => void; onIm
               className="primary"
               onClick={() => {
                 setFile(null);
-                setPhotos([]);
                 setReport(null);
               }}
             >
@@ -196,14 +162,6 @@ export default function ImportEmployeesDialog(props: { onClose: () => void; onIm
         </div>
 
         <input ref={csvInputRef} type="file" accept=".csv,text/csv" hidden onChange={chooseCsv} />
-        <input
-          ref={photoInputRef}
-          type="file"
-          accept="image/jpeg,image/png"
-          multiple
-          hidden
-          onChange={choosePhotos}
-        />
       </div>
     </div>
   );

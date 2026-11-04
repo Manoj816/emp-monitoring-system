@@ -129,14 +129,13 @@ public class AdminController {
     }
 
     /**
-     * Creates many employees from one CSV file, with their ID/photos alongside it.
+     * Creates many employees from one CSV file.
      *
-     * <p>A CSV cannot hold a picture, so each row names its picture in the
-     * optional photoFile column and the pictures come up as separate parts of the
-     * same request; the import pairs them by name. A row that names no picture
-     * still creates the employee - they show as "ID / photo: missing" until
-     * somebody uploads one, which is what makes onboarding a whole department in
-     * one go practical.
+     * <p>No ID/photo comes with them: a CSV holds text, and a picture per row
+     * could only arrive as a second upload picked by hand, which stops being a
+     * workflow long before the twenty-thousand-row files this path exists for.
+     * Imported employees show as "ID / photo: missing" until somebody uploads one
+     * per person, and cannot be verified until then.
      *
      * <p>Always answers with a report rather than an error for a bad row: the
      * upload itself succeeded, and the administrator needs the list of what the
@@ -144,8 +143,7 @@ public class AdminController {
      */
     @PostMapping(value = "/employees/import", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
     public EmployeeImportService.ImportReport importEmployees(
-            @RequestParam(value = "file", required = false) MultipartFile file,
-            @RequestParam(value = "photos", required = false) MultipartFile[] photos) {
+            @RequestParam(value = "file", required = false) MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Choose a CSV file to import.");
         }
@@ -155,19 +153,7 @@ public class AdminController {
                     "The import file has to be a .csv. Save the spreadsheet as CSV and upload that.");
         }
         try {
-            var pictures = new java.util.LinkedHashMap<String, byte[]>();
-            if (photos != null) {
-                for (var photo : photos) {
-                    if (photo != null && !photo.isEmpty() && photo.getOriginalFilename() != null) {
-                        // Browsers send the bare name for a multi-file pick, but a folder
-                        // pick sends a relative path; the CSV names the file either way.
-                        var fileName = photo.getOriginalFilename().replace('\\', '/');
-                        fileName = fileName.substring(fileName.lastIndexOf('/') + 1);
-                        pictures.put(fileName, photo.getBytes());
-                    }
-                }
-            }
-            return employeeImport.importCsv(file.getBytes(), pictures);
+            return employeeImport.importCsv(file.getBytes());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -180,8 +166,14 @@ public class AdminController {
         return value.trim();
     }
 
+    /** A reference photo this large is a mistake; the import CSV is what needs the bigger limit. */
+    private static final long MAX_IMAGE_BYTES = 10L * 1024 * 1024;
+
     /** Only JPEG/PNG uploads are accepted; anything else cannot be a usable reference. */
     private static void requireImage(MultipartFile image) {
+        if (image.getSize() > MAX_IMAGE_BYTES) {
+            throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "The image is too large (maximum 10 MB)");
+        }
         var type = image.getContentType() == null ? "" : image.getContentType().toLowerCase();
         var name = image.getOriginalFilename() == null ? "" : image.getOriginalFilename().toLowerCase();
         boolean typed = type.equals("image/jpeg") || type.equals("image/png") || type.equals("image/jpg");

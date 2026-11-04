@@ -31,6 +31,13 @@ public class SecurityConfig {
             .addFilterBefore(apiAuthFilter, UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
+                    // Spring forwards an unmatched path to /error, and that forward
+                    // runs through this chain again with no authentication on it
+                    // (OncePerRequestFilter skips ERROR dispatches, and the session
+                    // is STATELESS). Denying it turns every 404 into a 403, which
+                    // reads as "you are not allowed" when the truth is "that
+                    // endpoint is not deployed" - an hour of debugging each time.
+                    "/error",
                     "/actuator/health",
                     "/api/v1/devices/register",
                     "/api/v1/devices/auth",

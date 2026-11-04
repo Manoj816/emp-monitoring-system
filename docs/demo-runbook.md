@@ -73,16 +73,22 @@ only work on the laptop that runs them (step 4).
    (upload or webcam). The photo is mandatory.
 
    For a whole batch instead, **Employees → Import CSV**. The header row names
-   the columns `employeeCode,fullName,email,department,photoFile`; each row's
-   `photoFile` names one of the pictures chosen under **ID / photos**, and the
-   import pairs them by file name. There is a ready-made pair to try it with:
-   `docs\employees-import-template.csv` with `docs\employee-import-sample\E-1001.jpg`.
+   the columns `employeeCode,fullName,email,department,photoBase64`, and each
+   row carries its own ID/photo base64-encoded in that last column — the file is
+   the whole upload, with nothing to pick alongside it. **Download template** in
+   the popup writes the header row for you to fill in; the CSVs themselves are
+   not kept in this repo, since they are something you upload from your own
+   machine.
+
    Two things worth saying out loud at a demo: the file lands whole or not at
-   all — one bad row imports nothing and the popup lists every bad row, so the
-   portal never shows a half-imported list — and `photoFile` may be left empty,
-   which creates the employee with *ID / photo: missing* for a picture to be
-   uploaded later. The picture has to be a JPEG or PNG; a PDF of an ID card is a
-   document, not something a face can be compared against.
+   all — one bad row imports nothing and the popup lists every bad row by its
+   spreadsheet row number, so the portal never shows a half-imported list — and
+   `photoBase64` may be left empty, which creates the employee with *ID / photo:
+   missing* for a picture to be uploaded later. The picture has to be a JPEG or
+   PNG, checked by its leading bytes: a PDF of an ID card encodes perfectly well
+   but a face cannot be compared against it. Base64 is about a third larger than
+   the picture, so a roster of thousands is imported without photos and given
+   them per person afterwards.
 3. **Devices**: this PC shows as Unassigned → pick the employee → **Assign**.
    The agent notices within seconds; its log says the day's check is planned.
 4. On the agent window click **Verify now**. The first check is the

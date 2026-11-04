@@ -28,7 +28,7 @@ export interface ImportRowProblem {
 export interface ImportReport {
   /** Employees created. Zero whenever any row had a problem: the file lands whole or not at all. */
   imported: number;
-  /** How many of those arrived with their ID/photo attached. */
+  /** How many of those carried an ID/photo in their row. */
   withPhoto: number;
   rows: number;
   problemRows: number;
@@ -118,15 +118,13 @@ export const api = {
   },
 
   /**
-   * Bulk-creates employees from a CSV. A CSV holds text and cannot carry a
-   * picture, so each row names its ID/photo in the photoFile column and the
-   * pictures ride along as separate parts of the same request; the server pairs
-   * them up by file name.
+   * Bulk-creates employees from a CSV. Each row carries its own ID/photo
+   * base64-encoded in the photoBase64 column, so the file is the whole request:
+   * nothing to pick alongside it and nothing for the server to go and fetch.
    */
-  importEmployees: (file: File, photos: File[]) => {
+  importEmployees: (file: File) => {
     const form = new FormData();
     form.append("file", file, file.name);
-    for (const photo of photos) form.append("photos", photo, photo.name);
     return request<ImportReport>("/api/v1/admin/employees/import", { method: "POST", body: form });
   },
 

@@ -36,13 +36,30 @@ jobs:
           path: backend/target/*.jar
 
   deploy:
-    # Activates once infra is bootstrapped: set AWS_DEPLOY_ROLE_ARN, AWS_REGION and
-    # ECR_REPOSITORY as repository variables (Settings > Secrets and variables > Variables).
-    if: github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ROLE_ARN != ''
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment: production
     steps:
+      # This job used to be skipped outright when the variables were missing, and a
+      # skipped job leaves the whole run green. Deploys stopped happening on
+      # 2026-10-30 and nobody noticed for five days, because every run said
+      # success while the service kept serving the image from October. A deploy
+      # that cannot run has to be red: a green tick must mean the thing shipped.
+      - name: Check the deploy variables are set
+        run: |
+          missing=""
+          [ -z "${{ vars.AWS_DEPLOY_ROLE_ARN }}" ] && missing="$missing AWS_DEPLOY_ROLE_ARN"
+          [ -z "${{ vars.AWS_REGION }}" ]          && missing="$missing AWS_REGION"
+          [ -z "${{ vars.ECR_REPOSITORY }}" ]      && missing="$missing ECR_REPOSITORY"
+          [ -z "${{ vars.ECS_CLUSTER }}" ]         && missing="$missing ECS_CLUSTER"
+          [ -z "${{ vars.ECS_SERVICE }}" ]         && missing="$missing ECS_SERVICE"
+          if [ -n "$missing" ]; then
+            echo "::error::Cannot deploy - these repository variables are not set:$missing."
+            echo "::error::Set them under Settings > Secrets and variables > Actions > Variables."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - name: Assume AWS deploy role via OIDC
