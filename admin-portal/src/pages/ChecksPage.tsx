@@ -54,19 +54,33 @@ export default function ChecksPage(props: { title: string; hint: string }) {
 
   const tableFilters = useTableFilters();
 
+  // Taken from the rows rather than the fixed department list: a check belonging
+  // to an employee on an older department still has to be findable here.
+  const departments = [...new Set(rows.map((r) => r.employeeDepartment).filter(Boolean))]
+    .sort() as string[];
+
   const stats = useStatsBar({
     dated: true,
     title: "Check stats",
+    groupBy: { label: "Department", options: departments, allLabel: "All departments" },
     // Each tile opens its tab AND narrows the table to the period the number was
     // read for, so the rows on screen are exactly the ones the tile counted.
-    compute: (range) => {
-      const set = range ? rows.filter((r) => inDateRange(r.requestedAt, range)) : rows;
+    compute: (range, department) => {
+      const dated = range ? rows.filter((r) => inDateRange(r.requestedAt, range)) : rows;
+      const set = department ? dated.filter((r) => r.employeeDepartment === department) : dated;
       const goTo = (f: Filter) => ({
         onClick: () => {
           setFilter(f);
-          if (range) tableFilters.apply({ when: serializeRange(range) });
+          // The table ends up showing exactly the rows the tile counted, so the
+          // department has to travel with the period, not just the dates.
+          const narrow: Record<string, string> = {};
+          if (range) narrow.when = serializeRange(range);
+          if (department) narrow.department = department;
+          if (Object.keys(narrow).length > 0) tableFilters.apply(narrow);
         },
-        title: `Open the ${FILTER_LABELS[f]} tab for this period`,
+        title: department
+          ? `Open the ${FILTER_LABELS[f]} tab for ${department} in this period`
+          : `Open the ${FILTER_LABELS[f]} tab for this period`,
       });
       return [
         { label: "Checks", value: set.length, ...goTo("ALL") },
@@ -130,6 +144,11 @@ export default function ChecksPage(props: { title: string; hint: string }) {
               <>{row.employeeName ?? row.employeeId.slice(0, 8)} <span className="muted">{row.employeeCode ?? ""}</span></>
             ),
             headerStyle: { width: 150 },
+          },
+          {
+            key: "department", header: "Department", filter: "select",
+            value: (row) => row.employeeDepartment ?? "—",
+            cellStyle: { color: "var(--muted)" }, headerStyle: { width: 130 },
           },
           {
             key: "type", header: "Type", filter: "select", value: (row) => row.checkType,

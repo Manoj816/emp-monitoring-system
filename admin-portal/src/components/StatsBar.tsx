@@ -12,19 +12,29 @@ export interface StatItem extends StatTile {}
  * Returns the toolbar control and the popup element (null while closed).
  */
 export function useStatsBar(props: {
-  compute: (range: DateRange | null) => StatItem[];
+  compute: (range: DateRange | null, group: string) => StatItem[];
   /** Offers the date range (for data with a timestamp). */
   dated?: boolean;
   /** Popup title. */
   title?: string;
+  /**
+   * An optional second way to narrow the numbers, beside the period — the
+   * department, say. Options come from the caller rather than a fixed list, so
+   * a value only the data knows about is still offered.
+   */
+  groupBy?: { label: string; options: readonly string[]; allLabel?: string };
 }): { controls: ReactNode; panel: ReactNode } {
   const [open, setOpen] = useState(false);
   const [range, setRange] = useState<DateRange>(() => presetRange("today"));
+  const [group, setGroup] = useState("");
 
   function show() {
     if (props.dated) setRange(presetRange("today"));
+    setGroup("");
     setOpen(true);
   }
+
+  const allLabel = props.groupBy?.allLabel ?? "All";
 
   const controls = (
     <span className="stats-controls">
@@ -44,15 +54,31 @@ export function useStatsBar(props: {
             </label>
           </div>
         )}
+        {props.groupBy && (
+          <div className="stats-range">
+            <label>
+              {props.groupBy.label}
+              <select value={group} onChange={(e) => setGroup(e.target.value)}>
+                <option value="">{allLabel}</option>
+                {props.groupBy.options.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
         {/* A clickable tile closes the popup first, then jumps to its tab/filter. */}
         <Stats
-          items={props.compute(props.dated ? range : null).map((item) =>
+          items={props.compute(props.dated ? range : null, group).map((item) =>
             item.onClick
               ? { ...item, onClick: () => { setOpen(false); item.onClick!(); } }
               : item,
           )}
         />
-        <p className="stats-caption">{props.dated ? describeDateRange(range) : "All data"}</p>
+        <p className="stats-caption">
+          {props.dated ? describeDateRange(range) : "All data"}
+          {props.groupBy && group ? ` · ${group}` : ""}
+        </p>
         <div className="row">
           <button className="action" onClick={() => setOpen(false)}>Close</button>
         </div>

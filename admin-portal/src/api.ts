@@ -49,6 +49,8 @@ export interface AdminCheckRow {
   employeeId: string;
   employeeCode: string | null;
   employeeName: string | null;
+  /** The employee's department at the time the list was read; null if they have none. */
+  employeeDepartment: string | null;
   /** Null once the system the check ran on was deleted; the check stays with the employee. */
   deviceId: string | null;
   hasEvidence: boolean;

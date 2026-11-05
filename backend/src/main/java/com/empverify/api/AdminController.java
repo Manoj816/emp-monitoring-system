@@ -367,6 +367,7 @@ public class AdminController {
             String checkId, String status, boolean mismatchFlag, Double similarityScore,
             Double livenessConfidence,
             String checkType, String employeeId, String employeeCode, String employeeName,
+            String employeeDepartment,
             String deviceId, boolean hasEvidence, String errorDetail,
             java.time.Instant requestedAt, java.time.Instant completedAt,
             String reviewResolution) {}
@@ -391,6 +392,7 @@ public class AdminController {
                     c.getCheckType().name(), c.getEmployeeId().toString(),
                     emp == null ? null : emp.getEmployeeCode(),
                     emp == null ? null : emp.getFullName(),
+                    emp == null ? null : emp.getDepartment(),
                     c.getDeviceId() == null ? null : c.getDeviceId().toString(),
                     c.getEvidenceS3Key() != null, c.getErrorDetail(),
                     c.getRequestedAt(), c.getCompletedAt(),
@@ -425,6 +427,7 @@ public class AdminController {
                 check.getCheckType().name(), check.getEmployeeId().toString(),
                 emp == null ? null : emp.getEmployeeCode(),
                 emp == null ? null : emp.getFullName(),
+                emp == null ? null : emp.getDepartment(),
                 check.getDeviceId() == null ? null : check.getDeviceId().toString(),
                 check.getEvidenceS3Key() != null, check.getErrorDetail(),
                 check.getRequestedAt(), check.getCompletedAt(),
