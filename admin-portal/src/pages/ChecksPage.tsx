@@ -157,18 +157,18 @@ export default function ChecksPage(props: { title: string; hint: string }) {
           {
             key: "status", header: "Status", filter: "select",
             value: (row) => statusLabel(row.status),
+            // The reason a check failed used to sit on a second line under the badge.
+            // It was the only cell in the table that ever wrapped, so one failed check
+            // made itself taller than every row around it. The full text is in the
+            // details popup under "What went wrong", and it stays here as the badge's
+            // tooltip - nothing is lost, and every row is now the same height.
             render: (row) => (
-              <>
+              <span title={row.errorDetail ?? undefined}>
                 <span className={badgeClass(row.status)}>{statusLabel(row.status)}</span>
                 {row.mismatchFlag && <span className="badge error" style={{ marginLeft: 4 }}>mismatch?</span>}
-                {row.errorDetail && (
-                  <div className="muted truncate" style={{ fontSize: 12 }} title={row.errorDetail}>
-                    {row.errorDetail}
-                  </div>
-                )}
-              </>
+              </span>
             ),
-            cellStyle: { maxWidth: 300 }, headerStyle: { width: 300 },
+            headerStyle: { width: 170 },
           },
           {
             key: "similarity", header: "Similarity", filter: "number",
