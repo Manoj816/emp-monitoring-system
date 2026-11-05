@@ -317,9 +317,13 @@ if ($NoLaunch) {
 }
 
 Write-Host ""
+# One line about this PC, and nothing else. Whoever runs this wants to know the
+# machine arrived; the Intune note and the explanation of why an upgrade needs no
+# re-assignment were notes to an administrator reading a runbook, not to someone
+# watching an install finish.
 if ($registersAfresh) {
-    Write-Host "Done. Next: in the admin portal, open Devices, find '$env:COMPUTERNAME' (Unassigned) and assign it to the employee."
+    # The one case with something left to do, so it still says so.
+    Write-Host "Done. '$env:COMPUTERNAME' is registered in the admin portal - assign it to an employee under Devices."
 } else {
-    Write-Host "Done. '$env:COMPUTERNAME' keeps the employee it was already assigned to - there is nothing to do in the admin portal."
+    Write-Host "Done. '$env:COMPUTERNAME' is registered in the admin portal."
 }
-Write-Host "Managed fleets: deploy the same .msix via Intune (line-of-business app) for central control and auto-update."
