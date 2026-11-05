@@ -17,6 +17,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms> <!-- for the system-tray NotifyIcon -->
+    <!-- The EV mark: the exe's icon in Task Manager and alt-tab. The same file is
+         a resource below, because the tray needs to pick a frame by size. -->
+    <ApplicationIcon>Assets\EmpVerify.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\EmpVerify.ico" />
+  </ItemGroup>
 
 </Project>

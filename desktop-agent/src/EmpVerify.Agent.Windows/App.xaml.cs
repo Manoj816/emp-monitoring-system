@@ -41,7 +41,7 @@ public partial class App : System.Windows.Application
 
         _trayIcon = new WinForms.NotifyIcon
         {
-            Icon = System.Drawing.SystemIcons.Application,
+            Icon = LoadTrayIcon() ?? System.Drawing.SystemIcons.Application,
             Visible = true,
             Text = "EmpVerify Agent",
         };
@@ -72,6 +72,28 @@ public partial class App : System.Windows.Application
             WinForms.ToolTipIcon.Info);
 
         await _window.InitializeAsync();
+    }
+
+    /// <summary>
+    /// The EV mark for the tray, at the size this machine's tray actually asks for
+    /// (SmallIconSize follows the display scaling, so a 150% screen gets the 24px
+    /// frame rather than a blurred-up 16px one).
+    /// </summary>
+    /// <returns>null if the resource cannot be read, so a missing or broken icon
+    /// costs the agent its branding and not its start-up.</returns>
+    private static System.Drawing.Icon? LoadTrayIcon()
+    {
+        try
+        {
+            var resource = GetResourceStream(new Uri("pack://application:,,,/Assets/EmpVerify.ico"));
+            if (resource is null) return null;
+            using var stream = resource.Stream;
+            return new System.Drawing.Icon(stream, WinForms.SystemInformation.SmallIconSize);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private void ShowWindow()
