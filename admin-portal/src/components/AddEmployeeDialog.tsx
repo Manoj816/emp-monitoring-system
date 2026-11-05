@@ -75,7 +75,7 @@ export default function AddEmployeeDialog(props: { onClose: () => void; onCreate
         <form onSubmit={submit}>
           <div className="form-grid">
             <label>
-              Employee code *
+              Domain ID *
               <input
                 required
                 autoFocus

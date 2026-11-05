@@ -204,7 +204,7 @@ export default function EmployeeDetailsDialog(props: {
             <form onSubmit={saveEdit}>
               <div className="form-grid">
                 <label>
-                  Employee code *
+                  Domain ID *
                   <input
                     required
                     autoFocus

@@ -73,7 +73,7 @@ only work on the laptop that runs them (step 4).
    (upload or webcam). The photo is mandatory.
 
    For a whole batch instead, **Employees → Import CSV**. The header row names
-   the columns `employeeCode,fullName,email,department,photoBase64`, and each
+   the columns `domainId,fullName,email,department,photoBase64`, and each
    row carries its own ID/photo base64-encoded in that last column — the file is
    the whole upload, with nothing to pick alongside it. **Download template** in
    the popup writes the header row for you to fill in; the CSVs themselves are

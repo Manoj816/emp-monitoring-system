@@ -37,7 +37,7 @@ class EmployeeImportServiceTest {
 
     @InjectMocks private EmployeeImportService service;
 
-    private static final String HEADER = "employeeCode,fullName,email,department\n";
+    private static final String HEADER = "domainId,fullName,email,department\n";
 
     private EmployeeImportService.ImportReport importing(String csv) {
         return service.importCsv(csv.getBytes(StandardCharsets.UTF_8));
@@ -110,7 +110,7 @@ class EmployeeImportServiceTest {
         var report = importing(HEADER + ",Sam Price,nope,Finance\n");
 
         var detail = report.problems().get(0).detail();
-        assertTrue(detail.contains("employeeCode is empty"), detail);
+        assertTrue(detail.contains("domainId is empty"), detail);
         assertTrue(detail.contains("not a valid email address"), detail);
     }
 
@@ -134,7 +134,7 @@ class EmployeeImportServiceTest {
 
         assertEquals(0, report.imported());
         assertTrue(report.problems().get(0).detail().contains("already exists"));
-        assertEquals("E-1001", report.problems().get(0).employeeCode(),
+        assertEquals("E-1001", report.problems().get(0).domainId(),
                 "the report names the row by its code, so it can be found in the file");
     }
 
@@ -183,7 +183,7 @@ class EmployeeImportServiceTest {
 
     @Test
     void headerNamesDoNotHaveToBeSpeltExactly() {
-        var report = importing("Employee Code,Full Name,Email Address,Dept\n"
+        var report = importing("Domain ID,Full Name,Email Address,Dept\n"
                 + "E-1001,Asha Menon,asha.menon@example.com,Engineering\n");
 
         assertEquals(1, report.imported());
@@ -191,7 +191,7 @@ class EmployeeImportServiceTest {
 
     @Test
     void columnsMayComeInAnyOrder() {
-        var report = importing("email,department,employeeCode,fullName\n"
+        var report = importing("email,department,domainId,fullName\n"
                 + "asha.menon@example.com,Engineering,E-1001,Asha Menon\n");
 
         assertEquals(1, report.imported());
@@ -203,7 +203,7 @@ class EmployeeImportServiceTest {
     @Test
     void aFileWithoutTheColumnsItNeedsSaysWhichOnesAreMissing() {
         var thrown = assertThrows(ApiException.class,
-                () -> importing("employeeCode,fullName\nE-1001,Asha Menon\n"));
+                () -> importing("domainId,fullName\nE-1001,Asha Menon\n"));
 
         assertTrue(thrown.getMessage().contains("email"), thrown.getMessage());
         assertTrue(thrown.getMessage().contains("department"), thrown.getMessage());
@@ -258,7 +258,7 @@ class EmployeeImportServiceTest {
     // --- the picture the row carries -------------------------------------
 
     private static final String PHOTO_HEADER =
-            "employeeCode,fullName,email,department,photoBase64\n";
+            "domainId,fullName,email,department,photoBase64\n";
 
     /** Smallest thing that passes the magic-byte check: a JPEG starts FF D8 FF. */
     private static byte[] jpeg() {

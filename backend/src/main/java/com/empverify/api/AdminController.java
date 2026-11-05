@@ -96,7 +96,7 @@ public class AdminController {
             @RequestParam(value = "email", required = false) String email,
             @RequestParam(value = "department", required = false) String department,
             @RequestParam(value = "image", required = false) MultipartFile image) {
-        employeeCode = required(employeeCode, "Employee code is required");
+        employeeCode = required(employeeCode, "Domain ID is required");
         fullName = required(fullName, "Full name is required");
         email = required(email, "Email is required");
         department = required(department, "Department is required");
@@ -109,7 +109,7 @@ public class AdminController {
         }
         requireImage(image);
         if (employees.existsByEmployeeCodeIgnoreCase(employeeCode)) {
-            throw new ApiException(HttpStatus.CONFLICT, "An employee with code " + employeeCode + " already exists");
+            throw new ApiException(HttpStatus.CONFLICT, "An employee with Domain ID " + employeeCode + " already exists");
         }
         if (employees.existsByEmailIgnoreCase(email)) {
             throw new ApiException(HttpStatus.CONFLICT, "An employee with email " + email + " already exists");
@@ -209,7 +209,7 @@ public class AdminController {
             @PathVariable UUID employeeId, @RequestBody UpdateEmployeeRequest request) {
         var employee = employees.findById(employeeId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "employee not found"));
-        String employeeCode = required(request.employeeCode(), "Employee code is required");
+        String employeeCode = required(request.employeeCode(), "Domain ID is required");
         String fullName = required(request.fullName(), "Full name is required");
         String email = required(request.email(), "Email is required");
         String department = required(request.department(), "Department is required");
@@ -219,7 +219,7 @@ public class AdminController {
         // Uniqueness, excluding the employee themselves (a pure case change is fine).
         if (!employeeCode.equalsIgnoreCase(employee.getEmployeeCode())
                 && employees.existsByEmployeeCodeIgnoreCase(employeeCode)) {
-            throw new ApiException(HttpStatus.CONFLICT, "An employee with code " + employeeCode + " already exists");
+            throw new ApiException(HttpStatus.CONFLICT, "An employee with Domain ID " + employeeCode + " already exists");
         }
         if (!email.equalsIgnoreCase(employee.getEmail())
                 && employees.existsByEmailIgnoreCase(email)) {

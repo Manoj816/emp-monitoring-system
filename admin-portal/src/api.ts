@@ -21,7 +21,8 @@ export interface Employee {
 /** One row the CSV import refused, numbered the way a spreadsheet numbers it. */
 export interface ImportRowProblem {
   row: number;
-  employeeCode: string;
+  /** The row's Domain ID, so a refused row can be found in the file. */
+  domainId: string;
   detail: string;
 }
 

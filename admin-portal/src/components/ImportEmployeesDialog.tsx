@@ -13,7 +13,7 @@ import { api, DEPARTMENTS, type ImportReport } from "../api";
  */
 
 /** The template is the header and nothing else: it is a form to fill in, not an example. */
-const TEMPLATE = "employeeCode,fullName,email,department,photoBase64\r\n";
+const TEMPLATE = "domainId,fullName,email,department,photoBase64\r\n";
 
 function downloadTemplate() {
   // The BOM is what makes Excel open it as UTF-8 rather than the system codepage,
@@ -67,7 +67,7 @@ export default function ImportEmployeesDialog(props: { onClose: () => void; onIm
         <h3 style={{ marginTop: 0 }}>Import employees from a CSV</h3>
 
         <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-          The first row names the columns: <code>employeeCode</code>, <code>fullName</code>,{" "}
+          The first row names the columns: <code>domainId</code>, <code>fullName</code>,{" "}
           <code>email</code>, <code>department</code>, and optionally <code>photoBase64</code>.
           Department has to be one of {DEPARTMENTS.join(", ")}.
         </p>
@@ -117,13 +117,13 @@ export default function ImportEmployeesDialog(props: { onClose: () => void; onIm
             </p>
             <table>
               <thead>
-                <tr><th>Row</th><th>Code</th><th>What is wrong</th></tr>
+                <tr><th>Row</th><th>Domain ID</th><th>What is wrong</th></tr>
               </thead>
               <tbody>
                 {report.problems.map((problem) => (
                   <tr key={problem.row}>
                     <td>{problem.row}</td>
-                    <td>{problem.employeeCode || "—"}</td>
+                    <td>{problem.domainId || "—"}</td>
                     <td>{problem.detail}</td>
                   </tr>
                 ))}

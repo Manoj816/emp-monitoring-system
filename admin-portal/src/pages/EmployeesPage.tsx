@@ -180,7 +180,7 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
         rowLabel={(emp) => `Open ${emp.fullName}`}
         emptyText="No employees yet — click “Add employee” to create the first one."
         columns={[
-          { key: "code", header: "Code", value: (emp) => emp.employeeCode },
+          { key: "code", header: "Domain ID", value: (emp) => emp.employeeCode },
           { key: "name", header: "Name", value: (emp) => emp.fullName },
           { key: "email", header: "Email", value: (emp) => emp.email },
           {

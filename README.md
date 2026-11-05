@@ -51,7 +51,8 @@ reference image. Independent of Teams/Zoom. Full design:
   frame, and only a plain timeout is photographed: a locked or sleeping machine
   already says what happened, and nobody chose to be in front of that camera.
 - Employees can be created **in bulk from a CSV**, each row carrying its own
-  ID/photo base64-encoded in a `photoBase64` column — so everything an employee
+  ID/photo base64-encoded in a `photoBase64` column, keyed by the employee's
+  `domainId` — so everything an employee
   needs is in their row, with nothing to pick alongside the file and nothing for
   the server to go and fetch. The file lands whole or not at all: one bad row
   imports nothing and every bad row is reported at once, so the portal never

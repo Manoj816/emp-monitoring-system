@@ -80,9 +80,11 @@ public class EmployeeImportService {
 
     /** Header names accepted for each field, so a hand-made file does not have to guess. */
     private static final Map<String, String> COLUMNS = Map.ofEntries(
-            Map.entry("employeecode", "employeeCode"),
-            Map.entry("code", "employeeCode"),
-            Map.entry("empcode", "employeeCode"),
+            Map.entry("domainid", "domainId"),
+            Map.entry("domain", "domainId"),
+            Map.entry("employeecode", "domainId"),
+            Map.entry("code", "domainId"),
+            Map.entry("empcode", "domainId"),
             Map.entry("fullname", "fullName"),
             Map.entry("name", "fullName"),
             Map.entry("email", "email"),
@@ -97,12 +99,12 @@ public class EmployeeImportService {
 
     /** photoBase64 is deliberately absent: a row may arrive without a picture. */
     private static final List<String> REQUIRED =
-            List.of("employeeCode", "fullName", "email", "department");
+            List.of("domainId", "fullName", "email", "department");
 
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     /** One row the import refused, numbered the way the spreadsheet numbers it. */
-    public record RowProblem(int row, String employeeCode, String detail) {}
+    public record RowProblem(int row, String domainId, String detail) {}
 
     /**
      * @param imported    employees created (0 whenever anything was wrong)
@@ -157,7 +159,7 @@ public class EmployeeImportService {
         for (int i = 0; i < rows.size(); i++) {
             int row = i + 2;   // the header is row 1, exactly as a spreadsheet counts
             var fields = rows.get(i);
-            String code = cell(fields, column, "employeeCode");
+            String code = cell(fields, column, "domainId");
             String name = cell(fields, column, "fullName");
             String email = cell(fields, column, "email");
             String department = cell(fields, column, "department");
@@ -165,7 +167,7 @@ public class EmployeeImportService {
 
             var faults = new ArrayList<String>();
             if (code.isEmpty()) {
-                faults.add("employeeCode is empty");
+                faults.add("domainId is empty");
             }
             if (name.isEmpty()) {
                 faults.add("fullName is empty");
@@ -185,9 +187,9 @@ public class EmployeeImportService {
             if (!code.isEmpty()) {
                 Integer first = codesSeen.putIfAbsent(code.toLowerCase(Locale.ROOT), row);
                 if (first != null) {
-                    faults.add("employeeCode \"" + code + "\" is already used on row " + first);
+                    faults.add("domainId \"" + code + "\" is already used on row " + first);
                 } else if (employees.existsByEmployeeCodeIgnoreCase(code)) {
-                    faults.add("an employee with code \"" + code + "\" already exists");
+                    faults.add("an employee with Domain ID \"" + code + "\" already exists");
                 }
             }
             if (!email.isEmpty()) {
@@ -296,7 +298,7 @@ public class EmployeeImportService {
             throw new ApiException(HttpStatus.BAD_REQUEST,
                     "The first row of the file has to name the columns, and this one is missing "
                             + String.join(", ", missing)
-                            + ". Expected: employeeCode,fullName,email,department,photoBase64");
+                            + ". Expected: domainId,fullName,email,department,photoBase64");
         }
         return column;
     }
