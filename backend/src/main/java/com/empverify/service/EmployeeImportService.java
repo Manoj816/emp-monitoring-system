@@ -76,7 +76,7 @@ public class EmployeeImportService {
      * below, so "engineering" in the file is stored as "Engineering".
      */
     public static final List<String> DEPARTMENTS =
-            List.of("Engineering", "Sales", "Human Resources", "Finance");
+            List.of("Engineering", "Sales", "Human Resources", "Finance", "Call Center");
 
     /** Header names accepted for each field, so a hand-made file does not have to guess. */
     private static final Map<String, String> COLUMNS = Map.ofEntries(

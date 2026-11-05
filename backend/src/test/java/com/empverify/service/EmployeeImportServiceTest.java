@@ -158,6 +158,16 @@ class EmployeeImportServiceTest {
     }
 
     @Test
+    void aTwoWordDepartmentIsMatchedAndStoredInItsOwnSpelling() {
+        // "Call Center" was added after the first four, and a space in the name is
+        // exactly where a department list usually starts failing to match.
+        var report = importing(HEADER + "E-1001,Asha Menon,asha.menon@example.com,call center\n");
+
+        assertEquals(1, report.imported());
+        assertEquals("Call Center", saved(1).get(0).getDepartment());
+    }
+
+    @Test
     void quotedFieldsKeepTheirCommasAndQuotes() {
         var report = importing(HEADER
                 + "E-1001,\"Menon, Asha\",asha.menon@example.com,Engineering\n"

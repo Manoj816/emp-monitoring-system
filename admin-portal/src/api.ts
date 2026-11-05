@@ -3,7 +3,8 @@
 import { idToken } from "./auth";
 
 /** Departments an employee can belong to (fixed list for now; also the assign popup's filter). */
-export const DEPARTMENTS = ["Engineering", "Sales", "Human Resources", "Finance"] as const;
+export const DEPARTMENTS =
+  ["Engineering", "Sales", "Human Resources", "Finance", "Call Center"] as const;
 
 export interface Employee {
   id: string;
