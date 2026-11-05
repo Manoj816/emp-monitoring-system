@@ -537,3 +537,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .import-problems th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: #fff; }
 .import-problems td:first-child, .import-problems th:first-child { width: 48px; }
 .import-problems td:nth-child(2) { white-space: nowrap; }
+
+/* Numeric column filter: an operator and a value, side by side in a narrow th. */
+.num-filter { display: flex; gap: 4px; align-items: center; }
+.num-filter select { flex: 0 0 46px; width: 46px; padding: 5px 2px 5px 5px; text-align: center; }
+.num-filter input { flex: 1 1 auto; min-width: 0; }
+/* The spinners would leave no room for the number in a column this narrow. */
+.num-filter input::-webkit-outer-spin-button,
+.num-filter input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.num-filter input[type="number"] { -moz-appearance: textfield; appearance: textfield; }

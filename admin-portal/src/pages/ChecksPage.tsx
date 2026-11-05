@@ -171,12 +171,16 @@ export default function ChecksPage(props: { title: string; hint: string }) {
             cellStyle: { maxWidth: 300 }, headerStyle: { width: 300 },
           },
           {
-            key: "similarity", header: "Similarity", value: (row) => row.similarityScore?.toFixed(1) ?? "—",
-            headerStyle: { width: 90 },
+            key: "similarity", header: "Similarity", filter: "number",
+            value: (row) => row.similarityScore?.toFixed(1) ?? "—",
+            number: (row) => row.similarityScore,
+            headerStyle: { width: 128 },
           },
           {
-            key: "liveness", header: "Liveness", value: (row) => row.livenessConfidence?.toFixed(1) ?? "—",
-            headerStyle: { width: 90 },
+            key: "liveness", header: "Liveness", filter: "number",
+            value: (row) => row.livenessConfidence?.toFixed(1) ?? "—",
+            number: (row) => row.livenessConfidence,
+            headerStyle: { width: 128 },
           },
           {
             key: "review", header: "Review", filter: "select", headerStyle: { width: 120 },

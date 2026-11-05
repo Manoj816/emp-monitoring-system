@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { inDateRange, parseRange, serializeRange, type DateRange } from "../utils/dates";
+import {
+  matchesNumericFilter,
+  NUMERIC_OPERATORS,
+  parseNumericFilter,
+  serializeNumericFilter,
+  type NumericOperator,
+} from "../utils/numericFilter";
 import DateRangePicker from "./DateRangePicker";
 
 /**
@@ -16,11 +23,18 @@ export interface Column<T> {
   render?: (row: T) => ReactNode;
   /**
    * "text" = contains match (default); "select" = pick one of the values present;
-   * "date" = preset / custom range picker on the column's date; "none" = no filter.
+   * "date" = preset / custom range picker on the column's date;
+   * "number" = an operator (at least / at most / …) and a value; "none" = no filter.
    */
-  filter?: "text" | "select" | "date" | "none";
+  filter?: "text" | "select" | "date" | "number" | "none";
   /** The raw timestamp for a "date" column (the display value stays `value`). */
   date?: (row: T) => string | Date | null | undefined;
+  /**
+   * The raw score for a "number" column. Needed because `value` is already
+   * formatted for display — "99.8", or a dash for a check that has none — and
+   * comparing against rounded text would quietly answer a different question.
+   */
+  number?: (row: T) => number | null | undefined;
   cellStyle?: CSSProperties;
   headerStyle?: CSSProperties;
 }
@@ -59,6 +73,11 @@ export default function DataTable<T>(props: {
   const showFilters = props.showFilters ?? false;
   const [pageSize, setPageSize] = useState(props.pageSize ?? 25);
   const [page, setPage] = useState(1);
+  // The operator and the half-typed number live here rather than in the filter
+  // record, so picking "at most" before typing anything does not register as a
+  // filter that hides nothing.
+  const [numericOps, setNumericOps] = useState<Record<string, NumericOperator>>({});
+  const [numericText, setNumericText] = useState<Record<string, string>>({});
 
   const activeFilters = Object.entries(filters).filter(([, v]) => v !== "");
 
@@ -73,6 +92,12 @@ export default function DataTable<T>(props: {
         if (column.filter === "none") return true;
         if (column.filter === "date") {
           return inDateRange(column.date ? column.date(row) : column.value(row), ranges.get(column.key)!);
+        }
+        if (column.filter === "number") {
+          const comparison = parseNumericFilter(filters[column.key]);
+          if (comparison === null) return true;
+          const score = column.number ? column.number(row) : Number(column.value(row));
+          return matchesNumericFilter(comparison, score ?? null);
         }
         const needle = filters[column.key] ?? "";
         if (needle === "") return true;
@@ -94,6 +119,20 @@ export default function DataTable<T>(props: {
 
   const start = (page - 1) * pageSize;
   const visible = filtered.slice(start, start + pageSize);
+
+  function numericOp(key: string): NumericOperator {
+    return numericOps[key] ?? parseNumericFilter(filters[key])?.op ?? ">=";
+  }
+
+  function numericValue(key: string): string {
+    return numericText[key] ?? (parseNumericFilter(filters[key])?.value?.toString() ?? "");
+  }
+
+  function setNumeric(key: string, op: NumericOperator, text: string) {
+    setNumericOps((prev) => ({ ...prev, [key]: op }));
+    setNumericText((prev) => ({ ...prev, [key]: text }));
+    setFilters({ ...filters, [key]: serializeNumericFilter(op, text) });
+  }
 
   function options(column: Column<T>): string[] {
     const values = new Set<string>();
@@ -121,6 +160,29 @@ export default function DataTable<T>(props: {
                     onChange={(range) => setFilters({ ...filters, [c.key]: serializeRange(range) })}
                     label={c.header}
                   />
+                ) : c.filter === "number" ? (
+                  <span className="num-filter">
+                    <select
+                      value={numericOp(c.key)}
+                      onChange={(e) =>
+                        setNumeric(c.key, e.target.value as NumericOperator, numericValue(c.key))
+                      }
+                      aria-label={`How to compare ${c.header}`}
+                    >
+                      {NUMERIC_OPERATORS.map((o) => (
+                        <option key={o.op} value={o.op} title={o.title}>{o.label}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      placeholder="Value"
+                      value={numericValue(c.key)}
+                      onChange={(e) => setNumeric(c.key, numericOp(c.key), e.target.value)}
+                      aria-label={`Filter ${c.header}`}
+                    />
+                  </span>
                 ) : c.filter === "select" ? (
                   <select
                     value={filters[c.key] ?? ""}
