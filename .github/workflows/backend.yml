@@ -46,17 +46,29 @@ jobs:
       # 2026-10-30 and nobody noticed for five days, because every run said
       # success while the service kept serving the image from October. A deploy
       # that cannot run has to be red: a green tick must mean the thing shipped.
+      #
+      # Each value is read from the repository Variables tab OR, failing that, the
+      # Secrets tab under the same name: the GitHub UI lands on Secrets first, the
+      # five were entered there in good faith, and none of them is actually secret
+      # (a role ARN, a region, three resource names) - so accept both rather than
+      # stay red over which tab they were typed into.
       - name: Check the deploy variables are set
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN || secrets.AWS_DEPLOY_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || secrets.ECR_REPOSITORY }}
+          ECS_CLUSTER: ${{ vars.ECS_CLUSTER || secrets.ECS_CLUSTER }}
+          ECS_SERVICE: ${{ vars.ECS_SERVICE || secrets.ECS_SERVICE }}
         run: |
           missing=""
-          [ -z "${{ vars.AWS_DEPLOY_ROLE_ARN }}" ] && missing="$missing AWS_DEPLOY_ROLE_ARN"
-          [ -z "${{ vars.AWS_REGION }}" ]          && missing="$missing AWS_REGION"
-          [ -z "${{ vars.ECR_REPOSITORY }}" ]      && missing="$missing ECR_REPOSITORY"
-          [ -z "${{ vars.ECS_CLUSTER }}" ]         && missing="$missing ECS_CLUSTER"
-          [ -z "${{ vars.ECS_SERVICE }}" ]         && missing="$missing ECS_SERVICE"
+          [ -z "$AWS_DEPLOY_ROLE_ARN" ] && missing="$missing AWS_DEPLOY_ROLE_ARN"
+          [ -z "$AWS_REGION" ]          && missing="$missing AWS_REGION"
+          [ -z "$ECR_REPOSITORY" ]      && missing="$missing ECR_REPOSITORY"
+          [ -z "$ECS_CLUSTER" ]         && missing="$missing ECS_CLUSTER"
+          [ -z "$ECS_SERVICE" ]         && missing="$missing ECS_SERVICE"
           if [ -n "$missing" ]; then
-            echo "::error::Cannot deploy - these repository variables are not set:$missing."
-            echo "::error::Set them under Settings > Secrets and variables > Actions > Variables."
+            echo "::error::Cannot deploy - these are set neither as repository variables nor as secrets:$missing."
+            echo "::error::Set them under Settings > Secrets and variables > Actions (either tab works)."
             exit 1
           fi
 
@@ -65,8 +77,8 @@ jobs:
       - name: Assume AWS deploy role via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN || secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: ecr
@@ -75,7 +87,7 @@ jobs:
       - name: Build and push image
         working-directory: backend
         run: |
-          IMAGE="${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}"
+          IMAGE="${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY || secrets.ECR_REPOSITORY }}:${{ github.sha }}"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
@@ -83,8 +95,8 @@ jobs:
       - name: Deploy to ECS (new task-def revision with the new image)
         run: |
           FAMILY="empverify-backend"
-          CLUSTER="${{ vars.ECS_CLUSTER }}"
-          SERVICE="${{ vars.ECS_SERVICE }}"
+          CLUSTER="${{ vars.ECS_CLUSTER || secrets.ECS_CLUSTER }}"
+          SERVICE="${{ vars.ECS_SERVICE || secrets.ECS_SERVICE }}"
 
           # Take the current task definition, swap in the new image, drop the
           # read-only fields, and register a new revision.
