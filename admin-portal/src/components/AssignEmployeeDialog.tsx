@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
+import { appConfirm } from "./Confirm";
 
 /**
  * Assign / reassign popup for the Devices tab: a searchable, department-
@@ -65,14 +66,13 @@ export default function AssignEmployeeDialog(props: {
 
   async function assign() {
     if (!selected) return;
-    if (
-      reassign &&
-      !confirm(
+    if (reassign) {
+      const ok = await appConfirm(
         `Reassign ${device.hostname ?? device.id} from ${device.employeeName ?? "its employee"} to ` +
           `${selected.fullName}? The agent switches on its next poll, and the first check is the enrollment scan.`,
-      )
-    ) {
-      return;
+        { title: "Reassign system", confirmLabel: "Reassign" },
+      );
+      if (!ok) return;
     }
     setBusy(true);
     setError(null);

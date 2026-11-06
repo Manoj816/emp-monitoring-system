@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "./api";
 import { authConfigured, currentUserEmail, signOut } from "./auth";
+import ConfirmHost, { appConfirm } from "./components/Confirm";
 import LoginPage from "./pages/LoginPage";
 import EmployeesPage from "./pages/EmployeesPage";
 import DevicesPage from "./pages/DevicesPage";
@@ -134,8 +135,9 @@ export default function App() {
   }
 
   async function resetDemo() {
-    const ok = window.confirm(
+    const ok = await appConfirm(
       "Wipe ALL employees, devices, enrollment tokens, reference images and checks? This cannot be undone.",
+      { title: "Reset demo data", confirmLabel: "Wipe everything", danger: true },
     );
     if (!ok) return;
     try {
@@ -158,6 +160,7 @@ export default function App() {
 
   return (
     <div className={`app ${navOpen ? "nav-open" : ""}`}>
+      <ConfirmHost />
       <header className="appbar">
         <button className="action nav-toggle" onClick={() => setNavOpen(!navOpen)} aria-label="Toggle navigation">
           ☰

@@ -618,3 +618,6 @@ img.zoomable { cursor: zoom-in; }
   width: auto; height: auto; max-width: 95vw; max-height: 95vh;
   border-radius: 8px; box-shadow: 0 10px 50px rgba(0, 0, 0, 0.6); background: #000;
 }
+
+/* The in-app confirm/alert must sit above whichever popup asked the question. */
+.overlay.confirm-overlay { z-index: 90; }

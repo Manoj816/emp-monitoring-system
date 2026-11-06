@@ -4,6 +4,7 @@ import ActionMenu from "../components/ActionMenu";
 import AssignEmployeeDialog from "../components/AssignEmployeeDialog";
 import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
+import { appConfirm } from "../components/Confirm";
 import DeviceDetailsDialog from "../components/DeviceDetailsDialog";
 import { useFreshOnActive } from "../useFreshOnActive";
 import { useStatsBar, type StatItem } from "../components/StatsBar";
@@ -99,22 +100,22 @@ export default function DevicesPage(props: { title: string; hint: string; active
     },
   });
 
-  function revoke(device: DeviceSummary) {
-    if (!confirm(`Revoke ${device.hostname ?? device.id}? The agent on that machine will stop verifying immediately.`)) {
-      return;
-    }
+  async function revoke(device: DeviceSummary) {
+    const ok = await appConfirm(
+      `Revoke ${device.hostname ?? device.id}? The agent on that machine will stop verifying immediately.`,
+      { title: "Revoke system", confirmLabel: "Revoke", danger: true },
+    );
+    if (!ok) return;
     void run(() => api.revokeDevice(device.id));
   }
 
-  function remove(device: DeviceSummary) {
-    if (
-      !confirm(
-        `Delete ${device.hostname ?? device.id} from the list? Its check history stays with the employee. ` +
-          `If the agent on that machine is still running, it registers again as Unassigned.`,
-      )
-    ) {
-      return;
-    }
+  async function remove(device: DeviceSummary) {
+    const ok = await appConfirm(
+      `Delete ${device.hostname ?? device.id} from the list? Its check history stays with the employee. ` +
+        `If the agent on that machine is still running, it registers again as Unassigned.`,
+      { title: "Delete system", confirmLabel: "Delete", danger: true },
+    );
+    if (!ok) return;
     void run(() => api.deleteDevice(device.id));
   }
 
@@ -196,11 +197,11 @@ export default function DevicesPage(props: { title: string; hint: string; active
                       title: "Hand this system to a different employee",
                     },
                     {
-                      label: "Revoke", onClick: () => revoke(d), danger: true, disabled: d.status === "REVOKED",
+                      label: "Revoke", onClick: () => void revoke(d), danger: true, disabled: d.status === "REVOKED",
                       title: "Lost or retired machine: blocks it immediately",
                     },
                     {
-                      label: "Delete", onClick: () => remove(d), danger: true,
+                      label: "Delete", onClick: () => void remove(d), danger: true,
                       title: "Remove this row (stale duplicate or retired machine); its check history stays with the employee",
                     },
                   ]}
@@ -219,8 +220,8 @@ export default function DevicesPage(props: { title: string; hint: string; active
           onClose={() => setDetails(null)}
           // The popup stays open behind the picker, so it shows the new assignment once it is made.
           onAssign={() => setAssigning(details)}
-          onRevoke={() => revoke(details)}
-          onDelete={() => remove(details)}
+          onRevoke={() => void revoke(details)}
+          onDelete={() => void remove(details)}
         />
       )}
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type Employee } from "../api";
+import { api, type DeviceSummary, type Employee } from "../api";
 import CardTitle from "../components/CardTitle";
 import { useFreshOnActive } from "../useFreshOnActive";
 
@@ -32,6 +32,7 @@ const PAGE_SIZES = [10, 25, 50, 100];
 export default function ConfigurationPage(props: { title: string; hint: string; active: boolean }) {
   const [tab, setTab] = useState<Tab>("window");
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -45,6 +46,7 @@ export default function ConfigurationPage(props: { title: string; hint: string; 
   const [statusFilter, setStatusFilter] = useState("ACTIVE");
   const [dailyFilter, setDailyFilter] = useState("");
   const [enrollFilter, setEnrollFilter] = useState("");
+  const [systemFilter, setSystemFilter] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -59,7 +61,9 @@ export default function ConfigurationPage(props: { title: string; hint: string; 
 
   async function refresh() {
     try {
-      setEmployees(await api.listEmployees());
+      const [emps, devs] = await Promise.all([api.listEmployees(), api.listDevices()]);
+      setEmployees(emps);
+      setDevices(devs);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -123,12 +127,31 @@ export default function ConfigurationPage(props: { title: string; hint: string; 
     [active],
   );
 
+  /** Whether an active system is assigned to the employee (what a check needs). */
+  function hasSystem(e: Employee): boolean {
+    return devices.some((d) => d.employeeId === e.id && d.status === "ACTIVE");
+  }
+
+  const filtersDirty =
+    search !== "" || department !== "" || statusFilter !== "ACTIVE" ||
+    dailyFilter !== "" || enrollFilter !== "" || systemFilter !== "";
+
+  function clearFilters() {
+    setSearch("");
+    setDepartment("");
+    setStatusFilter("ACTIVE");
+    setDailyFilter("");
+    setEnrollFilter("");
+    setSystemFilter("");
+  }
+
   const q = search.trim().toLowerCase();
   const matching = employees
     .filter((e) => !statusFilter || e.status === statusFilter)
     .filter((e) => !department || e.department === department)
     .filter((e) => !dailyFilter || (dailyFilter === "on") === e.dailyChecks)
     .filter((e) => !enrollFilter || (enrollFilter === "done") === e.hasLiveEnrollment)
+    .filter((e) => !systemFilter || (systemFilter === "assigned") === hasSystem(e))
     .filter(
       (e) =>
         !q ||
@@ -142,7 +165,7 @@ export default function ConfigurationPage(props: { title: string; hint: string; 
   const selectable = matching.filter((e) => e.status === "ACTIVE");
 
   // A new filter starts from page 1 — page 7 of a different list means nothing.
-  useEffect(() => setPage(1), [search, department, statusFilter, dailyFilter, enrollFilter, pageSize]);
+  useEffect(() => setPage(1), [search, department, statusFilter, dailyFilter, enrollFilter, systemFilter, pageSize]);
 
   const pageCount = Math.max(1, Math.ceil(matching.length / pageSize));
   const safePage = Math.min(page, pageCount);
@@ -324,7 +347,6 @@ export default function ConfigurationPage(props: { title: string; hint: string; 
               aria-label="Filter by employee status"
             >
               <option value="ACTIVE">Active</option>
-              <option value="SUSPENDED">Suspended</option>
               <option value="OFFBOARDED">Offboarded</option>
               <option value="">All statuses</option>
             </select>
@@ -346,6 +368,20 @@ export default function ConfigurationPage(props: { title: string; hint: string; 
               <option value="done">Enrolled</option>
               <option value="pending">Pending first scan</option>
             </select>
+            <select
+              value={systemFilter}
+              onChange={(e) => setSystemFilter(e.target.value)}
+              aria-label="Filter by assigned system"
+            >
+              <option value="">System: all</option>
+              <option value="assigned">System assigned</option>
+              <option value="none">No system</option>
+            </select>
+            {filtersDirty && (
+              <button className="action" onClick={clearFilters} title="Back to the default view">
+                Clear filters
+              </button>
+            )}
           </div>
 
           <div className="pick-toolbar">
@@ -409,6 +445,11 @@ export default function ConfigurationPage(props: { title: string; hint: string; 
                       {!e.hasLiveEnrollment && e.status === "ACTIVE" && (
                         <span className="badge neutral" title="Their first live scan has not matched the ID/photo yet">
                           pending first scan
+                        </span>
+                      )}
+                      {e.status === "ACTIVE" && !hasSystem(e) && (
+                        <span className="badge check" title="No active system is assigned, so no check can reach them">
+                          no system
                         </span>
                       )}
                       <span className="badge neutral">{e.department ?? "No department"}</span>

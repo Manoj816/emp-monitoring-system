@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, DEPARTMENTS, type DeviceSummary, type Employee } from "../api";
+import { appConfirm } from "./Confirm";
 import ConfirmPhotoDialog from "./ConfirmPhotoDialog";
 import ZoomableImage from "./ZoomableImage";
 
@@ -148,15 +149,13 @@ export default function EmployeeDetailsDialog(props: {
     });
   }
 
-  function requestReEnrollment() {
-    if (
-      !confirm(
-        `Ask ${employee.fullName} for the first scan again? The current live scan is retired and their system(s) ` +
-          `run the enrollment scan as the next check (the day's random time, or Verify now). The uploaded ID/photo stays.`,
-      )
-    ) {
-      return;
-    }
+  async function requestReEnrollment() {
+    const ok = await appConfirm(
+      `Ask ${employee.fullName} for the first scan again? The current live scan is retired and their system(s) ` +
+        `run the enrollment scan as the next check. The uploaded ID/photo stays.`,
+      { title: "Request first scan", confirmLabel: "Request scan" },
+    );
+    if (!ok) return;
     void run("Request first scan", async () => {
       const r = await api.requestReEnrollment(employee.id);
       return r.systemsReset === 0
@@ -320,7 +319,7 @@ export default function EmployeeDetailsDialog(props: {
                     title="Upload a new ID/photo; the employee enrolls again against it">
               Replace ID / photo
             </button>
-            <button className="action" disabled={busy || employee.status !== "ACTIVE"} onClick={requestReEnrollment}
+            <button className="action" disabled={busy || employee.status !== "ACTIVE"} onClick={() => void requestReEnrollment()}
                     title="Keep the photo, but ask the employee for the enrollment scan again">
               Request first scan again
             </button>

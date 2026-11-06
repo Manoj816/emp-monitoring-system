@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
 import ActionMenu from "../components/ActionMenu";
+import { appAlert, appConfirm } from "../components/Confirm";
 import AddEmployeeDialog from "../components/AddEmployeeDialog";
 import CardTitle from "../components/CardTitle";
 import ConfirmPhotoDialog from "../components/ConfirmPhotoDialog";
@@ -68,18 +69,19 @@ export default function EmployeesPage(props: { title: string; hint: string; acti
     }
   }
 
-  function offboard(employee: Employee) {
-    if (
-      !confirm(
-        `Offboard ${employee.fullName}? They are marked OFFBOARDED and every system assigned to them is ` +
-          `deregistered in the same step (back to Unassigned, so it can be handed to the next employee).`,
-      )
-    ) {
-      return;
-    }
+  async function offboard(employee: Employee) {
+    const ok = await appConfirm(
+      `Offboard ${employee.fullName}? They are marked OFFBOARDED and every system assigned to them is ` +
+        `deregistered in the same step (back to Unassigned, so it can be handed to the next employee).`,
+      { title: "Offboard employee", confirmLabel: "Offboard", danger: true },
+    );
+    if (!ok) return;
     void run(async () => {
       const result = await api.offboardEmployee(employee.id);
-      alert(`${employee.fullName} offboarded. Systems deregistered: ${result.devicesDeregistered}.`);
+      await appAlert(
+        `${employee.fullName} offboarded. Systems deregistered: ${result.devicesDeregistered}.`,
+        "Offboarded",
+      );
     });
   }
 
@@ -116,33 +118,35 @@ export default function EmployeesPage(props: { title: string; hint: string; acti
     },
   });
 
-  function requestFirstScan(employee: Employee) {
-    if (
-      !confirm(
-        `Ask ${employee.fullName} for the first scan again? The current live scan is retired and their system(s) ` +
-          `run the enrollment scan as the next check (the day's random time, or Verify now). The uploaded ID/photo stays.`,
-      )
-    ) {
-      return;
-    }
+  async function requestFirstScan(employee: Employee) {
+    const ok = await appConfirm(
+      `Ask ${employee.fullName} for the first scan again? The current live scan is retired and their system(s) ` +
+        `run the enrollment scan as the next check. The uploaded ID/photo stays.`,
+      { title: "Request first scan", confirmLabel: "Request scan" },
+    );
+    if (!ok) return;
     void run(async () => {
       const r = await api.requestReEnrollment(employee.id);
-      alert(`Re-enrollment requested for ${employee.fullName}: ${r.systemsReset} system(s) will ask for the enrollment scan.`);
+      await appAlert(
+        `Re-enrollment requested for ${employee.fullName}: ${r.systemsReset} system(s) will ask for the enrollment scan.`,
+        "Requested",
+      );
     });
   }
 
-  function sendCheck(employee: Employee) {
-    if (
-      !confirm(
-        `Send a verification check to ${employee.fullName} now? Their system opens the scan ` +
-          `within a minute of being online, outside the day's random plan.`,
-      )
-    ) {
-      return;
-    }
+  async function sendCheck(employee: Employee) {
+    const ok = await appConfirm(
+      `Send a verification check to ${employee.fullName} now? Their system opens the scan ` +
+        `within a minute of being online, outside the day's random plan.`,
+      { title: "Send a check now", confirmLabel: "Send check" },
+    );
+    if (!ok) return;
     void run(async () => {
       const r = await api.requestCheck({ employeeId: employee.id });
-      alert(`Check sent to ${r.sent[0].employeeName}: ${r.sent[0].systems} system(s) will open the scan.`);
+      await appAlert(
+        `Check sent to ${r.sent[0].employeeName}: ${r.sent[0].systems} system(s) will open the scan.`,
+        "Check sent",
+      );
     });
   }
 
@@ -261,16 +265,16 @@ export default function EmployeesPage(props: { title: string; hint: string; acti
                   },
                   { label: "Replace ID / photo", onClick: () => pickFile(emp) },
                   {
-                    label: "Request first scan again", onClick: () => requestFirstScan(emp),
+                    label: "Request first scan again", onClick: () => void requestFirstScan(emp),
                     disabled: emp.status !== "ACTIVE", title: "Keep the photo; the employee enrolls again at the next check",
                   },
                   {
-                    label: "Send check now", onClick: () => sendCheck(emp),
+                    label: "Send check now", onClick: () => void sendCheck(emp),
                     disabled: emp.status !== "ACTIVE" || systemsOf(emp).length === 0,
                     title: "Their system opens a verification scan within a minute of being online",
                   },
                   {
-                    label: "Offboard", onClick: () => offboard(emp), danger: true,
+                    label: "Offboard", onClick: () => void offboard(emp), danger: true,
                     disabled: emp.status === "OFFBOARDED", title: "Marks the employee OFFBOARDED and deregisters their systems",
                   },
                 ]}
