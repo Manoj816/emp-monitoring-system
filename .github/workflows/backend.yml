@@ -47,8 +47,9 @@ jobs:
     # to anyone else. A repository Variable of the same name still overrides,
     # for pointing a fork or a new environment elsewhere without editing this
     # file. This replaced reading them from repo settings outright: the deploy
-    # sat red first over which tab they were typed into, then over a typo in
-    # the pasted ARN - values that never change should not be re-typeable.
+    # sat red first over which tab they were typed into, then over GitHub's
+    # switch to immutable OIDC subjects - values that never change should not
+    # be re-typeable. Any push touching backend/** (or this file) redeploys.
     env:
       AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN || 'arn:aws:iam::119331772192:role/empverify-github-deploy' }}
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
