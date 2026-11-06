@@ -56,6 +56,7 @@ export default function ConfirmPhotoDialog(props: {
       }}
     >
       <div className="modal wide" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <button type="button" className="modal-close" aria-label="Close" title="Close" disabled={props.busy} onClick={props.onCancel}>×</button>
         <h3 style={{ marginTop: 0 }}>Replace ID / photo — {employee.fullName}</h3>
         <p className="muted" style={{ marginTop: 0 }}>
           Check the picture before replacing it. Every verification is compared against this image.

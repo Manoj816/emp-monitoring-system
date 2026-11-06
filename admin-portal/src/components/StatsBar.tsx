@@ -45,6 +45,7 @@ export function useStatsBar(props: {
   const panel = !open ? null : (
     <div className="overlay" onClick={() => setOpen(false)}>
       <div className="modal stats-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <button type="button" className="modal-close" aria-label="Close" title="Close" onClick={() => setOpen(false)}>×</button>
         <h3 style={{ marginTop: 0 }}>{props.title ?? "Stats"}</h3>
         {props.dated && (
           <div className="stats-range">

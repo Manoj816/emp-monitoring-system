@@ -248,6 +248,7 @@ export default function ChecksPage(props: { title: string; hint: string }) {
       {evidence && (
         <div className="overlay" onClick={() => setEvidence(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="modal-close" aria-label="Close" title="Close" onClick={() => setEvidence(null)}>×</button>
             <h3 style={{ marginTop: 0 }}>Capture evidence</h3>
             <ZoomableImage className="evidence-img" src={evidence.url} alt="verification capture evidence" />
             <div className="row">

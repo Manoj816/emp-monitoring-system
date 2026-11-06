@@ -52,6 +52,7 @@ export default function CameraCapture(props: {
   return (
     <div className="overlay">
       <div className="modal">
+        <button type="button" className="modal-close" aria-label="Close" title="Close" onClick={props.onCancel}>×</button>
         <h3 style={{ marginTop: 0 }}>Capture reference image</h3>
         {error ? <p className="error-text">{error}</p> : <video ref={videoRef} autoPlay playsInline muted />}
         <div className="row">

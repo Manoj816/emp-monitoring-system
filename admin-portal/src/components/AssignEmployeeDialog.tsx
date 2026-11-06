@@ -88,6 +88,7 @@ export default function AssignEmployeeDialog(props: {
   return (
     <div className="overlay" onClick={busy ? undefined : props.onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <button type="button" className="modal-close" aria-label="Close" title="Close" disabled={busy} onClick={props.onClose}>×</button>
         <h3 style={{ marginTop: 0 }}>
           {reassign ? "Reassign system" : "Assign system"} — {device.hostname ?? device.id.slice(0, 8)}
         </h3>

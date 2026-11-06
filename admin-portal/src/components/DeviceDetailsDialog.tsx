@@ -55,6 +55,7 @@ export default function DeviceDetailsDialog(props: {
   return (
     <div className="overlay" onClick={busy ? undefined : props.onClose}>
       <div className="modal xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <button type="button" className="modal-close" aria-label="Close" title="Close" disabled={busy} onClick={props.onClose}>×</button>
         <header className="details-head">
           <span className="avatar lg">{initial}</span>
           <div style={{ flex: 1, minWidth: 0 }}>

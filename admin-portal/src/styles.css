@@ -389,8 +389,24 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .modal {
   background: var(--panel); border-radius: 14px; padding: 20px 22px; max-width: 560px; width: calc(100% - 32px);
   box-shadow: 0 24px 60px -20px rgba(16, 24, 40, 0.5); max-height: calc(100vh - 32px); overflow: auto;
+  position: relative; /* anchors the top-right close button */
 }
+.modal-close {
+  position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 8px; background: transparent; color: var(--muted);
+  font-size: 20px; line-height: 1; cursor: pointer;
+}
+.modal-close:hover:not(:disabled) { background: #eef1f7; color: #1c2430; }
+.modal-close:disabled { opacity: 0.4; cursor: default; }
 .modal h3 { margin-top: 0; }
+/* No visible scroll bars around a popup: the page behind is locked while one is
+   open (two bars side by side read as clutter, and the page cannot be used
+   anyway), and the popup itself scrolls without drawing a bar - wheel, trackpad
+   and keyboard still scroll it. */
+body:has(.overlay) { overflow: hidden; }
+.modal { scrollbar-width: none; }
+.modal::-webkit-scrollbar { display: none; }
 .modal video, .modal img { width: 100%; border-radius: 8px; background: #000; }
 .modal .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 .modal.wide { max-width: 680px; }
@@ -574,4 +590,10 @@ img.zoomable { cursor: zoom-in; }
   position: fixed; inset: 0; z-index: 2000; background: rgba(10, 14, 24, 0.88);
   display: flex; align-items: center; justify-content: center; cursor: zoom-out;
 }
-.lightbox img { max-width: 95vw; max-height: 95vh; border-radius: 8px; box-shadow: 0 10px 50px rgba(0, 0, 0, 0.6); }
+/* The photo at its own pixel size, capped by the screen - never blown up. The
+   second selector out-specifies ".modal img { width: 100% }", which was
+   stretching previews opened from inside a dialog into a smeared zoom. */
+.lightbox img, .modal .lightbox img {
+  width: auto; height: auto; max-width: 95vw; max-height: 95vh;
+  border-radius: 8px; box-shadow: 0 10px 50px rgba(0, 0, 0, 0.6); background: #000;
+}
