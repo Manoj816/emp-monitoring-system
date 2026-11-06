@@ -26,10 +26,23 @@ public class DeviceController {
 
     private final DeviceService deviceService;
     private final ReferenceImageRepository referenceImages;
+    private final com.empverify.repo.VerificationCheckRepository checks;
 
-    public DeviceController(DeviceService deviceService, ReferenceImageRepository referenceImages) {
+    /** Statuses that mean a scan actually happened (its verdict notwithstanding). */
+    private static final java.util.List<com.empverify.domain.Enums.CheckStatus> SCAN_STATUSES =
+            java.util.List.of(
+                    com.empverify.domain.Enums.CheckStatus.MATCH,
+                    com.empverify.domain.Enums.CheckStatus.CHECK,
+                    com.empverify.domain.Enums.CheckStatus.NO_FACE,
+                    com.empverify.domain.Enums.CheckStatus.MULTIPLE_FACES);
+
+    public DeviceController(
+            DeviceService deviceService,
+            ReferenceImageRepository referenceImages,
+            com.empverify.repo.VerificationCheckRepository checks) {
         this.deviceService = deviceService;
         this.referenceImages = referenceImages;
+        this.checks = checks;
     }
 
     /** @param machineId optional stable id of the installation; the same machine re-uses its device row */
@@ -69,10 +82,15 @@ public class DeviceController {
      *                   notice a reassignment or an offboarding without a restart
      * @param checkRequested an administrator asked this system for a check now; the
      *                       agent opens one, and opening any check clears the request
+     * @param lastScanAt when the employee's most recent completed scan finished (any
+     *                   verdict; misses excluded), null if they have never scanned.
+     *                   The agent seeds its "already checked today" memory from this,
+     *                   so a restart — an upgrade installs itself mid-day — does not
+     *                   forget the morning's scan and check the employee twice.
      */
     public record MeResponse(
             String deviceId, String status, boolean assigned, boolean enrolled, String employeeId,
-            boolean checkRequested) {}
+            boolean checkRequested, java.time.Instant lastScanAt) {}
 
     /**
      * Exchanges a one-time enrollment token (issued by an admin for one employee)
@@ -117,8 +135,13 @@ public class DeviceController {
                 && referenceImages.findByEmployeeIdAndStatusAndSource(
                         device.getEmployeeId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT)
                 .isPresent();
+        var lastScanAt = !assigned ? null
+                : checks.findFirstByEmployeeIdAndStatusInOrderByCompletedAtDesc(
+                        device.getEmployeeId(), SCAN_STATUSES)
+                        .map(c -> c.getCompletedAt()).orElse(null);
         return new MeResponse(device.getId().toString(), device.getStatus().name(), assigned, enrolled,
                 assigned ? device.getEmployeeId().toString() : null,
-                assigned && device.getCheckRequestedAt() != null);
+                assigned && device.getCheckRequestedAt() != null,
+                lastScanAt);
     }
 }

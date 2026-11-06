@@ -234,7 +234,7 @@ public partial class MainWindow : Window
         try
         {
             var state = await _api.GetDeviceStateAsync(CancellationToken.None);
-            _deviceState = state;
+            AdoptDeviceState(state);
             if (!state.Assigned)
             {
                 EnterAwaitingAssignment();
@@ -386,7 +386,7 @@ public partial class MainWindow : Window
         try
         {
             await EnsureAuthenticatedAsync(CancellationToken.None);
-            _deviceState = await _api!.GetDeviceStateAsync(CancellationToken.None);
+            AdoptDeviceState(await _api!.GetDeviceStateAsync(CancellationToken.None));
         }
         catch (Exception ex)
         {
@@ -404,6 +404,25 @@ public partial class MainWindow : Window
         CheckType.OnDemand => "Admin-requested check",
         _ => $"{type} check",
     };
+
+    /// <summary>
+    /// Adopts a fresh device state, folding the server's record of the employee's
+    /// last completed scan into the covered-day memory. This is what lets the rule
+    /// survive a restart: an upgrade installs itself mid-day and the new process
+    /// would otherwise re-plan the day and check an already-verified employee again.
+    /// </summary>
+    private void AdoptDeviceState(DeviceState state)
+    {
+        _deviceState = state;
+        if (state.LastScanAt is { } seen)
+        {
+            var local = seen.ToLocalTime();
+            if (_lastVerdictAt is null || local > _lastVerdictAt)
+            {
+                _lastVerdictAt = local;
+            }
+        }
+    }
 
     /// <summary>
     /// Forgets a locally-remembered "send a check now" after a check has been
@@ -526,7 +545,7 @@ public partial class MainWindow : Window
             {
                 await EnsureAuthenticatedAsync(CancellationToken.None);
                 var state = await _api!.GetDeviceStateAsync(CancellationToken.None);
-                _deviceState = state;
+                AdoptDeviceState(state);
                 if (state.Assigned)
                 {
                     _awaitingAssignment = false;
@@ -935,7 +954,7 @@ public partial class MainWindow : Window
         NetworkOk();
 
         var previous = _deviceState;
-        _deviceState = state;
+        AdoptDeviceState(state);
         if (!state.Assigned)
         {
             Deactivate();

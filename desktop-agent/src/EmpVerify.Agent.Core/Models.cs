@@ -40,8 +40,10 @@ public sealed record CaptureSession(string CaptureUrl, DateTimeOffset ExpiresAt)
 /// </summary>
 /// <param name="EmployeeId">The linked employee (null while unassigned); a change means the system was reassigned.</param>
 /// <param name="CheckRequested">An administrator asked this system for a check now; opening any check clears it.</param>
+/// <param name="LastScanAt">When the employee's most recent completed scan finished (misses excluded); null if never scanned.</param>
 public sealed record DeviceState(
-    string Status, bool Assigned, bool Enrolled, string? EmployeeId = null, bool CheckRequested = false);
+    string Status, bool Assigned, bool Enrolled, string? EmployeeId = null, bool CheckRequested = false,
+    DateTimeOffset? LastScanAt = null);
 
 public sealed record CheckResult(
     string CheckId,

@@ -12,6 +12,10 @@ public interface VerificationCheckRepository extends JpaRepository<VerificationC
     List<VerificationCheck> findByDeviceIdOrderByRequestedAtDesc(UUID deviceId, Pageable pageable);
     List<VerificationCheck> findAllByOrderByRequestedAtDesc(Pageable pageable);
 
+    /** The employee's most recent check among the given statuses (completed scans, for /devices/me). */
+    java.util.Optional<VerificationCheck> findFirstByEmployeeIdAndStatusInOrderByCompletedAtDesc(
+            UUID employeeId, java.util.Collection<com.empverify.domain.Enums.CheckStatus> statuses);
+
     /** Checks whose retained evidence is older than the retention cutoff. */
     List<VerificationCheck> findByEvidenceS3KeyIsNotNullAndCompletedAtBefore(Instant cutoff);
 
