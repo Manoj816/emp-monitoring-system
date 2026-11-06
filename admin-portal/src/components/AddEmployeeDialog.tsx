@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, DEPARTMENTS } from "../api";
+import ZoomableImage from "./ZoomableImage";
 
 /**
  * "Add employee" popup. The ID/photo is mandatory: it is the reference every
@@ -118,7 +119,7 @@ export default function AddEmployeeDialog(props: { onClose: () => void; onCreate
             </div>
             <div className="photo-pick-body">
               {preview ? (
-                <img className="photo-preview" src={preview} alt="Selected ID / photo" />
+                <ZoomableImage className="photo-preview" src={preview} alt="Selected ID / photo" />
               ) : (
                 <div className="photo-placeholder">No image selected</div>
               )}

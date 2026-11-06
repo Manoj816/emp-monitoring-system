@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, DEPARTMENTS, type DeviceSummary, type Employee } from "../api";
 import ConfirmPhotoDialog from "./ConfirmPhotoDialog";
+import ZoomableImage from "./ZoomableImage";
 
 /**
  * Employee details popup: the record itself (editable in place via the pencil
@@ -258,7 +259,7 @@ export default function EmployeeDetailsDialog(props: {
             <div className="photo-row">
               <figure>
                 {reference ? (
-                  <img className="photo-preview" src={reference} alt="Uploaded ID / photo" />
+                  <ZoomableImage className="photo-preview" src={reference} alt="Uploaded ID / photo" />
                 ) : (
                   <div className="photo-placeholder">No ID/photo uploaded.</div>
                 )}
@@ -266,7 +267,7 @@ export default function EmployeeDetailsDialog(props: {
               </figure>
               <figure>
                 {enrolled ? (
-                  <img className="photo-preview" src={enrolled} alt="Enrolled live scan" />
+                  <ZoomableImage className="photo-preview" src={enrolled} alt="Enrolled live scan" />
                 ) : (
                   <div className="photo-placeholder">
                     {employee.hasLiveEnrollment ? "Loading…" : "Pending first scan"}

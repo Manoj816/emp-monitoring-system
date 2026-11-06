@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type AdminCheckRow, type ReviewResolution } from "../api";
 import { checkBadgeClass, checkStatusLabel, needsReview } from "../utils/checks";
+import ZoomableImage from "./ZoomableImage";
 
 const RESOLUTIONS: { value: ReviewResolution; label: string }[] = [
   { value: "CONFIRMED_EMPLOYEE", label: "Confirmed: correct employee" },
@@ -118,7 +119,7 @@ export default function CheckDetailsDialog(props: {
           <div className="photo-row">
             <figure>
               {images.reference ? (
-                <img className="photo-preview" src={images.reference} alt="uploaded ID or photo" />
+                <ZoomableImage className="photo-preview" src={images.reference} alt="uploaded ID or photo" />
               ) : (
                 <div className="photo-placeholder">{images.loaded ? "No ID/photo uploaded." : "Loading…"}</div>
               )}
@@ -126,7 +127,7 @@ export default function CheckDetailsDialog(props: {
             </figure>
             <figure>
               {images.enrolled ? (
-                <img className="photo-preview" src={images.enrolled} alt="enrolled live scan" />
+                <ZoomableImage className="photo-preview" src={images.enrolled} alt="enrolled live scan" />
               ) : (
                 <div className="photo-placeholder">
                   {images.loaded ? "Not enrolled yet (no matching live scan so far)." : "Loading…"}
@@ -136,7 +137,7 @@ export default function CheckDetailsDialog(props: {
             </figure>
             <figure>
               {images.captured ? (
-                <img className="photo-preview" src={images.captured} alt="frame captured during this check" />
+                <ZoomableImage className="photo-preview" src={images.captured} alt="frame captured during this check" />
               ) : (
                 <div className="photo-placeholder">{capturedPlaceholder(check, images.loaded)}</div>
               )}

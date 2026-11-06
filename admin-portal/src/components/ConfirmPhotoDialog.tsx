@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Employee } from "../api";
+import ZoomableImage from "./ZoomableImage";
 
 /**
  * Confirmation step before an ID/photo is replaced. Replacing is not a small
@@ -63,7 +64,7 @@ export default function ConfirmPhotoDialog(props: {
         <div className="photo-row">
           <figure>
             {current ? (
-              <img className="photo-preview" src={current} alt="ID or photo currently on file" />
+              <ZoomableImage className="photo-preview" src={current} alt="ID or photo currently on file" />
             ) : (
               <div className="photo-placeholder">
                 {employee.hasReferenceImage ? "Loading…" : "No ID/photo on file yet."}
@@ -72,7 +73,7 @@ export default function ConfirmPhotoDialog(props: {
             <figcaption>Currently on file</figcaption>
           </figure>
           <figure>
-            {preview && <img className="photo-preview" src={preview} alt="Newly picked ID or photo" />}
+            {preview && <ZoomableImage className="photo-preview" src={preview} alt="Newly picked ID or photo" />}
             <figcaption>New picture</figcaption>
           </figure>
         </div>

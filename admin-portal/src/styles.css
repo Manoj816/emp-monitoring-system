@@ -567,3 +567,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 .pick-toolbar { display: flex; align-items: center; gap: 10px; margin: 8px 0 4px; font-size: 13px; }
 .pick-toolbar .spacer { flex: 1; }
 .pick-item input[type="checkbox"] { pointer-events: none; flex: 0 0 auto; }
+
+/* Click any picture for the full-size view; the lightbox sits above every modal. */
+img.zoomable { cursor: zoom-in; }
+.lightbox {
+  position: fixed; inset: 0; z-index: 2000; background: rgba(10, 14, 24, 0.88);
+  display: flex; align-items: center; justify-content: center; cursor: zoom-out;
+}
+.lightbox img { max-width: 95vw; max-height: 95vh; border-radius: 8px; box-shadow: 0 10px 50px rgba(0, 0, 0, 0.6); }

@@ -8,6 +8,7 @@ import { useStatsBar } from "../components/StatsBar";
 import { useTableFilters } from "../components/TableFilters";
 import { checkBadgeClass as badgeClass, checkStatusLabel as statusLabel, isMissed, needsReview } from "../utils/checks";
 import { inDateRange, serializeRange } from "../utils/dates";
+import ZoomableImage from "../components/ZoomableImage";
 
 const FILTERS = ["ALL", "CHECK", "MATCH", "MISSED", "ERRORS"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -248,7 +249,7 @@ export default function ChecksPage(props: { title: string; hint: string }) {
         <div className="overlay" onClick={() => setEvidence(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3 style={{ marginTop: 0 }}>Capture evidence</h3>
-            <img src={evidence.url} alt="verification capture evidence" />
+            <ZoomableImage className="evidence-img" src={evidence.url} alt="verification capture evidence" />
             <div className="row">
               <button className="action" onClick={() => setEvidence(null)}>Close</button>
             </div>
