@@ -26,6 +26,19 @@ public class PackagingScriptTests
     }
 
     [Fact]
+    public void TheBuildAlwaysStampsTheVersionIntoTheBinary()
+    {
+        // CI runs build-msix.ps1 with no -Version, and the stamp used to be gated on
+        // it: every installed agent then reported the default 1.0.0.0, and the portal
+        // could not say what any system actually ran. The version must come from the
+        // manifest when none is passed.
+        var script = ReadScript("build-msix.ps1");
+        Assert.Contains("$effectiveVersion", script);
+        Assert.Contains("-p:AssemblyVersion=$effectiveVersion", script);
+        Assert.DoesNotContain("if ($Version) {\n    # The agent reports", script);
+    }
+
+    [Fact]
     public void InstallerRegistersTheStartupTask()
     {
         var script = ReadScript("Install-PerMachine.ps1");

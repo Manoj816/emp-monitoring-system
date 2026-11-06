@@ -21,6 +21,24 @@ public static class StartupManager
     /// True when the agent runs from the MSIX package — i.e. an administrator
     /// installed it. The dev exe run straight from the build output is not packaged.
     /// </summary>
+    /// <summary>
+    /// The version this agent reports: the installed package's version when packaged,
+    /// else the assembly version marked "(dev build)".
+    /// </summary>
+    public static string ReportedVersion()
+    {
+        try
+        {
+            var v = global::Windows.ApplicationModel.Package.Current.Id.Version;
+            return $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
+        }
+        catch
+        {
+            var assembly = typeof(StartupManager).Assembly.GetName().Version?.ToString() ?? "unknown";
+            return $"{assembly} (dev build)";
+        }
+    }
+
     public static bool IsPackaged()
     {
         try

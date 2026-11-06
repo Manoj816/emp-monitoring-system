@@ -83,7 +83,12 @@ export default function DeviceDetailsDialog(props: {
               <dt>Platform</dt>
               <dd>{device.platform}</dd>
               <dt>Agent</dt>
-              <dd>{device.agentVersion ?? <span className="muted">—</span>}</dd>
+              <dd>
+                {device.agentVersion ?? <span className="muted">—</span>}
+                {device.agentVersion && (
+                  <span className="muted"> · as the agent last reported it (refreshed at every sign-in)</span>
+                )}
+              </dd>
               <dt>Status</dt>
               <dd><span className={statusBadge(device.status)}>{device.status}</span></dd>
               <dt>Enrollment</dt>

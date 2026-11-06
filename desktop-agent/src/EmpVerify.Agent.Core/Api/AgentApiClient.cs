@@ -30,8 +30,13 @@ public sealed class AgentApiClient : IAgentApi
     private sealed record RegisterResponse(string DeviceId, string DeviceSecret);
     private sealed record AuthRequest(string DeviceId, string DeviceSecret, string? AgentVersion, string? MachineId);
 
-    /// <summary>The build's version, reported on every sign-in so the fleet view tracks upgrades.</summary>
-    private static readonly string? AgentVersion =
+    /// <summary>
+    /// The version reported on every sign-in, so the portal shows what each system
+    /// actually runs. Defaults to this assembly's version; the platform head replaces
+    /// it with the installed package's own version, the authoritative source for an
+    /// installed agent.
+    /// </summary>
+    public static string? AgentVersion { get; set; } =
         typeof(AgentApiClient).Assembly.GetName().Version?.ToString();
 
     /// <summary>

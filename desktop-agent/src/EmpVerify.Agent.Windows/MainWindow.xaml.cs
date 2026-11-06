@@ -172,7 +172,7 @@ public partial class MainWindow : Window
                 _settings.Save();
             }
             var api = CreateApi();
-            var version = typeof(MainWindow).Assembly.GetName().Version?.ToString();
+            var version = AgentApiClient.AgentVersion;
             DeviceCredentials credentials;
             if (provisioning.Kind == ProvisioningKind.Provisioning)
             {

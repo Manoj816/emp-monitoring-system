@@ -37,6 +37,10 @@ public partial class App : System.Windows.Application
 
         // Identify this installation to the server so a reinstall re-uses its device row.
         EmpVerify.Agent.Core.Api.AgentApiClient.MachineId = MachineIdentity.Id;
+        // And say which build this is: the installed package's own version, or - for a
+        // dev exe, which has no package - its assembly version marked as a dev build, so
+        // the portal never mistakes a developer's run for a released one.
+        EmpVerify.Agent.Core.Api.AgentApiClient.AgentVersion = Services.StartupManager.ReportedVersion();
 
         _window = new MainWindow();
 
