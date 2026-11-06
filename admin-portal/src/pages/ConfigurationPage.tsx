@@ -2,18 +2,34 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type Employee } from "../api";
 import CardTitle from "../components/CardTitle";
 
+const TABS = ["window", "roster"] as const;
+type Tab = (typeof TABS)[number];
+
+const TAB_LABELS: Record<Tab, string> = {
+  window: "Daily check window",
+  roster: "Daily-check roster",
+};
+
+const PAGE_SIZES = [10, 25, 50, 100];
+
 /**
- * The Configuration tab: the admin controls for how checks run, in one place.
- * Two controls today — the daily check window (when a day's random check can
- * land) and the daily-check roster (who gets a daily check at all). The roster
- * is the same searchable pick list as "Send a check": filter to a department,
- * select all, turn the daily check off for the lot — or flip one person with
- * the switch on their row. Someone off the roster is still enrolled and still
- * answers a sent check; they are simply not checked automatically every day,
- * and the server never judges them NO_CHECK for a day on which nothing was
- * ever going to run. Running agents pick up every change within a minute.
+ * The Configuration tab: the admin controls for how checks run, split into the
+ * same chip tabs the checks page uses — the daily check window (when a day's
+ * random check can land) and the daily-check roster (who gets a daily check at
+ * all). The roster is the same searchable pick list as "Send a check", with
+ * client-side pagination so ten thousand rows never render at once ("Select
+ * all" selects everything that matches the filter, across pages, which is what
+ * a department-wide change means). Someone off the roster is still enrolled
+ * and still answers a sent check; they are simply not checked automatically
+ * every day. Running agents pick up every change within a minute.
+ *
+ * Scale note, deliberate for now: the employee list itself still loads in one
+ * request, like everywhere else in the portal. At a truly large employee base
+ * the list endpoints should grow server-side paging/search before this page
+ * does anything cleverer.
  */
 export default function ConfigurationPage(props: { title: string; hint: string }) {
+  const [tab, setTab] = useState<Tab>("window");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +40,8 @@ export default function ConfigurationPage(props: { title: string; hint: string }
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // The check window form. The server may say "12:00" or "12:00:00"; the time
   // inputs want HH:mm.
@@ -98,7 +116,7 @@ export default function ConfigurationPage(props: { title: string; hint: string }
   );
 
   const q = search.trim().toLowerCase();
-  const visible = active
+  const matching = active
     .filter((e) => !department || e.department === department)
     .filter(
       (e) =>
@@ -109,7 +127,17 @@ export default function ConfigurationPage(props: { title: string; hint: string }
     )
     .sort((a, b) => a.fullName.localeCompare(b.fullName));
 
-  const allShownSelected = visible.length > 0 && visible.every((e) => selected.has(e.id));
+  // A new filter starts from page 1 — page 7 of a different list means nothing.
+  useEffect(() => setPage(1), [search, department, pageSize]);
+
+  const pageCount = Math.max(1, Math.ceil(matching.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const pageStart = (safePage - 1) * pageSize;
+  const pageRows = matching.slice(pageStart, pageStart + pageSize);
+
+  /** "Select all" means everything that matches the filter — across pages — because
+      that is what a department-wide change is. */
+  const allMatchingSelected = matching.length > 0 && matching.every((e) => selected.has(e.id));
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -120,11 +148,11 @@ export default function ConfigurationPage(props: { title: string; hint: string }
     });
   }
 
-  function toggleAll() {
+  function toggleAllMatching() {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (allShownSelected) visible.forEach((e) => next.delete(e.id));
-      else visible.forEach((e) => next.add(e.id));
+      if (allMatchingSelected) matching.forEach((e) => next.delete(e.id));
+      else matching.forEach((e) => next.add(e.id));
       return next;
     });
   }
@@ -148,7 +176,7 @@ export default function ConfigurationPage(props: { title: string; hint: string }
     }
   }
 
-  /** The selection in bulk — a department and “select all” make this department-wide. */
+  /** The selection in bulk — a department filter and “select all” make this department-wide. */
   async function setForSelected(enabled: boolean) {
     setBusy(true);
     setError(null);
@@ -173,156 +201,196 @@ export default function ConfigurationPage(props: { title: string; hint: string }
         <CardTitle title={props.title} hint={props.hint} />
       </div>
 
+      <div className="subbar">
+        <div className="chips" role="tablist" aria-label="Configuration sections">
+          {TABS.map((t) => (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              className={`chip ${tab === t ? "active" : ""}`}
+              onClick={() => setTab(t)}
+            >
+              {TAB_LABELS[t]}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {notice && <p className="notice">{notice}</p>}
       {error && <p className="error-text">{error}</p>}
 
-      <section className="config-card">
-        <div className="config-head">
-          <h3>Daily check window</h3>
-          {savedWindow && (
-            <span className="badge neutral">
-              current: {savedWindow.start}–{savedWindow.end}
-            </span>
-          )}
-        </div>
-        <p className="help">
-          Each day's check opens at a random time inside these hours (the employee's local time), so
-          nobody can plan around it. A day whose check has not run yet is re-planned inside the new
-          window; a day already checked stays checked.
-        </p>
-        {!windowLoaded ? (
-          <p className="muted">Loading…</p>
-        ) : (
-          <div className="config-window">
-            <label>
-              From
-              <input type="time" value={start} disabled={savingWindow} onChange={(e) => setStart(e.target.value)} />
-            </label>
-            <label>
-              To
-              <input type="time" value={end} disabled={savingWindow} onChange={(e) => setEnd(e.target.value)} />
-            </label>
-            <button
-              className="primary"
-              disabled={savingWindow || (savedWindow?.start === start && savedWindow?.end === end)}
-              onClick={() => void saveWindow()}
-            >
-              {savingWindow ? "Saving…" : "Save window"}
-            </button>
+      {tab === "window" && (
+        <section className="config-card">
+          <div className="config-head">
+            <h3>Daily check window</h3>
+            {savedWindow && (
+              <span className="badge neutral">
+                current: {savedWindow.start}–{savedWindow.end}
+              </span>
+            )}
           </div>
-        )}
-      </section>
+          <p className="help">
+            Each day's check opens at a random time inside these hours (the employee's local time), so
+            nobody can plan around it. A day whose check has not run yet is re-planned inside the new
+            window; a day already checked stays checked.
+          </p>
+          {!windowLoaded ? (
+            <p className="muted">Loading…</p>
+          ) : (
+            <div className="config-window">
+              <label>
+                From
+                <input type="time" value={start} disabled={savingWindow} onChange={(e) => setStart(e.target.value)} />
+              </label>
+              <label>
+                To
+                <input type="time" value={end} disabled={savingWindow} onChange={(e) => setEnd(e.target.value)} />
+              </label>
+              <button
+                className="primary"
+                disabled={savingWindow || (savedWindow?.start === start && savedWindow?.end === end)}
+                onClick={() => void saveWindow()}
+              >
+                {savingWindow ? "Saving…" : "Save window"}
+              </button>
+            </div>
+          )}
+        </section>
+      )}
 
-      <section className="config-card">
-        <div className="config-head">
-          <h3>Daily-check roster</h3>
-          <span className="badge neutral">
-            {onRoster.length} of {active.length} active employees on the roster
-          </span>
-        </div>
-        <p className="help">
-          Who gets the day's random check. Turning someone off stops only the automatic daily check —
-          they stay enrolled, “Send a check” still reaches them, and days without a check are not
-          counted against them. For a whole department: filter to it, “Select all shown”, then turn
-          the daily check off (or on) for the selection.
-        </p>
+      {tab === "roster" && (
+        <section className="config-card">
+          <div className="config-head">
+            <h3>Daily-check roster</h3>
+            <span className="badge neutral">
+              {onRoster.length} of {active.length} active employees on the roster
+            </span>
+          </div>
+          <p className="help">
+            Who gets the day's random check. Turning someone off stops only the automatic daily check —
+            they stay enrolled, “Send a check” still reaches them, and days without a check are not
+            counted against them. For a whole department: filter to it, “Select all matching”, then turn
+            the daily check off (or on) for the selection.
+          </p>
 
-        <div className="pick-controls">
-          <input
-            placeholder="Search by name, code or email…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select
-            value={department}
-            onChange={(e) => setDepartment(e.target.value)}
-            aria-label="Filter by department"
-          >
-            <option value="">All departments</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="pick-toolbar">
-          <label>
+          <div className="pick-controls">
             <input
-              type="checkbox"
-              checked={allShownSelected}
-              disabled={busy || visible.length === 0}
-              onChange={toggleAll}
-            />{" "}
-            Select all shown ({visible.length})
-          </label>
-          <span className="spacer" />
-          <span className="muted">{selected.size} selected</span>
-          {selected.size > 0 && (
-            <>
-              <button className="action" disabled={busy} onClick={() => void setForSelected(true)}>
-                Daily check on
-              </button>
-              <button className="action" disabled={busy} onClick={() => void setForSelected(false)}>
-                Daily check off
-              </button>
-              <button className="action" disabled={busy} onClick={() => setSelected(new Set())}>
-                Clear
-              </button>
-            </>
-          )}
-        </div>
+              placeholder="Search by name, code or email…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <select
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+              aria-label="Filter by department"
+            >
+              <option value="">All departments</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
 
-        <ul className="pick-list" role="listbox" aria-label="Active employees" aria-multiselectable="true">
-          {!loaded && <li className="pick-empty">Loading…</li>}
-          {loaded && visible.length === 0 && (
-            <li className="pick-empty">
-              {active.length === 0
-                ? "No active employees yet — create one on the Employees page first."
-                : "No employees match this search or department."}
-            </li>
-          )}
-          {visible.map((e) => {
-            const isSelected = selected.has(e.id);
-            return (
-              <li key={e.id}>
-                <div className={`pick-item pick-row ${isSelected ? "selected" : ""}`}>
-                  <button
-                    type="button"
-                    className="pick-row-main"
-                    role="option"
-                    aria-selected={isSelected}
-                    disabled={busy}
-                    onClick={() => toggleSelected(e.id)}
-                  >
-                    <input type="checkbox" checked={isSelected} readOnly tabIndex={-1} />
-                    <span className="avatar">{e.fullName.trim().charAt(0).toUpperCase() || "?"}</span>
-                    <span className="pick-main">
-                      <span className="pick-name">{e.fullName}</span>
-                      <span className="pick-sub">{e.employeeCode} · {e.email}</span>
-                    </span>
-                    <span className="badge neutral">{e.department ?? "No department"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="action"
-                    disabled={busy}
-                    title={
-                      e.dailyChecks
-                        ? "Click to stop the automatic daily check for them"
-                        : "Click to put them back on the daily-check roster"
-                    }
-                    onClick={() => void toggleOne(e)}
-                  >
-                    <span className={`badge ${e.dailyChecks ? "match" : "error"}`}>
-                      {e.dailyChecks ? "daily: on" : "daily: off"}
-                    </span>
-                  </button>
-                </div>
+          <div className="pick-toolbar">
+            <label>
+              <input
+                type="checkbox"
+                checked={allMatchingSelected}
+                disabled={busy || matching.length === 0}
+                onChange={toggleAllMatching}
+              />{" "}
+              Select all {matching.length} matching
+            </label>
+            <span className="spacer" />
+            <span className="muted">{selected.size} selected</span>
+            {selected.size > 0 && (
+              <>
+                <button className="action" disabled={busy} onClick={() => void setForSelected(true)}>
+                  Daily check on
+                </button>
+                <button className="action" disabled={busy} onClick={() => void setForSelected(false)}>
+                  Daily check off
+                </button>
+                <button className="action" disabled={busy} onClick={() => setSelected(new Set())}>
+                  Clear
+                </button>
+              </>
+            )}
+          </div>
+
+          <ul className="pick-list" role="listbox" aria-label="Active employees" aria-multiselectable="true">
+            {!loaded && <li className="pick-empty">Loading…</li>}
+            {loaded && pageRows.length === 0 && (
+              <li className="pick-empty">
+                {active.length === 0
+                  ? "No active employees yet — create one on the Employees page first."
+                  : "No employees match this search or department."}
               </li>
-            );
-          })}
-        </ul>
-      </section>
+            )}
+            {pageRows.map((e) => {
+              const isSelected = selected.has(e.id);
+              return (
+                <li key={e.id}>
+                  <div className={`pick-item pick-row ${isSelected ? "selected" : ""}`}>
+                    <button
+                      type="button"
+                      className="pick-row-main"
+                      role="option"
+                      aria-selected={isSelected}
+                      disabled={busy}
+                      onClick={() => toggleSelected(e.id)}
+                    >
+                      <input type="checkbox" checked={isSelected} readOnly tabIndex={-1} />
+                      <span className="avatar">{e.fullName.trim().charAt(0).toUpperCase() || "?"}</span>
+                      <span className="pick-main">
+                        <span className="pick-name">{e.fullName}</span>
+                        <span className="pick-sub">{e.employeeCode} · {e.email}</span>
+                      </span>
+                      <span className="badge neutral">{e.department ?? "No department"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="action"
+                      disabled={busy}
+                      title={
+                        e.dailyChecks
+                          ? "Click to stop the automatic daily check for them"
+                          : "Click to put them back on the daily-check roster"
+                      }
+                      onClick={() => void toggleOne(e)}
+                    >
+                      <span className={`badge ${e.dailyChecks ? "match" : "error"}`}>
+                        {e.dailyChecks ? "daily: on" : "daily: off"}
+                      </span>
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="table-footer">
+            <span className="muted">
+              {matching.length === 0
+                ? "0 employees"
+                : `Showing ${pageStart + 1}–${Math.min(pageStart + pageSize, matching.length)} of ${matching.length}`}
+              {matching.length !== active.length && ` (filtered from ${active.length})`}
+            </span>
+            <span className="pager">
+              <label className="muted">
+                Per page{" "}
+                <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+                  {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <button className="action" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>‹ Prev</button>
+              <span className="muted">Page {safePage} of {pageCount}</span>
+              <button className="action" disabled={safePage >= pageCount} onClick={() => setPage(safePage + 1)}>Next ›</button>
+            </span>
+          </div>
+        </section>
+      )}
     </>
   );
 }
