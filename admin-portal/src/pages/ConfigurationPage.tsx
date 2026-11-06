@@ -39,6 +39,11 @@ export default function ConfigurationPage(props: { title: string; hint: string }
   // Roster list controls.
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("");
+  // "ACTIVE" by default: only active employees can be checked, so the others are
+  // reference rows (shown with the switch disabled) rather than the default view.
+  const [statusFilter, setStatusFilter] = useState("ACTIVE");
+  const [dailyFilter, setDailyFilter] = useState("");
+  const [enrollFilter, setEnrollFilter] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -116,8 +121,11 @@ export default function ConfigurationPage(props: { title: string; hint: string }
   );
 
   const q = search.trim().toLowerCase();
-  const matching = active
+  const matching = employees
+    .filter((e) => !statusFilter || e.status === statusFilter)
     .filter((e) => !department || e.department === department)
+    .filter((e) => !dailyFilter || (dailyFilter === "on") === e.dailyChecks)
+    .filter((e) => !enrollFilter || (enrollFilter === "done") === e.hasLiveEnrollment)
     .filter(
       (e) =>
         !q ||
@@ -127,17 +135,20 @@ export default function ConfigurationPage(props: { title: string; hint: string }
     )
     .sort((a, b) => a.fullName.localeCompare(b.fullName));
 
+  /** The matches whose switch means anything — what "Select all" selects. */
+  const selectable = matching.filter((e) => e.status === "ACTIVE");
+
   // A new filter starts from page 1 — page 7 of a different list means nothing.
-  useEffect(() => setPage(1), [search, department, pageSize]);
+  useEffect(() => setPage(1), [search, department, statusFilter, dailyFilter, enrollFilter, pageSize]);
 
   const pageCount = Math.max(1, Math.ceil(matching.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const pageStart = (safePage - 1) * pageSize;
   const pageRows = matching.slice(pageStart, pageStart + pageSize);
 
-  /** "Select all" means everything that matches the filter — across pages — because
-      that is what a department-wide change is. */
-  const allMatchingSelected = matching.length > 0 && matching.every((e) => selected.has(e.id));
+  /** "Select all" means every ACTIVE match — across pages — because that is what
+      a department-wide change is; a suspended row's switch means nothing. */
+  const allMatchingSelected = selectable.length > 0 && selectable.every((e) => selected.has(e.id));
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -151,8 +162,8 @@ export default function ConfigurationPage(props: { title: string; hint: string }
   function toggleAllMatching() {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (allMatchingSelected) matching.forEach((e) => next.delete(e.id));
-      else matching.forEach((e) => next.add(e.id));
+      if (allMatchingSelected) selectable.forEach((e) => next.delete(e.id));
+      else selectable.forEach((e) => next.add(e.id));
       return next;
     });
   }
@@ -304,6 +315,34 @@ export default function ConfigurationPage(props: { title: string; hint: string }
                 <option key={d} value={d}>{d}</option>
               ))}
             </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filter by employee status"
+            >
+              <option value="ACTIVE">Active</option>
+              <option value="SUSPENDED">Suspended</option>
+              <option value="OFFBOARDED">Offboarded</option>
+              <option value="">All statuses</option>
+            </select>
+            <select
+              value={dailyFilter}
+              onChange={(e) => setDailyFilter(e.target.value)}
+              aria-label="Filter by daily check"
+            >
+              <option value="">Daily: all</option>
+              <option value="on">Daily: on</option>
+              <option value="off">Daily: off</option>
+            </select>
+            <select
+              value={enrollFilter}
+              onChange={(e) => setEnrollFilter(e.target.value)}
+              aria-label="Filter by enrollment"
+            >
+              <option value="">Enrollment: all</option>
+              <option value="done">Enrolled</option>
+              <option value="pending">Pending first scan</option>
+            </select>
           </div>
 
           <div className="pick-toolbar">
@@ -311,10 +350,10 @@ export default function ConfigurationPage(props: { title: string; hint: string }
               <input
                 type="checkbox"
                 checked={allMatchingSelected}
-                disabled={busy || matching.length === 0}
+                disabled={busy || selectable.length === 0}
                 onChange={toggleAllMatching}
               />{" "}
-              Select all {matching.length} matching
+              Select all {selectable.length} matching
             </label>
             <span className="spacer" />
             <span className="muted">{selected.size} selected</span>
@@ -333,17 +372,18 @@ export default function ConfigurationPage(props: { title: string; hint: string }
             )}
           </div>
 
-          <ul className="pick-list" role="listbox" aria-label="Active employees" aria-multiselectable="true">
+          <ul className="pick-list" role="listbox" aria-label="Employees" aria-multiselectable="true">
             {!loaded && <li className="pick-empty">Loading…</li>}
             {loaded && pageRows.length === 0 && (
               <li className="pick-empty">
-                {active.length === 0
-                  ? "No active employees yet — create one on the Employees page first."
-                  : "No employees match this search or department."}
+                {employees.length === 0
+                  ? "No employees yet — create one on the Employees page first."
+                  : "No employees match these filters."}
               </li>
             )}
             {pageRows.map((e) => {
               const isSelected = selected.has(e.id);
+              const inert = e.status !== "ACTIVE";
               return (
                 <li key={e.id}>
                   <div className={`pick-item pick-row ${isSelected ? "selected" : ""}`}>
@@ -352,15 +392,22 @@ export default function ConfigurationPage(props: { title: string; hint: string }
                       className="pick-row-main"
                       role="option"
                       aria-selected={isSelected}
-                      disabled={busy}
+                      disabled={busy || inert}
+                      title={inert ? "Only active employees are checked" : undefined}
                       onClick={() => toggleSelected(e.id)}
                     >
-                      <input type="checkbox" checked={isSelected} readOnly tabIndex={-1} />
+                      <input type="checkbox" checked={isSelected} readOnly tabIndex={-1} disabled={inert} />
                       <span className="avatar">{e.fullName.trim().charAt(0).toUpperCase() || "?"}</span>
                       <span className="pick-main">
                         <span className="pick-name">{e.fullName}</span>
                         <span className="pick-sub">{e.employeeCode} · {e.email}</span>
                       </span>
+                      {inert && <span className="badge error">{e.status.toLowerCase()}</span>}
+                      {!e.hasLiveEnrollment && e.status === "ACTIVE" && (
+                        <span className="badge neutral" title="Their first live scan has not matched the ID/photo yet">
+                          pending first scan
+                        </span>
+                      )}
                       <span className="badge neutral">{e.department ?? "No department"}</span>
                     </button>
                     <button
@@ -369,8 +416,9 @@ export default function ConfigurationPage(props: { title: string; hint: string }
                       aria-checked={e.dailyChecks}
                       aria-label={`Daily check for ${e.fullName}`}
                       className={`switch ${e.dailyChecks ? "on" : ""}`}
-                      disabled={busy}
+                      disabled={busy || inert}
                       title={
+                        inert ? "Only active employees are checked" :
                         e.dailyChecks
                           ? "Daily check is on — click to stop the automatic daily check for them"
                           : "Daily check is off — click to put them back on the daily-check roster"
