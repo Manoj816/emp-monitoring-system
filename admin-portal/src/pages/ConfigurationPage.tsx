@@ -41,9 +41,9 @@ export default function ConfigurationPage(props: { title: string; hint: string; 
   // Roster list controls.
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("");
-  // "ACTIVE" by default: only active employees can be checked, so the others are
-  // reference rows (shown with the switch disabled) rather than the default view.
-  const [statusFilter, setStatusFilter] = useState("ACTIVE");
+  // All statuses by default. Non-active employees show as reference rows with the
+  // switch disabled, since only active employees can be checked.
+  const [statusFilter, setStatusFilter] = useState("");
   const [dailyFilter, setDailyFilter] = useState("");
   const [enrollFilter, setEnrollFilter] = useState("");
   const [systemFilter, setSystemFilter] = useState("");
@@ -133,13 +133,13 @@ export default function ConfigurationPage(props: { title: string; hint: string; 
   }
 
   const filtersDirty =
-    search !== "" || department !== "" || statusFilter !== "ACTIVE" ||
+    search !== "" || department !== "" || statusFilter !== "" ||
     dailyFilter !== "" || enrollFilter !== "" || systemFilter !== "";
 
   function clearFilters() {
     setSearch("");
     setDepartment("");
-    setStatusFilter("ACTIVE");
+    setStatusFilter("");
     setDailyFilter("");
     setEnrollFilter("");
     setSystemFilter("");
@@ -346,9 +346,9 @@ export default function ConfigurationPage(props: { title: string; hint: string; 
               onChange={(e) => setStatusFilter(e.target.value)}
               aria-label="Filter by employee status"
             >
+              <option value="">All statuses</option>
               <option value="ACTIVE">Active</option>
               <option value="OFFBOARDED">Offboarded</option>
-              <option value="">All statuses</option>
             </select>
             <select
               value={dailyFilter}
