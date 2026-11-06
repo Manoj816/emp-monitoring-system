@@ -81,8 +81,15 @@ const SECTIONS: { id: Section; label: string; hint: string; description: string;
   },
 ];
 
+/** The section the URL names (#devices, #checks, #config), so a hard refresh
+    lands back on the screen the admin was on instead of always on Employees. */
+function sectionFromHash(): Section {
+  const h = window.location.hash.replace("#", "");
+  return SECTIONS.some((s) => s.id === h) ? (h as Section) : "employees";
+}
+
 export default function App() {
-  const [section, setSection] = useState<Section>("employees");
+  const [section, setSection] = useState<Section>(sectionFromHash);
   // undefined = still checking the session; null = signed out
   const [user, setUser] = useState<string | null | undefined>(undefined);
   const [resetCount, setResetCount] = useState(0);
@@ -92,6 +99,18 @@ export default function App() {
   useEffect(() => {
     currentUserEmail().then(setUser);
   }, []);
+
+  // Back/forward (and hand-edited hashes) drive the section like the sidebar does.
+  useEffect(() => {
+    const onHash = () => setSection(sectionFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  function go(next: Section) {
+    window.location.hash = next;
+    setSection(next);
+  }
 
   if (!authConfigured) {
     return (
@@ -115,7 +134,7 @@ export default function App() {
     try {
       const s = await api.resetDemoData();
       setNotice(`Reset done: removed ${s.employees} employees, ${s.devices} devices, ${s.checks} checks.`);
-      setSection("employees");
+      go("employees");
       setResetCount((n) => n + 1); // remount the pages so they refetch
     } catch (e) {
       setNotice(`Reset failed: ${(e as Error).message}`);
@@ -163,7 +182,7 @@ export default function App() {
                 key={s.id}
                 className={`sidenav-item ${section === s.id ? "active" : ""}`}
                 onClick={() => {
-                  setSection(s.id);
+                  go(s.id);
                   setNavOpen(false);
                 }}
                 aria-current={section === s.id ? "page" : undefined}
