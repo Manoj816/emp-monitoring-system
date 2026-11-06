@@ -1,8 +1,8 @@
 {
-  "_comment": "Trust policy for role empverify-github-deploy (IAM > Roles > empverify-github-deploy > Trust relationships > Edit trust policy). Mirrors infra/terraform/bootstrap/main.tf. Trusts BOTH GitHub OIDC subject forms: the classic owner/repo one, and the immutable owner@id/repo@id one GitHub switched this repository to - the switch is what broke CI deploys with 'Not authorized to perform sts:AssumeRoleWithWebIdentity'.",
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "GithubActionsOidcBothSubjectForms",
       "Effect": "Allow",
       "Principal": {
         "Federated": "arn:aws:iam::119331772192:oidc-provider/token.actions.githubusercontent.com"
