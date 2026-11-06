@@ -37,16 +37,17 @@ resource "aws_iam_role" "github_deploy" {
       }
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {
+        # Exact matches, deliberately not StringLike: no pattern needed, and the
+        # console warns on any StringLike against the sub key.
+        #
+        # GitHub moved this repository to immutable OIDC subjects (the sub
+        # claim carries owner@id/repo@id so a renamed or recreated repo can
+        # never inherit this trust). That flip is what broke CI deploys with
+        # "Not authorized to perform sts:AssumeRoleWithWebIdentity": the old
+        # owner/repo patterns stopped matching any token GitHub issues. Both
+        # forms are trusted so a later flip back cannot break deploys again.
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-        }
-        StringLike = {
-          # GitHub moved this repository to immutable OIDC subjects (the sub
-          # claim carries owner@id/repo@id so a renamed or recreated repo can
-          # never inherit this trust). That flip is what broke CI deploys with
-          # "Not authorized to perform sts:AssumeRoleWithWebIdentity": the old
-          # owner/repo patterns stopped matching any token GitHub issues. Both
-          # forms are trusted so a later flip back cannot break deploys again.
           "token.actions.githubusercontent.com:sub" = [
             "repo:${var.github_repository}:ref:refs/heads/main",
             "repo:${var.github_repository}:environment:production",
