@@ -309,6 +309,26 @@ class VerificationServiceTest {
     }
 
     @Test
+    void onDemandOpensOnlyWhileARequestIsPending() {
+        // One "send a check now" is one scan: the first open consumes the request,
+        // and a duplicate ON_DEMAND open is refused instead of becoming a second
+        // scan nobody asked for.
+        var device = new Device();
+        device.setEmployeeId(employeeId);
+        device.setCheckRequestedAt(Instant.now());
+        when(deviceService.requireActiveDevice(deviceId)).thenReturn(device);
+        when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        var check = service.openCheck(deviceId, CheckType.ON_DEMAND);
+        assertEquals(CheckType.ON_DEMAND, check.getCheckType());
+        verify(deviceService).clearCheckRequest(device);
+
+        device.setCheckRequestedAt(null); // what clearCheckRequest does on the real device
+        var ex = assertThrows(ApiException.class, () -> service.openCheck(deviceId, CheckType.ON_DEMAND));
+        assertEquals(HttpStatus.CONFLICT, ex.getStatus());
+    }
+
+    @Test
     void openingAnyCheckSettlesAPendingAdminRequest() {
         // Whatever check opens first answers "send a check now": the request must
         // never produce a second scan after the employee was already checked.

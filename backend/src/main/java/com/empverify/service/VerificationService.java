@@ -109,6 +109,14 @@ public class VerificationService {
     @Transactional
     public VerificationCheck openCheck(UUID deviceId, CheckType type) {
         var device = deviceService.requireActiveDevice(deviceId);
+        // An ON_DEMAND check exists only as the answer to a pending "send a check
+        // now": the first open consumes the request, so a second ON_DEMAND open —
+        // an agent bug, a stale agent build, a replayed call — is refused here
+        // rather than becoming a scan nobody asked for. The server is the
+        // authority on how many checks one click is.
+        if (type == CheckType.ON_DEMAND && device.getCheckRequestedAt() == null) {
+            throw new ApiException(HttpStatus.CONFLICT, "no admin check request is pending for this device");
+        }
         // Whatever check opens — the admin's own, the day's random one, a recorded
         // miss — it answers a pending "send a check now", so the request never fires twice.
         deviceService.clearCheckRequest(device);
