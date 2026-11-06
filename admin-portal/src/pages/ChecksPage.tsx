@@ -117,7 +117,6 @@ export default function ChecksPage(props: { title: string; hint: string }) {
           >
             Send a check
           </button>
-          <span className="muted">Auto-refreshes every 20s</span>
         </span>
       </div>
       <div className="subbar">
