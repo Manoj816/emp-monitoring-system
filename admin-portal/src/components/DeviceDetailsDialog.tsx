@@ -4,7 +4,11 @@ import { checkBadgeClass, checkStatusLabel } from "../utils/checks";
 
 /** How far back the fleet-wide feed is read to find this system's checks. */
 const FEED_LIMIT = 500;
-const SHOWN = 10;
+/** The popup lists only this system's recent checks; older ones live on the checks page. */
+const RECENT_DAYS = 7;
+const RECENT_MS = RECENT_DAYS * 24 * 60 * 60 * 1000;
+/** A safety cap for a system running a very chatty demo interval. */
+const SHOWN = 50;
 
 function statusBadge(status: string): string {
   if (status === "ACTIVE") return "badge match";
@@ -31,13 +35,21 @@ export default function DeviceDetailsDialog(props: {
   const { device, employee } = props;
   const [checks, setChecks] = useState<AdminCheckRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Always collapsed on open: the list is secondary, and a popup that opens as
+  // one long scroll hides the record and the actions it is for.
+  const [checksOpen, setChecksOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     api
       .listChecks(FEED_LIMIT)
       .then((rows) => {
-        if (!cancelled) setChecks(rows.filter((r) => r.deviceId === device.id));
+        const since = Date.now() - RECENT_MS;
+        if (!cancelled) {
+          setChecks(
+            rows.filter((r) => r.deviceId === device.id && new Date(r.requestedAt).getTime() >= since),
+          );
+        }
       })
       .catch((e) => {
         if (!cancelled) setError((e as Error).message);
@@ -154,14 +166,29 @@ export default function DeviceDetailsDialog(props: {
           </section>
 
           <section className="panel" style={{ gridColumn: "1 / -1" }}>
-            <h4>Checks on this system</h4>
-            {error && <p className="error-text" style={{ marginTop: 0 }}>{error}</p>}
-            {checks === null ? (
-              <p className="muted" style={{ margin: 0 }}>Loading…</p>
-            ) : checks.length === 0 ? (
-              <p className="muted" style={{ margin: 0 }}>No check has run on this system yet.</p>
-            ) : (
-              <ul className="record-list">
+            <button
+              type="button"
+              className="panel-toggle"
+              aria-expanded={checksOpen}
+              onClick={() => setChecksOpen(!checksOpen)}
+            >
+              <span className="panel-toggle-title">Checks on this system · last {RECENT_DAYS} days</span>
+              <span className="muted">
+                {checks === null ? "loading…" : `${checks.length} check${checks.length === 1 ? "" : "s"}`}
+              </span>
+              <span className={`panel-chevron ${checksOpen ? "open" : ""}`} aria-hidden="true">▾</span>
+            </button>
+            {checksOpen && error && <p className="error-text" style={{ margin: "10px 0 0" }}>{error}</p>}
+            {checksOpen && checks === null && !error && (
+              <p className="muted" style={{ margin: "10px 0 0" }}>Loading…</p>
+            )}
+            {checksOpen && checks !== null && checks.length === 0 && (
+              <p className="muted" style={{ margin: "10px 0 0" }}>
+                No check ran on this system in the last {RECENT_DAYS} days.
+              </p>
+            )}
+            {checksOpen && checks !== null && checks.length > 0 && (
+              <ul className="record-list" style={{ marginTop: 10 }}>
                 {checks.slice(0, SHOWN).map((c) => (
                   <li key={c.checkId}>
                     <span className="host">
@@ -180,13 +207,13 @@ export default function DeviceDetailsDialog(props: {
                 ))}
               </ul>
             )}
-            {checks !== null && checks.length > 0 && (
+            {checksOpen && checks !== null && checks.length > 0 && (
               <p className="fine">
                 {checks.length > SHOWN
                   ? `Showing the ${SHOWN} most recent of ${checks.length}. `
                   : ""}
-                Read from the latest {FEED_LIMIT} checks across the fleet — older ones are on the
-                Verification checks page.
+                Only the last {RECENT_DAYS} days are listed here — nothing is deleted; every check stays
+                on the Verification checks page.
               </p>
             )}
           </section>

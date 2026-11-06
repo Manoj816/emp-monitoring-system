@@ -621,3 +621,15 @@ img.zoomable { cursor: zoom-in; }
 
 /* The in-app confirm/alert must sit above whichever popup asked the question. */
 .overlay.confirm-overlay { z-index: 90; }
+
+/* A panel whose body folds away: the header is the toggle. */
+.panel-toggle {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 0;
+  border: none; background: none; cursor: pointer; font: inherit; text-align: left;
+}
+.panel-toggle-title {
+  flex: 1 1 auto; font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted);
+}
+.panel-chevron { font-size: 16px; color: var(--muted); transition: transform 0.15s ease; transform: rotate(-90deg); }
+.panel-chevron.open { transform: rotate(0deg); }
