@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
 import ActionMenu from "../components/ActionMenu";
 import AddEmployeeDialog from "../components/AddEmployeeDialog";
@@ -9,6 +9,7 @@ import EmployeeDetailsDialog from "../components/EmployeeDetailsDialog";
 import ImportEmployeesDialog from "../components/ImportEmployeesDialog";
 import { useStatsBar, type StatItem } from "../components/StatsBar";
 import { useTableFilters } from "../components/TableFilters";
+import { useFreshOnActive } from "../useFreshOnActive";
 
 /**
  * The plain text each filterable column holds for a row, in one place so the
@@ -21,7 +22,7 @@ const COLUMN_VALUE: Record<string, (emp: Employee) => string> = {
   enrollment: (emp) => (emp.hasLiveEnrollment ? "done" : "pending first scan"),
 };
 
-export default function EmployeesPage(props: { title: string; hint: string }) {
+export default function EmployeesPage(props: { title: string; hint: string; active: boolean }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -52,9 +53,7 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
     return devices.filter((d) => d.employeeId === employee.id && d.status !== "REVOKED");
   }
 
-  useEffect(() => {
-    void refresh();
-  }, []);
+  useFreshOnActive(props.active, () => void refresh());
 
   async function run(work: () => Promise<void>) {
     setBusy(true);

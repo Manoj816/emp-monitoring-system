@@ -17,7 +17,7 @@ const FILTER_LABELS: Record<Filter, string> = {
   ALL: "All", CHECK: "Needs review", MATCH: "Match", MISSED: "Missed", ERRORS: "Errors",
 };
 
-export default function ChecksPage(props: { title: string; hint: string }) {
+export default function ChecksPage(props: { title: string; hint: string; active: boolean }) {
   const [rows, setRows] = useState<AdminCheckRow[]>([]);
   const [filter, setFilter] = useState<Filter>("ALL");
   const [error, setError] = useState<string | null>(null);
@@ -41,12 +41,19 @@ export default function ChecksPage(props: { title: string; hint: string }) {
     }
   }
 
+  // Hostnames once; a system is renamed far too rarely to poll for.
   useEffect(() => {
-    void refresh();
     void api.listDevices().then(setDevices).catch(() => setDevices([]));
+  }, []);
+
+  // The live feed refreshes and polls only while this page is the one on
+  // screen; a hidden feed polling every 20s is pure server load.
+  useEffect(() => {
+    if (!props.active) return;
+    void refresh();
     const interval = setInterval(() => void refresh(), 20_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [props.active]);
 
   const visible = rows.filter((r) => {
     if (filter === "ALL") return true;

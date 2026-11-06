@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api, type DeviceSummary, type Employee } from "../api";
 import ActionMenu from "../components/ActionMenu";
 import AssignEmployeeDialog from "../components/AssignEmployeeDialog";
 import CardTitle from "../components/CardTitle";
 import DataTable from "../components/DataTable";
 import DeviceDetailsDialog from "../components/DeviceDetailsDialog";
+import { useFreshOnActive } from "../useFreshOnActive";
 import { useStatsBar, type StatItem } from "../components/StatsBar";
 import { useTableFilters } from "../components/TableFilters";
 
@@ -27,7 +28,7 @@ const COLUMN_VALUE: Record<string, (d: DeviceSummary) => string> = {
   status: (d) => d.status,
 };
 
-export default function DevicesPage(props: { title: string; hint: string }) {
+export default function DevicesPage(props: { title: string; hint: string; active: boolean }) {
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [assigning, setAssigning] = useState<DeviceSummary | null>(null);
@@ -51,9 +52,7 @@ export default function DevicesPage(props: { title: string; hint: string }) {
     }
   }
 
-  useEffect(() => {
-    void refresh();
-  }, []);
+  useFreshOnActive(props.active, () => void refresh());
 
   async function run(work: () => Promise<void>) {
     setBusy(true);

@@ -90,6 +90,9 @@ function sectionFromHash(): Section {
 
 export default function App() {
   const [section, setSection] = useState<Section>(sectionFromHash);
+  // Pages stay mounted once visited (hidden, not unmounted), so switching tabs
+  // neither refetches their data nor loses their filters and scroll position.
+  const [visited, setVisited] = useState<Set<Section>>(() => new Set([sectionFromHash()]));
   // undefined = still checking the session; null = signed out
   const [user, setUser] = useState<string | null | undefined>(undefined);
   const [resetCount, setResetCount] = useState(0);
@@ -106,6 +109,10 @@ export default function App() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
+
+  useEffect(() => {
+    setVisited((prev) => (prev.has(section) ? prev : new Set(prev).add(section)));
+  }, [section]);
 
   function go(next: Section) {
     window.location.hash = next;
@@ -208,10 +215,22 @@ export default function App() {
           )}
 
           <main className="card" key={resetCount} aria-label={current.label}>
-            {section === "employees" && <EmployeesPage title={current.label} hint={current.description} />}
-            {section === "devices" && <DevicesPage title={current.label} hint={current.description} />}
-            {section === "checks" && <ChecksPage title={current.label} hint={current.description} />}
-            {section === "config" && <ConfigurationPage title={current.label} hint={current.description} />}
+            {SECTIONS.filter((s) => visited.has(s.id)).map((s) => (
+              <div key={s.id} hidden={section !== s.id}>
+                {s.id === "employees" && (
+                  <EmployeesPage title={s.label} hint={s.description} active={section === "employees"} />
+                )}
+                {s.id === "devices" && (
+                  <DevicesPage title={s.label} hint={s.description} active={section === "devices"} />
+                )}
+                {s.id === "checks" && (
+                  <ChecksPage title={s.label} hint={s.description} active={section === "checks"} />
+                )}
+                {s.id === "config" && (
+                  <ConfigurationPage title={s.label} hint={s.description} active={section === "config"} />
+                )}
+              </div>
+            ))}
           </main>
         </div>
       </div>

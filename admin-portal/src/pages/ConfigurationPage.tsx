@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Employee } from "../api";
 import CardTitle from "../components/CardTitle";
+import { useFreshOnActive } from "../useFreshOnActive";
 
 const TABS = ["window", "roster"] as const;
 type Tab = (typeof TABS)[number];
@@ -28,7 +29,7 @@ const PAGE_SIZES = [10, 25, 50, 100];
  * the list endpoints should grow server-side paging/search before this page
  * does anything cleverer.
  */
-export default function ConfigurationPage(props: { title: string; hint: string }) {
+export default function ConfigurationPage(props: { title: string; hint: string; active: boolean }) {
   const [tab, setTab] = useState<Tab>("window");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -67,8 +68,10 @@ export default function ConfigurationPage(props: { title: string; hint: string }
     }
   }
 
+  useFreshOnActive(props.active, () => void refresh());
+
+  // The window is read once; this page is where it changes, and saving updates it.
   useEffect(() => {
-    void refresh();
     api
       .getCheckWindow()
       .then((w) => {
