@@ -47,6 +47,8 @@ public partial class MainWindow : Window
     private IReadOnlyList<DateTimeOffset> _plan = Array.Empty<DateTimeOffset>();
     private DateTimeOffset _lastHandled = DateTimeOffset.MinValue;
     private DateTimeOffset _lastDemoCheck = DateTimeOffset.MinValue;
+    /// <summary>When the last scan with a verdict completed; a day already verified does not open its slot again.</summary>
+    private DateTimeOffset? _lastVerdictAt;
     private bool _awaitingAssignment;
     private bool _checkRunning;
     /// <summary>The start-up enrollment scan has been completed (or was not due) in this run.</summary>
@@ -652,6 +654,17 @@ public partial class MainWindow : Window
             return;
         }
         var type = await ResolveScheduledCheckTypeAsync();
+        // The employee was already verified today — an admin-sent check or the
+        // enrollment scan, minutes or hours ago. Opening the day's random check on
+        // top of that is a second interruption that proves nothing new, so the
+        // slot counts as covered. An un-enrolled system still owes the enrollment
+        // scan (an earlier non-matching scan must not stand in for it), and
+        // demo-interval checks keep firing — repetition is their whole point.
+        if (!demo && type != CheckType.Enrollment && _lastVerdictAt is { } seen && seen.Date == DateTime.Today)
+        {
+            Log($"Today's check is already covered by the completed scan at {seen:HH:mm} — not opening another.");
+            return;
+        }
         if (TryDefer(type, demo))
         {
             return;
@@ -1003,6 +1016,7 @@ public partial class MainWindow : Window
             var technicalFailure = result.Result?.Status == CheckStatus.VerificationError;
             if (result.HasVerdict && !technicalFailure)
             {
+                _lastVerdictAt = DateTimeOffset.Now;
                 SetStatus($"Last check: {result.Result!.Status} at {DateTime.Now:HH:mm}.");
                 if (type == CheckType.Enrollment && result.Result.Status == CheckStatus.Match)
                 {
