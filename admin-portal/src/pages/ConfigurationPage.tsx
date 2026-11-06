@@ -254,6 +254,20 @@ export default function ConfigurationPage(props: { title: string; hint: string }
               >
                 {savingWindow ? "Saving…" : "Save window"}
               </button>
+              {savedWindow && (savedWindow.start !== start || savedWindow.end !== end) && (
+                <button
+                  className="action"
+                  disabled={savingWindow}
+                  title={`Back to the saved window, ${savedWindow.start}–${savedWindow.end}`}
+                  onClick={() => {
+                    setStart(savedWindow.start);
+                    setEnd(savedWindow.end);
+                    setError(null);
+                  }}
+                >
+                  Discard changes
+                </button>
+              )}
             </div>
           )}
         </section>
@@ -351,18 +365,19 @@ export default function ConfigurationPage(props: { title: string; hint: string }
                     </button>
                     <button
                       type="button"
-                      className="action"
+                      role="switch"
+                      aria-checked={e.dailyChecks}
+                      aria-label={`Daily check for ${e.fullName}`}
+                      className={`switch ${e.dailyChecks ? "on" : ""}`}
                       disabled={busy}
                       title={
                         e.dailyChecks
-                          ? "Click to stop the automatic daily check for them"
-                          : "Click to put them back on the daily-check roster"
+                          ? "Daily check is on — click to stop the automatic daily check for them"
+                          : "Daily check is off — click to put them back on the daily-check roster"
                       }
                       onClick={() => void toggleOne(e)}
                     >
-                      <span className={`badge ${e.dailyChecks ? "match" : "error"}`}>
-                        {e.dailyChecks ? "daily: on" : "daily: off"}
-                      </span>
+                      <span className="switch-knob" />
                     </button>
                   </div>
                 </li>

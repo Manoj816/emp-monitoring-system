@@ -578,6 +578,27 @@ body:has(.overlay) { overflow: hidden; }
   padding: 8px 10px; border: none; background: none; cursor: pointer; font: inherit; text-align: left;
 }
 .pick-row > .action { margin: 6px 10px 6px 0; flex: 0 0 auto; align-self: center; }
+.pick-row > .switch { margin: 6px 12px 6px 0; align-self: center; }
+
+/* The roster's on/off control is a switch, not a button: green and knob right
+   when the employee gets the daily check. */
+.switch {
+  position: relative; width: 40px; height: 22px; flex: 0 0 auto; padding: 0;
+  border: 1px solid var(--border); border-radius: 999px; background: #dfe3ec;
+  cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease;
+}
+.switch .switch-knob {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: left 0.15s ease;
+}
+.switch.on { background: var(--ok); border-color: var(--ok); }
+.switch.on .switch-knob { left: 20px; }
+.switch:disabled { opacity: 0.5; cursor: default; }
+
+/* The embedded pick lists keep their scroll but draw no bar, same as the popups. */
+.pick-list { scrollbar-width: none; }
+.pick-list::-webkit-scrollbar { display: none; }
 
 /* Send-a-check: the multi-select toolbar between the search row and the list. */
 .pick-toolbar { display: flex; align-items: center; gap: 10px; margin: 8px 0 4px; font-size: 13px; }
