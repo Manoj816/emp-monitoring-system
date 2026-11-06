@@ -35,6 +35,13 @@ public class Employee {
     @Column(name = "policy_id")
     private UUID policyId;
 
+    /**
+     * On the daily-check roster (the default). Off = no scheduled daily check and
+     * no NO_CHECK judgement; enrollment and admin-sent checks still run.
+     */
+    @Column(name = "daily_checks_enabled", nullable = false)
+    private boolean dailyChecksEnabled = true;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -52,6 +59,8 @@ public class Employee {
     public void setDepartment(String v) { this.department = v; }
     public EmployeeStatus getStatus() { return status; }
     public void setStatus(EmployeeStatus v) { this.status = v; }
+    public boolean isDailyChecksEnabled() { return dailyChecksEnabled; }
+    public void setDailyChecksEnabled(boolean v) { this.dailyChecksEnabled = v; }
     public UUID getPolicyId() { return policyId; }
     public void setPolicyId(UUID v) { this.policyId = v; }
     public Instant getCreatedAt() { return createdAt; }

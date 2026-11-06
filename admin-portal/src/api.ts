@@ -17,6 +17,8 @@ export interface Employee {
   hasReferenceImage: boolean;
   /** The employee's first live scan matched it and is now the second reference. */
   hasLiveEnrollment: boolean;
+  /** On the daily-check roster; off = admin-sent checks only (Configuration tab). */
+  dailyChecks: boolean;
 }
 
 /** One row the CSV import refused, numbered the way a spreadsheet numbers it. */
@@ -67,12 +69,18 @@ export interface CheckWindow {
   timezone: string;
 }
 
-export interface RequestCheckResult {
+export interface RequestCheckTarget {
   employeeId: string;
   employeeName: string;
   department: string | null;
   /** How many of their systems will open the check (normally 1). */
   systems: number;
+}
+
+export interface RequestCheckResult {
+  sent: RequestCheckTarget[];
+  /** Selected employees no check could be sent to, and why. */
+  skipped: { employeeId: string; employeeName: string; reason: string }[];
 }
 
 export type ReviewResolution =
@@ -224,6 +232,14 @@ export const api = {
   /** The daily check window of the default policy. */
   getCheckWindow: () => request<CheckWindow>("/api/v1/admin/policy/check-window"),
 
+  /** Puts an employee on / takes them off the daily-check roster (Configuration tab). */
+  setDailyChecks: (employeeId: string, enabled: boolean) =>
+    request<Employee>(`/api/v1/admin/employees/${employeeId}/daily-checks`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    }),
+
   /** Sets the daily check window; running agents re-plan within a minute. */
   updateCheckWindow: (workWindowStart: string, workWindowEnd: string) =>
     request<CheckWindow>("/api/v1/admin/policy/check-window", {
@@ -233,12 +249,12 @@ export const api = {
     }),
 
   /**
-   * Sends a verification check now: to the given employee, or — without an
-   * employeeId — to a random active employee (within the department, if given).
-   * The agent opens the scan within a minute of being online; the result lands
-   * in the checks list as ON_DEMAND.
+   * Sends a verification check now: to one employee, to many (multi-select /
+   * "select all"), or — with nobody picked — to a random active employee
+   * (within the department, if given). Each agent opens its scan within a
+   * minute of being online; results land in the checks list as ON_DEMAND.
    */
-  requestCheck: (input: { employeeId?: string; department?: string }) =>
+  requestCheck: (input: { employeeId?: string; employeeIds?: string[]; department?: string }) =>
     request<RequestCheckResult>("/api/v1/admin/checks/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

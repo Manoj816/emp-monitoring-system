@@ -672,9 +672,12 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Re-reads the policy while active, so a check window changed in the portal
-    /// reaches running agents within a minute. A day whose check has not fired yet
-    /// is re-planned inside the new window; a day already checked stays checked.
+    /// Re-reads the policy while active, so a change made in the portal reaches
+    /// running agents within a minute: a new check window re-plans a day whose
+    /// check has not fired yet (a day already checked stays checked), and taking
+    /// the employee off the daily-check roster arrives as maxChecksPerDay = 0,
+    /// which drops any check still scheduled for today. Admin-sent checks bypass
+    /// the plan, so they keep working either way.
     /// </summary>
     private async Task RefreshPolicyAsync()
     {
@@ -689,10 +692,12 @@ public partial class MainWindow : Window
             return;
         }
         NetworkOk();
-        var windowChanged = _policy is not null
-            && (fresh.WorkWindowStart != _policy.WorkWindowStart || fresh.WorkWindowEnd != _policy.WorkWindowEnd);
+        var current = _policy;
         _policy = fresh; // other knobs (timeout, capture-on-timeout) apply silently
-        if (!windowChanged)
+        if (current is null
+            || (fresh.WorkWindowStart == current.WorkWindowStart
+                && fresh.WorkWindowEnd == current.WorkWindowEnd
+                && fresh.MaxChecksPerDay == current.MaxChecksPerDay))
         {
             return;
         }
@@ -700,11 +705,14 @@ public partial class MainWindow : Window
         var remaining = fresh.MaxChecksPerDay - fired.Count;
         if (remaining <= 0)
         {
-            Log("An administrator changed the check window — today's check already ran; the new window applies from tomorrow.");
+            _plan = fired; // drop anything still scheduled under the old policy
+            Log(fresh.MaxChecksPerDay == 0
+                ? "An administrator took this employee off the daily-check roster — no scheduled check today; admin-sent checks still run."
+                : "An administrator changed the check window — today's check already ran; the new window applies from tomorrow.");
             return;
         }
         _plan = fired.Concat(_scheduler.PlanRemainingDay(fresh, DateTimeOffset.Now, PlanLead).Take(remaining)).ToList();
-        Log("An administrator changed the check window — re-planning today's check inside the new hours.");
+        Log("An administrator changed the check schedule — re-planning today's check.");
         LogNextCheck();
     }
 

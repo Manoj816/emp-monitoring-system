@@ -114,6 +114,9 @@ public class NoCheckService {
             if (employee.getStatus() != EmployeeStatus.ACTIVE) {
                 continue;
             }
+            if (!employee.isDailyChecksEnabled()) {
+                continue; // off the daily roster: no check was ever going to run today
+            }
             List<Device> systems = devices.findByEmployeeId(employee.getId()).stream()
                     .filter(d -> d.getStatus() == DeviceStatus.ACTIVE)
                     .toList();

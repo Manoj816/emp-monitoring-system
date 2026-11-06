@@ -78,7 +78,9 @@ public class AdminController {
             /** An administrator has uploaded the ID/photo reference. */
             boolean hasReferenceImage,
             /** The employee's first live scan matched it and is now the second reference. */
-            boolean hasLiveEnrollment) {}
+            boolean hasLiveEnrollment,
+            /** On the daily-check roster; off = admin-sent checks only. */
+            boolean dailyChecks) {}
 
     public record EnrollmentTokenResponse(String enrollmentToken) {}
 
@@ -411,42 +413,107 @@ public class AdminController {
                 .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "default policy missing"));
     }
 
-    public record RequestCheckRequest(String employeeId, String department) {}
-
-    public record RequestCheckResponse(
-            String employeeId, String employeeName, String department, int systems) {}
+    public record DailyChecksRequest(boolean enabled) {}
 
     /**
-     * Sends a verification check now. With an employeeId it goes to that employee;
-     * without one, to a random ACTIVE employee who has an active system — across the
-     * whole company, or within the given department. The agent opens the scan within
-     * a minute (when the PC is on); the result lands in the checks list as ON_DEMAND.
+     * Puts an employee on, or takes them off, the daily-check roster (the
+     * Configuration tab). Off means no scheduled daily check and no NO_CHECK
+     * judgement; enrollment and admin-sent checks still run. The agent re-reads
+     * its policy every minute, so the change lands without a restart.
+     */
+    @org.springframework.web.bind.annotation.PutMapping("/employees/{employeeId}/daily-checks")
+    public EmployeeResponse setDailyChecks(
+            @PathVariable UUID employeeId, @Valid @RequestBody DailyChecksRequest request) {
+        var employee = employees.findById(employeeId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "employee not found"));
+        if (employee.isDailyChecksEnabled() != request.enabled()) {
+            employee.setDailyChecksEnabled(request.enabled());
+            employees.save(employee);
+            audit.record("admin", request.enabled() ? "DAILY_CHECKS_ENABLED" : "DAILY_CHECKS_DISABLED",
+                    "employee", employeeId.toString(), "{\"enabled\":" + request.enabled() + "}");
+        }
+        return toResponse(employee);
+    }
+
+    public record RequestCheckRequest(String employeeId, List<String> employeeIds, String department) {}
+
+    public record RequestCheckTarget(String employeeId, String employeeName, String department, int systems) {}
+
+    /** One selected employee no check could be sent to, and why. */
+    public record SkippedTarget(String employeeId, String employeeName, String reason) {}
+
+    public record RequestCheckResponse(List<RequestCheckTarget> sent, List<SkippedTarget> skipped) {}
+
+    /**
+     * Sends a verification check now. The selection can be one employee, many
+     * (the portal's multi-select / "select all"), or nobody — in which case it
+     * goes to a random ACTIVE employee with an active system, across the whole
+     * company or within the given department. Each chosen employee's check is
+     * sent independently: one suspended record or retired PC skips that person
+     * (reported in the response) instead of failing the whole batch. Only a
+     * batch where NOBODY could receive a check is an error, so "sent" can never
+     * silently mean "sent to no one". Each agent opens its scan within a minute
+     * of being online; results land in the checks list as ON_DEMAND.
      */
     @PostMapping("/checks/request")
     public RequestCheckResponse requestCheck(
             @RequestBody(required = false) RequestCheckRequest request) {
-        var employeeId = request == null ? null : trimToNull(request.employeeId());
         var department = request == null ? null : trimToNull(request.department());
 
-        Employee target;
-        if (employeeId != null) {
-            target = employees.findById(UUID.fromString(employeeId))
-                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "employee not found"));
-            if (target.getStatus() != com.empverify.domain.Enums.EmployeeStatus.ACTIVE) {
-                throw new ApiException(HttpStatus.CONFLICT,
-                        target.getFullName() + " is not an active employee");
+        // The selection, in the order it was made (employeeId is the single-select
+        // form the employee row uses; a duplicate id is one employee, not two checks).
+        var ids = new java.util.LinkedHashSet<UUID>();
+        if (request != null && request.employeeIds() != null) {
+            for (var raw : request.employeeIds()) {
+                if (trimToNull(raw) != null) {
+                    ids.add(UUID.fromString(raw.trim()));
+                }
             }
-        } else {
-            target = pickRandomCheckable(department);
+        }
+        if (request != null && trimToNull(request.employeeId()) != null) {
+            ids.add(UUID.fromString(request.employeeId().trim()));
         }
 
-        int systems = deviceService.requestCheck(target.getId(), "admin");
-        if (systems == 0) {
-            throw new ApiException(HttpStatus.CONFLICT,
-                    target.getFullName() + " has no active system to open a check on");
+        List<Employee> targets;
+        if (ids.isEmpty()) {
+            targets = List.of(pickRandomCheckable(department));
+        } else {
+            targets = new java.util.ArrayList<>();
+            for (var id : ids) {
+                targets.add(employees.findById(id)
+                        .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "employee not found")));
+            }
         }
-        return new RequestCheckResponse(
-                target.getId().toString(), target.getFullName(), target.getDepartment(), systems);
+
+        var sent = new java.util.ArrayList<RequestCheckTarget>();
+        var skipped = new java.util.ArrayList<SkippedTarget>();
+        for (var target : targets) {
+            if (target.getStatus() != com.empverify.domain.Enums.EmployeeStatus.ACTIVE) {
+                skipped.add(new SkippedTarget(
+                        target.getId().toString(), target.getFullName(), "not an active employee"));
+                continue;
+            }
+            int systems = deviceService.requestCheck(target.getId(), "admin");
+            if (systems == 0) {
+                skipped.add(new SkippedTarget(
+                        target.getId().toString(), target.getFullName(), "no active system"));
+                continue;
+            }
+            sent.add(new RequestCheckTarget(
+                    target.getId().toString(), target.getFullName(), target.getDepartment(), systems));
+        }
+
+        if (sent.isEmpty()) {
+            if (skipped.size() == 1) {
+                var only = skipped.get(0);
+                throw new ApiException(HttpStatus.CONFLICT, "no active system".equals(only.reason())
+                        ? only.employeeName() + " has no active system to open a check on"
+                        : only.employeeName() + " is not an active employee");
+            }
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "No check could be sent: none of the selected employees has an active system");
+        }
+        return new RequestCheckResponse(List.copyOf(sent), List.copyOf(skipped));
     }
 
     /**
@@ -599,6 +666,7 @@ public class AdminController {
                 employee.getId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT).isPresent();
         return new EmployeeResponse(
                 employee.getId().toString(), employee.getEmployeeCode(), employee.getFullName(),
-                employee.getEmail(), employee.getDepartment(), employee.getStatus().name(), hasImage, hasLive);
+                employee.getEmail(), employee.getDepartment(), employee.getStatus().name(), hasImage, hasLive,
+                employee.isDailyChecksEnabled());
     }
 }

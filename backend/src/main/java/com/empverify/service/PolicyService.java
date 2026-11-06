@@ -37,4 +37,15 @@ public class PolicyService {
         return policies.findByName("default")
                 .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "default policy missing"));
     }
+
+    /**
+     * Whether the employee is on the daily-check roster. Off means the agent gets
+     * maxChecksPerDay = 0 and plans no daily check; enrollment and admin-sent
+     * checks are unaffected. Unknown employees default to on, never to silence.
+     */
+    public boolean dailyChecksEnabled(java.util.UUID employeeId) {
+        return employees.findById(employeeId)
+                .map(e -> e.isDailyChecksEnabled())
+                .orElse(true);
+    }
 }

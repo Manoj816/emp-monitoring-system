@@ -57,16 +57,21 @@ public class CheckController {
             String checkId, String status, boolean mismatchFlag,
             Double similarityScore, Double livenessConfidence, OffsetDateTime completedAt) {}
 
-    /** Current check policy for the authenticated device; fetched at session start. */
+    /** Current check policy for the authenticated device; re-read by the agent every minute. */
     @GetMapping("/policy")
     public PolicyResponse policy(Authentication auth) {
         var device = deviceService.requireActiveDevice(deviceId(auth));
         var policy = policyService.effectiveFor(device);
+        // An employee off the daily-check roster simply has zero daily checks; the
+        // agent needs no second concept, and admin-sent checks bypass the plan anyway.
+        int maxChecksPerDay = policyService.dailyChecksEnabled(device.getEmployeeId())
+                ? policy.getMaxChecksPerDay()
+                : 0;
         return new PolicyResponse(
                 policy.getWorkWindowStart().toString(),
                 policy.getWorkWindowEnd().toString(),
                 policy.getTimezone(),
-                policy.getMaxChecksPerDay(),
+                maxChecksPerDay,
                 policy.getResponseTimeoutSeconds(),
                 policy.isLivenessOnSessionStart(),
                 policy.isCaptureOnTimeout());

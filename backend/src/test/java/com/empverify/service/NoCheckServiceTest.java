@@ -74,6 +74,16 @@ class NoCheckServiceTest {
     }
 
     @Test
+    void anEmployeeOffTheDailyRosterIsNeverJudgedNoCheck() {
+        // No check was ever going to run for them, so an empty day is not a miss.
+        employee.setDailyChecksEnabled(false);
+
+        assertEquals(0, service.recordNoCheckDays(at(MONDAY, LocalTime.of(17, 15))));
+
+        verify(checks, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
     void aDayWithNoCheckIsRecordedOnceTheWindowHasClosed() {
         when(checks.existsByEmployeeIdAndRequestedAtGreaterThanEqualAndRequestedAtLessThan(
                 eq(employee.getId()), any(), any())).thenReturn(false);

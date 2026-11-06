@@ -5,8 +5,9 @@ import LoginPage from "./pages/LoginPage";
 import EmployeesPage from "./pages/EmployeesPage";
 import DevicesPage from "./pages/DevicesPage";
 import ChecksPage from "./pages/ChecksPage";
+import ConfigurationPage from "./pages/ConfigurationPage";
 
-type Section = "employees" | "devices" | "checks";
+type Section = "employees" | "devices" | "checks" | "config";
 
 const SECTIONS: { id: Section; label: string; hint: string; description: string; icon: ReactNode }[] = [
   {
@@ -51,12 +52,30 @@ const SECTIONS: { id: Section; label: string; hint: string; description: string;
       "was shown and not completed, the work window closed with nobody ever back at the machine, or no check " +
       "was opened at all that day — the last of which the server records once the window has closed, with the " +
       "time the system was last online. Every missed scan says what was observed rather than guessing why. " +
-      "“Check window” sets the daily hours checks can land in; “Send a check” opens one now, on a chosen " +
-      "employee or a random one. Click a row to open its details.",
+      "“Send a check” opens one now — on chosen employees, a whole department, or a random one. The daily " +
+      "hours and who gets the daily check live on the Configuration tab. Click a row to open its details.",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" />
         <path d="M9 12l2 2 4-4" />
+      </svg>
+    ),
+  },
+  {
+    id: "config",
+    label: "Configuration",
+    hint: "Window and daily roster",
+    description:
+      "Admin controls for how checks run. Set the daily check window — the hours a day's random check can " +
+      "land in, in each employee's local time — and manage the daily-check roster: who gets the day's random " +
+      "check at all. Someone taken off the roster is still enrolled and still answers “Send a check”; they " +
+      "are simply not checked automatically every day, and days without a check are not held against them. " +
+      "Running agents pick up every change here within a minute.",
+    icon: (
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 7h8M16 7h4M4 17h4M12 17h8" />
+        <circle cx="14" cy="7" r="2" />
+        <circle cx="10" cy="17" r="2" />
       </svg>
     ),
   },
@@ -173,6 +192,7 @@ export default function App() {
             {section === "employees" && <EmployeesPage title={current.label} hint={current.description} />}
             {section === "devices" && <DevicesPage title={current.label} hint={current.description} />}
             {section === "checks" && <ChecksPage title={current.label} hint={current.description} />}
+            {section === "config" && <ConfigurationPage title={current.label} hint={current.description} />}
           </main>
         </div>
       </div>

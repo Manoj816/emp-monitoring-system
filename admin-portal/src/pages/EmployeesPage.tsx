@@ -143,7 +143,7 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
     }
     void run(async () => {
       const r = await api.requestCheck({ employeeId: employee.id });
-      alert(`Check sent to ${r.employeeName}: ${r.systems} system(s) will open the scan.`);
+      alert(`Check sent to ${r.sent[0].employeeName}: ${r.sent[0].systems} system(s) will open the scan.`);
     });
   }
 

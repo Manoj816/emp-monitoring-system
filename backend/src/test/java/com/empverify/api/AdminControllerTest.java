@@ -352,11 +352,13 @@ class AdminControllerTest {
         when(deviceService.requestCheck(employee.getId(), "admin")).thenReturn(1);
 
         var response = controller.requestCheck(
-                new AdminController.RequestCheckRequest(employee.getId().toString(), null));
+                new AdminController.RequestCheckRequest(employee.getId().toString(), null, null));
 
-        assertEquals(employee.getId().toString(), response.employeeId());
-        assertEquals("Pat Example", response.employeeName());
-        assertEquals(1, response.systems());
+        assertEquals(1, response.sent().size());
+        assertEquals(employee.getId().toString(), response.sent().get(0).employeeId());
+        assertEquals("Pat Example", response.sent().get(0).employeeName());
+        assertEquals(1, response.sent().get(0).systems());
+        assertTrue(response.skipped().isEmpty());
     }
 
     @Test
@@ -366,7 +368,45 @@ class AdminControllerTest {
         when(deviceService.requestCheck(employee.getId(), "admin")).thenReturn(0);
 
         var e = assertThrows(ApiException.class, () -> controller.requestCheck(
-                new AdminController.RequestCheckRequest(employee.getId().toString(), null)));
+                new AdminController.RequestCheckRequest(employee.getId().toString(), null, null)));
+
+        assertEquals(HttpStatus.CONFLICT, e.getStatus());
+    }
+
+    @Test
+    void bulkRequestSendsToEveryoneItCanAndReportsWhoItSkipped() {
+        // One suspended record or retired PC must not fail the whole batch: the
+        // admin asked for N checks and gets as many as can actually happen, with
+        // the rest named instead of silently dropped.
+        var withSystem = activeEmployee("Has Pc", "Sales");
+        var withoutSystem = activeEmployee("No Pc", "Sales");
+        when(employees.findById(withSystem.getId())).thenReturn(Optional.of(withSystem));
+        when(employees.findById(withoutSystem.getId())).thenReturn(Optional.of(withoutSystem));
+        when(deviceService.requestCheck(withSystem.getId(), "admin")).thenReturn(1);
+        when(deviceService.requestCheck(withoutSystem.getId(), "admin")).thenReturn(0);
+
+        var response = controller.requestCheck(new AdminController.RequestCheckRequest(
+                null, java.util.List.of(withSystem.getId().toString(), withoutSystem.getId().toString()), null));
+
+        assertEquals(1, response.sent().size());
+        assertEquals("Has Pc", response.sent().get(0).employeeName());
+        assertEquals(1, response.skipped().size());
+        assertEquals("No Pc", response.skipped().get(0).employeeName());
+        assertEquals("no active system", response.skipped().get(0).reason());
+    }
+
+    @Test
+    void bulkRequestWhereNobodyCanReceiveIsRefused() {
+        // "Sent" must never mean "sent to no one".
+        var a = activeEmployee("No Pc A", "Sales");
+        var b = activeEmployee("No Pc B", "Sales");
+        when(employees.findById(a.getId())).thenReturn(Optional.of(a));
+        when(employees.findById(b.getId())).thenReturn(Optional.of(b));
+        when(deviceService.requestCheck(any(), eq("admin"))).thenReturn(0);
+
+        var e = assertThrows(ApiException.class, () -> controller.requestCheck(
+                new AdminController.RequestCheckRequest(
+                        null, java.util.List.of(a.getId().toString(), b.getId().toString()), null)));
 
         assertEquals(HttpStatus.CONFLICT, e.getStatus());
     }
@@ -381,10 +421,31 @@ class AdminControllerTest {
                 .thenReturn(java.util.List.of(activeDeviceOf(inDept), activeDeviceOf(otherDept)));
         when(deviceService.requestCheck(inDept.getId(), "admin")).thenReturn(1);
 
-        var response = controller.requestCheck(new AdminController.RequestCheckRequest(null, "Sales"));
+        var response = controller.requestCheck(
+                new AdminController.RequestCheckRequest(null, null, "Sales"));
 
-        assertEquals(inDept.getId().toString(), response.employeeId());
-        assertEquals("Sales", response.department());
+        assertEquals(inDept.getId().toString(), response.sent().get(0).employeeId());
+        assertEquals("Sales", response.sent().get(0).department());
+    }
+
+    @Test
+    void dailyChecksToggleIsStoredAuditedAndIdempotent() {
+        var employee = activeEmployee("Pat Example", "Engineering");
+        when(employees.findById(employee.getId())).thenReturn(Optional.of(employee));
+        when(referenceImages.findByEmployeeIdAndStatusAndSource(any(), any(), any()))
+                .thenReturn(Optional.empty());
+
+        var off = controller.setDailyChecks(employee.getId(), new AdminController.DailyChecksRequest(false));
+
+        assertFalse(off.dailyChecks());
+        assertFalse(employee.isDailyChecksEnabled());
+        verify(employees).save(employee);
+        verify(audit).record(eq("admin"), eq("DAILY_CHECKS_DISABLED"), eq("employee"),
+                eq(employee.getId().toString()), any());
+
+        // Setting the same value again changes nothing and is not audited as a change.
+        controller.setDailyChecks(employee.getId(), new AdminController.DailyChecksRequest(false));
+        verify(employees, org.mockito.Mockito.times(1)).save(employee);
     }
 
     @Test
@@ -393,7 +454,7 @@ class AdminControllerTest {
         when(deviceService.listDevices()).thenReturn(java.util.List.of());
 
         var e = assertThrows(ApiException.class,
-                () -> controller.requestCheck(new AdminController.RequestCheckRequest(null, null)));
+                () -> controller.requestCheck(new AdminController.RequestCheckRequest(null, null, null)));
 
         assertEquals(HttpStatus.CONFLICT, e.getStatus());
         verify(deviceService, never()).requestCheck(any(), anyString());

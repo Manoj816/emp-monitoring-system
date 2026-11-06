@@ -181,8 +181,10 @@ paths:
       tags: [checks]
       summary: Current check policy for the authenticated device
       description: >
-        Fetched at session start. The agent schedules random check times with jitter
-        inside the returned work window; the policy always comes from the server.
+        Fetched at activation and re-read every minute, so a window or roster change
+        made in the portal reaches a running agent without a restart. The agent
+        schedules random check times with jitter inside the returned work window;
+        the policy always comes from the server.
       responses:
         "200":
           description: Active policy.
@@ -194,7 +196,13 @@ paths:
                   workWindowStart: { type: string, example: "09:00" }
                   workWindowEnd: { type: string, example: "17:00" }
                   timezone: { type: string, example: "Asia/Kolkata" }
-                  maxChecksPerDay: { type: integer, example: 4 }
+                  maxChecksPerDay:
+                    type: integer
+                    example: 4
+                    description: >
+                      0 means the employee is off the daily-check roster: the agent
+                      plans no daily check (and the server records no NO_CHECK days).
+                      Enrollment and admin-sent checks run regardless.
                   responseTimeoutSeconds: { type: integer, example: 120 }
                   livenessOnSessionStart: { type: boolean }
                   captureOnTimeout:
