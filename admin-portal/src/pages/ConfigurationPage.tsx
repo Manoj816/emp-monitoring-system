@@ -1,39 +1,46 @@
-import { useEffect, useState } from "react";
-import { api, type DeviceSummary, type Employee } from "../api";
+import { useEffect, useMemo, useState } from "react";
+import { api, type Employee } from "../api";
 import CardTitle from "../components/CardTitle";
-import DataTable from "../components/DataTable";
-import { useTableFilters } from "../components/TableFilters";
 
 /**
  * The Configuration tab: the admin controls for how checks run, in one place.
  * Two controls today — the daily check window (when a day's random check can
- * land) and the daily-check roster (who gets a daily check at all). Someone off
- * the roster is still enrolled and still answers a sent check; they are simply
- * not checked automatically every day, and the server never judges them
- * NO_CHECK for a day on which nothing was ever going to run.
+ * land) and the daily-check roster (who gets a daily check at all). The roster
+ * is the same searchable pick list as "Send a check": filter to a department,
+ * select all, turn the daily check off for the lot — or flip one person with
+ * the switch on their row. Someone off the roster is still enrolled and still
+ * answers a sent check; they are simply not checked automatically every day,
+ * and the server never judges them NO_CHECK for a day on which nothing was
+ * ever going to run. Running agents pick up every change within a minute.
  */
 export default function ConfigurationPage(props: { title: string; hint: string }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [devices, setDevices] = useState<DeviceSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Roster list controls.
+  const [search, setSearch] = useState("");
+  const [department, setDepartment] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // The check window form. The server may say "12:00" or "12:00:00"; the time
   // inputs want HH:mm.
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
+  const [savedWindow, setSavedWindow] = useState<{ start: string; end: string } | null>(null);
   const [windowLoaded, setWindowLoaded] = useState(false);
   const [savingWindow, setSavingWindow] = useState(false);
 
   async function refresh() {
     try {
-      const [emps, devs] = await Promise.all([api.listEmployees(), api.listDevices()]);
-      setEmployees(emps);
-      setDevices(devs);
+      setEmployees(await api.listEmployees());
       setError(null);
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setLoaded(true);
     }
   }
 
@@ -42,8 +49,11 @@ export default function ConfigurationPage(props: { title: string; hint: string }
     api
       .getCheckWindow()
       .then((w) => {
-        setStart(w.workWindowStart.slice(0, 5));
-        setEnd(w.workWindowEnd.slice(0, 5));
+        const s = w.workWindowStart.slice(0, 5);
+        const e = w.workWindowEnd.slice(0, 5);
+        setStart(s);
+        setEnd(e);
+        setSavedWindow({ start: s, end: e });
         setWindowLoaded(true);
       })
       .catch((e) => {
@@ -65,10 +75,10 @@ export default function ConfigurationPage(props: { title: string; hint: string }
     setError(null);
     try {
       const saved = await api.updateCheckWindow(start, end);
-      setNotice(
-        `Check window set to ${saved.workWindowStart.slice(0, 5)}–${saved.workWindowEnd.slice(0, 5)}. ` +
-          "Running agents pick it up within a minute.",
-      );
+      const s = saved.workWindowStart.slice(0, 5);
+      const e = saved.workWindowEnd.slice(0, 5);
+      setSavedWindow({ start: s, end: e });
+      setNotice(`Check window set to ${s}–${e}. Running agents pick it up within a minute.`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -76,7 +86,51 @@ export default function ConfigurationPage(props: { title: string; hint: string }
     }
   }
 
-  async function toggleDaily(emp: Employee) {
+  // ---- roster ---------------------------------------------------------------
+
+  /** Only ACTIVE employees are on (or off) the roster; others cannot be checked at all. */
+  const active = useMemo(() => employees.filter((e) => e.status === "ACTIVE"), [employees]);
+  const onRoster = active.filter((e) => e.dailyChecks);
+
+  const departments = useMemo(
+    () => [...new Set(active.map((e) => e.department).filter(Boolean))].sort() as string[],
+    [active],
+  );
+
+  const q = search.trim().toLowerCase();
+  const visible = active
+    .filter((e) => !department || e.department === department)
+    .filter(
+      (e) =>
+        !q ||
+        e.fullName.toLowerCase().includes(q) ||
+        e.employeeCode.toLowerCase().includes(q) ||
+        e.email.toLowerCase().includes(q),
+    )
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+
+  const allShownSelected = visible.length > 0 && visible.every((e) => selected.has(e.id));
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allShownSelected) visible.forEach((e) => next.delete(e.id));
+      else visible.forEach((e) => next.add(e.id));
+      return next;
+    });
+  }
+
+  /** Flip one employee from the switch on their row. */
+  async function toggleOne(emp: Employee) {
     setBusy(true);
     setError(null);
     try {
@@ -85,7 +139,7 @@ export default function ConfigurationPage(props: { title: string; hint: string }
       setNotice(
         updated.dailyChecks
           ? `${updated.fullName} is back on the daily-check roster.`
-          : `${updated.fullName} no longer gets the daily check. They are still enrolled, and “Send a check” still works.`,
+          : `${updated.fullName} no longer gets the daily check. They stay enrolled, and “Send a check” still reaches them.`,
       );
     } catch (e) {
       setError((e as Error).message);
@@ -94,31 +148,43 @@ export default function ConfigurationPage(props: { title: string; hint: string }
     }
   }
 
-  /** The systems currently assigned to an employee (revoked ones excluded). */
-  function systemsOf(employee: Employee): string {
-    const names = devices
-      .filter((d) => d.employeeId === employee.id && d.status !== "REVOKED")
-      .map((d) => d.hostname ?? d.id.slice(0, 8));
-    return names.length === 0 ? "none" : names.join(", ");
+  /** The selection in bulk — a department and “select all” make this department-wide. */
+  async function setForSelected(enabled: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.setDailyChecksBulk({ enabled, employeeIds: [...selected] });
+      setNotice(
+        `Daily check turned ${enabled ? "on" : "off"} for ${r.updated} of ${r.matched} selected employee${r.matched === 1 ? "" : "s"}` +
+          (r.updated < r.matched ? " (the rest were already set that way)." : "."),
+      );
+      setSelected(new Set());
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
-
-  const active = employees.filter((e) => e.status === "ACTIVE");
-  const onRoster = active.filter((e) => e.dailyChecks);
-
-  const tableFilters = useTableFilters();
 
   return (
     <>
       <div className="toolbar">
         <CardTitle title={props.title} hint={props.hint} />
-        <span className="toolbar-right">{tableFilters.control}</span>
       </div>
 
       {notice && <p className="notice">{notice}</p>}
       {error && <p className="error-text">{error}</p>}
 
       <section className="config-card">
-        <h3>Daily check window</h3>
+        <div className="config-head">
+          <h3>Daily check window</h3>
+          {savedWindow && (
+            <span className="badge neutral">
+              current: {savedWindow.start}–{savedWindow.end}
+            </span>
+          )}
+        </div>
         <p className="help">
           Each day's check opens at a random time inside these hours (the employee's local time), so
           nobody can plan around it. A day whose check has not run yet is re-planned inside the new
@@ -127,16 +193,20 @@ export default function ConfigurationPage(props: { title: string; hint: string }
         {!windowLoaded ? (
           <p className="muted">Loading…</p>
         ) : (
-          <div className="row" style={{ justifyContent: "flex-start", gap: 12 }}>
+          <div className="config-window">
             <label>
-              From{" "}
+              From
               <input type="time" value={start} disabled={savingWindow} onChange={(e) => setStart(e.target.value)} />
             </label>
             <label>
-              To{" "}
+              To
               <input type="time" value={end} disabled={savingWindow} onChange={(e) => setEnd(e.target.value)} />
             </label>
-            <button className="primary" disabled={savingWindow} onClick={() => void saveWindow()}>
+            <button
+              className="primary"
+              disabled={savingWindow || (savedWindow?.start === start && savedWindow?.end === end)}
+              onClick={() => void saveWindow()}
+            >
               {savingWindow ? "Saving…" : "Save window"}
             </button>
           </div>
@@ -144,58 +214,114 @@ export default function ConfigurationPage(props: { title: string; hint: string }
       </section>
 
       <section className="config-card">
-        <h3>Daily-check roster</h3>
+        <div className="config-head">
+          <h3>Daily-check roster</h3>
+          <span className="badge neutral">
+            {onRoster.length} of {active.length} active employees on the roster
+          </span>
+        </div>
         <p className="help">
-          Who gets the day's random check. {onRoster.length} of {active.length} active employees are
-          on the roster. Turning someone off stops only the automatic daily check — they stay
-          enrolled, “Send a check” still reaches them, and days without a check are not counted
-          against them as NO CHECK.
+          Who gets the day's random check. Turning someone off stops only the automatic daily check —
+          they stay enrolled, “Send a check” still reaches them, and days without a check are not
+          counted against them. For a whole department: filter to it, “Select all shown”, then turn
+          the daily check off (or on) for the selection.
         </p>
-        <DataTable
-          {...tableFilters.tableProps}
-          rows={employees}
-          rowKey={(emp) => emp.id}
-          emptyText="No employees yet — create one on the Employees page first."
-          columns={[
-            { key: "code", header: "Domain ID", value: (emp) => emp.employeeCode },
-            { key: "name", header: "Name", value: (emp) => emp.fullName },
-            {
-              key: "department", header: "Department", filter: "select",
-              value: (emp) => emp.department ?? "—",
-            },
-            {
-              key: "status", header: "Status", filter: "select",
-              value: (emp) => emp.status,
-              render: (emp) => (
-                <span className={`badge ${emp.status === "ACTIVE" ? "match" : "neutral"}`}>{emp.status}</span>
-              ),
-            },
-            { key: "system", header: "System", value: (emp) => systemsOf(emp) },
-            {
-              key: "daily", header: "Daily check", filter: "select",
-              value: (emp) => (emp.dailyChecks ? "on" : "off"),
-              headerStyle: { width: 150 },
-              render: (emp) => (
-                <button
-                  className="action"
-                  disabled={busy || emp.status !== "ACTIVE"}
-                  title={
-                    emp.status !== "ACTIVE"
-                      ? "Only active employees are checked"
-                      : emp.dailyChecks
+
+        <div className="pick-controls">
+          <input
+            placeholder="Search by name, code or email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
+            aria-label="Filter by department"
+          >
+            <option value="">All departments</option>
+            {departments.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="pick-toolbar">
+          <label>
+            <input
+              type="checkbox"
+              checked={allShownSelected}
+              disabled={busy || visible.length === 0}
+              onChange={toggleAll}
+            />{" "}
+            Select all shown ({visible.length})
+          </label>
+          <span className="spacer" />
+          <span className="muted">{selected.size} selected</span>
+          {selected.size > 0 && (
+            <>
+              <button className="action" disabled={busy} onClick={() => void setForSelected(true)}>
+                Daily check on
+              </button>
+              <button className="action" disabled={busy} onClick={() => void setForSelected(false)}>
+                Daily check off
+              </button>
+              <button className="action" disabled={busy} onClick={() => setSelected(new Set())}>
+                Clear
+              </button>
+            </>
+          )}
+        </div>
+
+        <ul className="pick-list" role="listbox" aria-label="Active employees" aria-multiselectable="true">
+          {!loaded && <li className="pick-empty">Loading…</li>}
+          {loaded && visible.length === 0 && (
+            <li className="pick-empty">
+              {active.length === 0
+                ? "No active employees yet — create one on the Employees page first."
+                : "No employees match this search or department."}
+            </li>
+          )}
+          {visible.map((e) => {
+            const isSelected = selected.has(e.id);
+            return (
+              <li key={e.id}>
+                <div className={`pick-item pick-row ${isSelected ? "selected" : ""}`}>
+                  <button
+                    type="button"
+                    className="pick-row-main"
+                    role="option"
+                    aria-selected={isSelected}
+                    disabled={busy}
+                    onClick={() => toggleSelected(e.id)}
+                  >
+                    <input type="checkbox" checked={isSelected} readOnly tabIndex={-1} />
+                    <span className="avatar">{e.fullName.trim().charAt(0).toUpperCase() || "?"}</span>
+                    <span className="pick-main">
+                      <span className="pick-name">{e.fullName}</span>
+                      <span className="pick-sub">{e.employeeCode} · {e.email}</span>
+                    </span>
+                    <span className="badge neutral">{e.department ?? "No department"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="action"
+                    disabled={busy}
+                    title={
+                      e.dailyChecks
                         ? "Click to stop the automatic daily check for them"
                         : "Click to put them back on the daily-check roster"
-                  }
-                  onClick={() => void toggleDaily(emp)}
-                >
-                  <span className={`badge ${emp.dailyChecks ? "match" : "neutral"}`}>
-                    {emp.dailyChecks ? "on" : "off"}
-                  </span>
-                </button>
-              ),
-            },
-          ]}
-        />
+                    }
+                    onClick={() => void toggleOne(e)}
+                  >
+                    <span className={`badge ${e.dailyChecks ? "match" : "error"}`}>
+                      {e.dailyChecks ? "daily: on" : "daily: off"}
+                    </span>
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </section>
     </>
   );

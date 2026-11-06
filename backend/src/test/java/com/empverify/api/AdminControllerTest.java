@@ -449,6 +449,50 @@ class AdminControllerTest {
     }
 
     @Test
+    void bulkDailyChecksByDepartmentTouchesOnlyThatDepartmentsActiveEmployees() {
+        var sales = activeEmployee("Dee Sales", "Sales");
+        var salesSuspended = activeEmployee("Sus Pended", "Sales");
+        salesSuspended.setStatus(com.empverify.domain.Enums.EmployeeStatus.SUSPENDED);
+        var engineering = activeEmployee("Eng Person", "Engineering");
+        when(employees.findAll()).thenReturn(java.util.List.of(sales, salesSuspended, engineering));
+
+        var response = controller.setDailyChecksBulk(
+                new AdminController.BulkDailyChecksRequest(false, null, "Sales", null));
+
+        assertEquals(1, response.matched());
+        assertEquals(1, response.updated());
+        assertFalse(sales.isDailyChecksEnabled());
+        assertTrue(salesSuspended.isDailyChecksEnabled(), "suspended employees are left alone");
+        assertTrue(engineering.isDailyChecksEnabled(), "other departments are left alone");
+        verify(audit).record(eq("admin"), eq("DAILY_CHECKS_BULK_DISABLED"), eq("employee"),
+                eq("department:Sales"), any());
+    }
+
+    @Test
+    void bulkDailyChecksCountsOnlyActualChanges() {
+        var alreadyOff = activeEmployee("Al Ready", "Sales");
+        alreadyOff.setDailyChecksEnabled(false);
+        var on = activeEmployee("Still On", "Sales");
+        when(employees.findById(alreadyOff.getId())).thenReturn(Optional.of(alreadyOff));
+        when(employees.findById(on.getId())).thenReturn(Optional.of(on));
+
+        var response = controller.setDailyChecksBulk(new AdminController.BulkDailyChecksRequest(
+                false, java.util.List.of(alreadyOff.getId().toString(), on.getId().toString()), null, null));
+
+        assertEquals(2, response.matched());
+        assertEquals(1, response.updated());
+        verify(employees, org.mockito.Mockito.times(1)).save(any(Employee.class));
+    }
+
+    @Test
+    void bulkDailyChecksWithNoSelectionIsRefused() {
+        var e = assertThrows(ApiException.class, () -> controller.setDailyChecksBulk(
+                new AdminController.BulkDailyChecksRequest(false, null, null, null)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+    }
+
+    @Test
     void randomRequestWithNobodyCheckableIsRefused() {
         when(employees.findAll()).thenReturn(java.util.List.of(activeEmployee("Sal NoPc", "Sales")));
         when(deviceService.listDevices()).thenReturn(java.util.List.of());

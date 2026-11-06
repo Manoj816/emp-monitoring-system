@@ -232,6 +232,23 @@ export const api = {
   /** The daily check window of the default policy. */
   getCheckWindow: () => request<CheckWindow>("/api/v1/admin/policy/check-window"),
 
+  /**
+   * Daily-check roster in bulk: the given employees, a whole department, or
+   * everyone (all). Only ACTIVE employees are touched; `updated` counts actual
+   * changes, `matched` what the selection covered.
+   */
+  setDailyChecksBulk: (input: {
+    enabled: boolean;
+    employeeIds?: string[];
+    department?: string;
+    all?: boolean;
+  }) =>
+    request<{ updated: number; matched: number }>("/api/v1/admin/employees/daily-checks", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }),
+
   /** Puts an employee on / takes them off the daily-check roster (Configuration tab). */
   setDailyChecks: (employeeId: string, enabled: boolean) =>
     request<Employee>(`/api/v1/admin/employees/${employeeId}/daily-checks`, {

@@ -403,6 +403,20 @@ public partial class MainWindow : Window
         _ => $"{type} check",
     };
 
+    /// <summary>
+    /// Forgets a locally-remembered "send a check now" after a check has been
+    /// opened. The server clears its flag the moment any check opens; this keeps
+    /// the agent's copy of the state from re-triggering on a value read before
+    /// that moment. The next state poll is the fresh truth either way.
+    /// </summary>
+    private void ClearLocalCheckRequest()
+    {
+        if (_deviceState is { CheckRequested: true })
+        {
+            _deviceState = _deviceState with { CheckRequested = false };
+        }
+    }
+
     /// <summary>Refreshes the short-lived device token before a check so a long-running agent never 403s.</summary>
     private async Task EnsureAuthenticatedAsync(CancellationToken ct)
     {
@@ -810,6 +824,7 @@ public partial class MainWindow : Window
             await EnsureAuthenticatedAsync(CancellationToken.None);
             var check = await _api!.OpenCheckAsync(held.Type, CancellationToken.None);
             await _api.CancelCheckAsync(check.CheckId, "unattended", CancellationToken.None, note);
+            ClearLocalCheckRequest(); // opening the check settled any pending admin request
             NetworkOk();
             Log($"{Label(held.Type)} missed: {note}");
             SetStatus($"Last check: missed (nobody at the workstation) at {DateTime.Now:HH:mm}.");
@@ -841,6 +856,7 @@ public partial class MainWindow : Window
             var type = await ResolveScheduledCheckTypeAsync();
             var check = await _api!.OpenCheckAsync(type, CancellationToken.None);
             await _api.CancelCheckAsync(check.CheckId, "machine_away", CancellationToken.None, note);
+            ClearLocalCheckRequest(); // opening the check settled any pending admin request
             NetworkOk();
             Log($"{Label(type)} missed: {note}");
             SetStatus($"Last check: missed (the machine was away) at {DateTime.Now:HH:mm}.");
@@ -1019,6 +1035,11 @@ public partial class MainWindow : Window
         finally
         {
             _checkRunning = false;
+            // Opening the check cleared the server's "send a check now" flag, but
+            // ResolveScheduledCheckTypeAsync re-reads the device state BEFORE the
+            // open, so our local copy can still say "requested" here. Left alone,
+            // that stale flag opened a second scan the moment this one finished.
+            ClearLocalCheckRequest();
         }
         return result;
     }

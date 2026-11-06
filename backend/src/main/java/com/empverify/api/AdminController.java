@@ -435,6 +435,78 @@ public class AdminController {
         return toResponse(employee);
     }
 
+    public record BulkDailyChecksRequest(
+            boolean enabled, List<String> employeeIds, String department, Boolean all) {}
+
+    public record BulkDailyChecksResponse(
+            /** How many employees actually changed (already-matching ones are not counted). */
+            int updated,
+            /** How many the selection covered. */
+            int matched) {}
+
+    /**
+     * Daily-check roster in bulk: the given employees, a whole department, or
+     * every employee (all = true). Only ACTIVE employees are touched — the flag
+     * is meaningless on an offboarded record. One audit row carries the scope and
+     * the count, rather than a thousand rows saying the same sentence.
+     */
+    @org.springframework.web.bind.annotation.PutMapping("/employees/daily-checks")
+    @Transactional
+    public BulkDailyChecksResponse setDailyChecksBulk(@Valid @RequestBody BulkDailyChecksRequest request) {
+        var department = trimToNull(request.department());
+        var ids = new java.util.LinkedHashSet<UUID>();
+        if (request.employeeIds() != null) {
+            for (var raw : request.employeeIds()) {
+                if (trimToNull(raw) != null) {
+                    ids.add(UUID.fromString(raw.trim()));
+                }
+            }
+        }
+
+        List<Employee> targets;
+        String scope;
+        if (!ids.isEmpty()) {
+            targets = new java.util.ArrayList<>();
+            for (var id : ids) {
+                targets.add(employees.findById(id)
+                        .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "employee not found")));
+            }
+            scope = "ids:" + ids.size();
+        } else if (department != null) {
+            targets = employees.findAll().stream()
+                    .filter(e -> department.equalsIgnoreCase(e.getDepartment()))
+                    .toList();
+            scope = "department:" + department;
+        } else if (Boolean.TRUE.equals(request.all())) {
+            targets = employees.findAll();
+            scope = "all";
+        } else {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Select employees, a department, or all = true");
+        }
+
+        int matched = 0;
+        int updated = 0;
+        for (var employee : targets) {
+            if (employee.getStatus() != com.empverify.domain.Enums.EmployeeStatus.ACTIVE) {
+                continue;
+            }
+            matched++;
+            if (employee.isDailyChecksEnabled() != request.enabled()) {
+                employee.setDailyChecksEnabled(request.enabled());
+                employees.save(employee);
+                updated++;
+            }
+        }
+        if (updated > 0) {
+            audit.record("admin",
+                    request.enabled() ? "DAILY_CHECKS_BULK_ENABLED" : "DAILY_CHECKS_BULK_DISABLED",
+                    "employee", scope,
+                    "{\"updated\":" + updated + ",\"matched\":" + matched + "}");
+        }
+        return new BulkDailyChecksResponse(updated, matched);
+    }
+
     public record RequestCheckRequest(String employeeId, List<String> employeeIds, String department) {}
 
     public record RequestCheckTarget(String employeeId, String employeeName, String department, int systems) {}
