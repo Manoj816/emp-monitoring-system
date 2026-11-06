@@ -17,8 +17,11 @@ public final class Enums {
      */
     public enum ReferenceImageSource { ADMIN_UPLOAD, LIVE_ENROLLMENT }
 
-    /** ENROLLMENT = the first live scan after assignment, matched against the uploaded ID/photo. */
-    public enum CheckType { ENROLLMENT, SESSION_START, PERIODIC, LIVENESS, ESCALATION }
+    /**
+     * ENROLLMENT = the first live scan after assignment, matched against the uploaded ID/photo.
+     * ON_DEMAND = a check an administrator sent from the portal ("send a check now").
+     */
+    public enum CheckType { ENROLLMENT, SESSION_START, PERIODIC, LIVENESS, ESCALATION, ON_DEMAND }
 
     /**
      * EXPIRED = a check was opened but no scan was done (the portal shows it as Missed).

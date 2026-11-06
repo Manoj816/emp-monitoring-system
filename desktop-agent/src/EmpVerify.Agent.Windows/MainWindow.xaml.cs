@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Windows;
@@ -13,16 +14,17 @@ using WinForms = System.Windows.Forms;
 namespace EmpVerify.Agent.Windows;
 
 /// <summary>
-/// Agent window. Registration is either device-first (tenant provisioning token:
-/// the device self-registers as unassigned and waits for an admin to link it to an
-/// employee) or per-employee (enrollment token, manual or provisioned). Once
-/// assigned, it runs one randomized interactive check per working day, plus
-/// on-demand/demo checks. The only scan the agent opens by itself at start-up is
-/// the enrollment scan of a system that still owes one (a fresh install, or a
-/// re-enrollment the administrator asked for); an enrolled system starts silently
-/// and is checked at the day's random time. Every check opens the agent's own
-/// browser window — nothing is captured silently. Closing the window hides to the
-/// tray; checks keep running.
+/// The agent's hidden host window — the agent is a background tray app and this
+/// window is never shown. Registration is either device-first (tenant provisioning
+/// token: the device self-registers as unassigned and waits for an admin to link
+/// it to an employee) or per-employee (enrollment token). Once assigned, it runs
+/// one randomized interactive check per working day inside the admin-configured
+/// check window, plus any check an administrator sends from the portal ("send a
+/// check now"). The only scan the agent opens by itself at start-up is the
+/// enrollment scan of a system that still owes one. Every check opens the agent's
+/// own browser window — nothing is captured silently; everything else (scheduling,
+/// the check window, on-demand checks) belongs to the administrator, so the
+/// employee is shown nothing to click and no activity to pattern-match.
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -45,7 +47,6 @@ public partial class MainWindow : Window
     private IReadOnlyList<DateTimeOffset> _plan = Array.Empty<DateTimeOffset>();
     private DateTimeOffset _lastHandled = DateTimeOffset.MinValue;
     private DateTimeOffset _lastDemoCheck = DateTimeOffset.MinValue;
-    private DateTimeOffset? _demoScheduledAt;
     private bool _awaitingAssignment;
     private bool _checkRunning;
     /// <summary>The start-up enrollment scan has been completed (or was not due) in this run.</summary>
@@ -77,15 +78,13 @@ public partial class MainWindow : Window
     /// scan is not simply "the moment I unlock".
     /// </summary>
     private static readonly TimeSpan ResumeJitter = TimeSpan.FromMinutes(3);
+    /// <summary>How long an admin-sent check waits for somebody to be back at an unlocked workstation.</summary>
+    private static readonly TimeSpan OnDemandHold = TimeSpan.FromMinutes(30);
     private WinForms.NotifyIcon? _trayIcon;
 
     public MainWindow()
     {
         InitializeComponent();
-        if (!string.IsNullOrWhiteSpace(_settings.DemoCheckAt))
-        {
-            DemoTimeBox.Text = _settings.DemoCheckAt;
-        }
         _timer.Tick += async (_, _) => await OnScheduleTickAsync();
     }
 
@@ -106,15 +105,13 @@ public partial class MainWindow : Window
         await TryConnectAsync();
     }
 
-    /// <summary>Tray "Verify now": the click is the consent.</summary>
-    public async Task VerifyNowFromTrayAsync() => await RunCheckAsync(CheckType.Periodic);
-
     /// <summary>Lets App close the window for real (bypass hide-to-tray) on Exit.</summary>
     public void PrepareExit() => _exiting = true;
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        // Closing the window hides the agent to the tray; it keeps verifying.
+        // The window is never shown, but belt and braces: a close that is not the
+        // dev Exit only hides it; the agent keeps verifying.
         if (!_exiting)
         {
             e.Cancel = true;
@@ -153,10 +150,10 @@ public partial class MainWindow : Window
             // No stored identity and no deploy-time token: the installer did not
             // configure this machine. Nothing the employee can type fixes that. The
             // window stays closed, so the tray balloon is the only way this is seen.
-            Log("This system is not set up for EmpVerify (no provisioning token found). Contact your administrator.");
+            Log("This system is not set up for PresenSure (no provisioning token found). Contact your administrator.");
             SetStatus("Not set up — contact your administrator.");
-            _trayIcon?.ShowBalloonTip(6000, "EmpVerify Agent",
-                "This system is not set up for EmpVerify. Contact your administrator.",
+            _trayIcon?.ShowBalloonTip(6000, "PresenSure Workforce",
+                "This system is not set up for PresenSure. Contact your administrator.",
                 WinForms.ToolTipIcon.Warning);
             return;
         }
@@ -258,7 +255,7 @@ public partial class MainWindow : Window
         _awaitingAssignment = true;
         SetStatus("Registered — waiting for an administrator to assign this system.");
         Log("Waiting for an administrator to assign this system to an employee...");
-        _trayIcon?.ShowBalloonTip(4000, "EmpVerify Agent",
+        _trayIcon?.ShowBalloonTip(4000, "PresenSure Workforce",
             "Registered. Waiting for an administrator to assign this system.", WinForms.ToolTipIcon.Info);
         _timer.Start();
     }
@@ -288,9 +285,6 @@ public partial class MainWindow : Window
             _checkRetryAt = null;
             _timer.Start();
 
-            await SetCheckButtonsEnabled(true);
-            DemoScheduleButton.IsEnabled = true;
-            DemoClearButton.IsEnabled = true;
             SetStatus("Connected — scheduled checks active.");
             // Deliberately no schedule details (window, count, time): the day's check
             // is random so that nobody can plan around it.
@@ -339,7 +333,7 @@ public partial class MainWindow : Window
         }
         var retryAt = DateTimeOffset.Now.AddMinutes(Math.Max(1, _settings.RetryMinutes));
         _startupScanRetryAt = retryAt;
-        Log("Enrollment scan not completed — it reopens shortly. Click 'Liveness check' to do it now.");
+        Log("Enrollment scan not completed — it reopens shortly.");
         SetStatus("Enrollment scan required — it reopens shortly.");
     }
 
@@ -405,6 +399,7 @@ public partial class MainWindow : Window
         CheckType.SessionStart => "Session-start scan",
         CheckType.Periodic => "Daily check",
         CheckType.Liveness => "Liveness check",
+        CheckType.OnDemand => "Admin-requested check",
         _ => $"{type} check",
     };
 
@@ -457,7 +452,7 @@ public partial class MainWindow : Window
         if (!_offline)
         {
             _offline = true;
-            Log("Waiting for the network — the EmpVerify server cannot be reached yet. "
+            Log("Waiting for the network — the PresenSure server cannot be reached yet. "
                 + "This is normal for a minute after the PC starts or wakes up; checks resume by themselves.");
             SetStatus("Waiting for the network…");
         }
@@ -546,6 +541,7 @@ public partial class MainWindow : Window
             {
                 return;
             }
+            await RefreshPolicyAsync();
         }
 
         // A new day: plan it afresh (the agent may run for weeks without a restart).
@@ -574,6 +570,16 @@ public partial class MainWindow : Window
             return;
         }
 
+        // An administrator sent a check from the portal ("send a check now"). It
+        // runs ahead of anything the day still has planned; the server clears the
+        // request the moment any check opens, so it cannot fire twice.
+        if (_deviceState is { CheckRequested: true })
+        {
+            _deviceState = _deviceState with { CheckRequested = false };
+            await RunAdminRequestedCheckAsync();
+            return;
+        }
+
         // The one more attempt after a missed check.
         if (_checkRetryAt is { } again && now >= again)
         {
@@ -591,16 +597,6 @@ public partial class MainWindow : Window
                 _checkRetriesLeft = _settings.MissedCheckRetries;
                 await RunScheduledCheckAsync(demo: true);
             }
-            return;
-        }
-
-        // Demo: a one-shot check armed from the UI (or DemoCheckAt in settings).
-        if (_demoScheduledAt is { } at && now >= at)
-        {
-            _demoScheduledAt = null;
-            DemoStatusText.Text = "";
-            _checkRetriesLeft = _settings.MissedCheckRetries;
-            await RunScheduledCheckAsync(demo: true);
             return;
         }
 
@@ -650,6 +646,69 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// A check an administrator sent from the portal. It opens now — or, with
+    /// nobody at an unlocked workstation, waits up to <see cref="OnDemandHold"/>
+    /// for them to come back before the miss is recorded. The agent never retries
+    /// it by itself: the administrator sees the result (or the miss) in the portal
+    /// and can simply send another.
+    /// </summary>
+    private async Task RunAdminRequestedCheckAsync()
+    {
+        if (!await ServerReachableAsync())
+        {
+            return; // nothing opened: the request stays on the server and the next poll re-delivers it
+        }
+        // An un-enrolled system still owes the enrollment scan first; the admin's
+        // request is answered by whichever check opens.
+        var type = await ResolveScheduledCheckTypeAsync() == CheckType.Enrollment
+            ? CheckType.Enrollment
+            : CheckType.OnDemand;
+        Log("An administrator requested a verification check on this system.");
+        if (TryDefer(type, demo: false, dueBy: DateTimeOffset.Now + OnDemandHold))
+        {
+            return;
+        }
+        await RunCheckAsync(type, scheduled: false);
+    }
+
+    /// <summary>
+    /// Re-reads the policy while active, so a check window changed in the portal
+    /// reaches running agents within a minute. A day whose check has not fired yet
+    /// is re-planned inside the new window; a day already checked stays checked.
+    /// </summary>
+    private async Task RefreshPolicyAsync()
+    {
+        CheckPolicy fresh;
+        try
+        {
+            fresh = await _api!.GetPolicyAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            NoteNetworkFailure(ex, "Could not refresh the check policy");
+            return;
+        }
+        NetworkOk();
+        var windowChanged = _policy is not null
+            && (fresh.WorkWindowStart != _policy.WorkWindowStart || fresh.WorkWindowEnd != _policy.WorkWindowEnd);
+        _policy = fresh; // other knobs (timeout, capture-on-timeout) apply silently
+        if (!windowChanged)
+        {
+            return;
+        }
+        var fired = _plan.Where(t => t <= _lastHandled).ToList();
+        var remaining = fresh.MaxChecksPerDay - fired.Count;
+        if (remaining <= 0)
+        {
+            Log("An administrator changed the check window — today's check already ran; the new window applies from tomorrow.");
+            return;
+        }
+        _plan = fired.Concat(_scheduler.PlanRemainingDay(fresh, DateTimeOffset.Now, PlanLead).Take(remaining)).ToList();
+        Log("An administrator changed the check window — re-planning today's check inside the new hours.");
+        LogNextCheck();
+    }
+
+    /// <summary>
     /// The day's check, come due with nobody at an unlocked workstation to show it
     /// to. Nothing is recorded while it waits — a locked screen is somebody away
     /// from their desk, not a refusal to be checked.
@@ -673,14 +732,14 @@ public partial class MainWindow : Window
     /// to an empty chair and counted against the employee. Returns true when it was
     /// held; false to run the check now.
     /// </summary>
-    private bool TryDefer(CheckType type, bool demo)
+    private bool TryDefer(CheckType type, bool demo, DateTimeOffset? dueBy = null)
     {
         if (_workstation.Current == WorkstationState.Active)
         {
             return false;
         }
         var now = DateTimeOffset.Now;
-        _deferred = new DeferredCheck { Type = type, Demo = demo, Since = now, DueBy = WindowEnd(now) };
+        _deferred = new DeferredCheck { Type = type, Demo = demo, Since = now, DueBy = dueBy ?? WindowEnd(now) };
         Log($"{Label(type)} came due while {StateDescription(_workstation.Current)} — holding it until the "
             + "workstation is back in use. Nothing is recorded as missed yet.");
         SetStatus("Check waiting for the workstation to be back in use.");
@@ -710,7 +769,9 @@ public partial class MainWindow : Window
             case DeferredCheckAction.Run:
                 _deferred = null;
                 Log($"{Label(held.Type)}: the workstation is back in use — opening it now.");
-                await RunCheckAsync(held.Type, scheduled: true, demo: held.Demo);
+                // An admin-sent check is never retried by the agent: the admin sees
+                // the miss in the portal and can simply send another.
+                await RunCheckAsync(held.Type, scheduled: held.Type != CheckType.OnDemand, demo: held.Demo);
                 break;
 
             case DeferredCheckAction.RecordMiss:
@@ -786,8 +847,11 @@ public partial class MainWindow : Window
     /// <summary>What the agent saw while it held the check, for the administrator.</summary>
     private string HeldMissNote(DeferredCheck held)
     {
-        var note = $"It came due at {held.Since:HH:mm} and was held back for the employee to be at an "
-            + $"unlocked workstation, but the work window closed at {held.DueBy:HH:mm} first.";
+        var note = held.Type == CheckType.OnDemand
+            ? $"An administrator asked for this check at {held.Since:HH:mm}. It was held for the employee "
+                + $"to be at an unlocked workstation, and the wait ended at {held.DueBy:HH:mm}."
+            : $"It came due at {held.Since:HH:mm} and was held back for the employee to be at an "
+                + $"unlocked workstation, but the work window closed at {held.DueBy:HH:mm} first.";
         note += held.Returns == 0
             ? " The workstation was not back in use at any point in between."
             : $" It came back into use {held.Returns} time(s), but was away again before the scan could be shown.";
@@ -867,53 +931,11 @@ public partial class MainWindow : Window
         _plan = Array.Empty<DateTimeOffset>();
         _planDate = DateTime.MinValue;
         _checkRetryAt = null;
-        _demoScheduledAt = null;
         _startupScanRetryAt = null;
         _deferred = null;
-        _ = SetCheckButtonsEnabled(false);
-        DemoScheduleButton.IsEnabled = false;
-        DemoClearButton.IsEnabled = false;
-    }
-
-    private async void VerifyNow_Click(object sender, RoutedEventArgs e)
-    {
-        await RunCheckAsync(await ResolveScheduledCheckTypeAsync());
-    }
-
-    private void DemoSchedule_Click(object sender, RoutedEventArgs e)
-    {
-        if (!TimeOnly.TryParse(DemoTimeBox.Text.Trim(), out var at))
-        {
-            DemoStatusText.Text = "Enter a time as HH:mm (e.g. 14:30).";
-            return;
-        }
-        var now = DateTimeOffset.Now;
-        var target = new DateTimeOffset(now.Year, now.Month, now.Day, at.Hour, at.Minute, 0, now.Offset);
-        if (target <= now)
-        {
-            target = target.AddDays(1); // a past time today means the same time tomorrow
-        }
-        _demoScheduledAt = target;
-        _settings.DemoCheckAt = DemoTimeBox.Text.Trim();
-        _settings.Save();
-        DemoStatusText.Text = $"Check scheduled for {target:ddd HH:mm}.";
-        Log($"Demo: check scheduled for {target:ddd HH:mm}.");
-    }
-
-    private void DemoClear_Click(object sender, RoutedEventArgs e)
-    {
-        _demoScheduledAt = null;
-        DemoStatusText.Text = "Demo check cleared.";
-        Log("Demo: scheduled check cleared.");
     }
 
     // ---- checks -------------------------------------------------------------------
-
-    /// <summary>"Liveness check" button: an on-demand face scan; the click is the consent.</summary>
-    private async void Liveness_Click(object sender, RoutedEventArgs e)
-    {
-        await RunCheckAsync(CheckType.Liveness, forceLiveness: true);
-    }
 
     /// <summary>
     /// One interactive check in the agent's own browser window. By default this is
@@ -932,7 +954,6 @@ public partial class MainWindow : Window
             return null;
         }
         _checkRunning = true;
-        await SetCheckButtonsEnabled(false);
         FlowResult? result = null;
         try
         {
@@ -990,7 +1011,6 @@ public partial class MainWindow : Window
         finally
         {
             _checkRunning = false;
-            await SetCheckButtonsEnabled(true);
         }
         return result;
     }
@@ -1008,31 +1028,47 @@ public partial class MainWindow : Window
         _ => $"{Label(type)} failed.",
     };
 
-    private async Task SetCheckButtonsEnabled(bool enabled)
-    {
-        await Dispatcher.InvokeAsync(() =>
-        {
-            VerifyNowButton.IsEnabled = enabled;
-            LivenessButton.IsEnabled = enabled;
-        });
-    }
-
     private AgentApiClient CreateApi() =>
         new(new HttpClient { BaseAddress = new Uri(_settings.BackendUrl) });
 
     private void SetStatus(string status)
     {
-        StatusText.Text = status;
         if (_trayIcon is not null)
         {
             // NotifyIcon.Text is capped at 63 characters.
-            var text = $"EmpVerify — {status}";
+            var text = $"PresenSure — {status}";
             _trayIcon.Text = text.Length > 63 ? text[..63] : text;
         }
     }
 
+    private static readonly string LogPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "EmpVerify", "agent.log");
+
+    /// <summary>
+    /// The activity line. The agent has no visible window — scheduling belongs to
+    /// the administrator, and an on-screen activity list would hand the employee
+    /// the pattern the random check exists to deny them — so lines go to a local
+    /// file for support instead of a screen. Best-effort: a log line is never
+    /// worth an exception in the scheduler.
+    /// </summary>
     private void Log(string message)
     {
-        ActivityList.Items.Insert(0, $"{DateTime.Now:HH:mm:ss}  {message}");
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
+            var file = new FileInfo(LogPath);
+            if (file.Exists && file.Length > 1_000_000)
+            {
+                // One rotation keeps the file bounded on a machine that runs for months.
+                File.Copy(LogPath, LogPath + ".old", overwrite: true);
+                File.Delete(LogPath);
+            }
+            File.AppendAllText(LogPath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {message}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Logging must never cost the agent its checks.
+        }
     }
 }

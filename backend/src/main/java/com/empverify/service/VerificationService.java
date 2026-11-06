@@ -109,6 +109,9 @@ public class VerificationService {
     @Transactional
     public VerificationCheck openCheck(UUID deviceId, CheckType type) {
         var device = deviceService.requireActiveDevice(deviceId);
+        // Whatever check opens — the admin's own, the day's random one, a recorded
+        // miss — it answers a pending "send a check now", so the request never fires twice.
+        deviceService.clearCheckRequest(device);
         var check = new VerificationCheck();
         check.setDeviceId(device.getId());
         check.setEmployeeId(device.getEmployeeId());

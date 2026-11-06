@@ -95,10 +95,12 @@ toolchains live at `%LOCALAPPDATA%\Microsoft\dotnet` (SDK 10) and
 `%USERPROFILE%\.jdks\jdk-21.*` (set `JAVA_HOME` accordingly), or use
 `run-agent.cmd`, which resolves this automatically.
 
-Agent smoke test: issue an enrollment token
-(`POST /api/v1/admin/employees/{id}/enrollment-tokens` with header
-`X-Admin-Key: dev-admin-key`), paste it into the agent's registration screen,
-then click "Verify now" for a real webcam capture verified by the backend.
+Agent smoke test: the agent is a background tray app with no window of its
+own — the installer provisions it and it registers silently. To make it open a
+scan right now, use **Send a check** in the admin portal (or
+`POST /api/v1/admin/checks/request` with header `X-Admin-Key: dev-admin-key`
+and body `{"employeeId":"<id>"}`); the agent picks the request up within a
+minute and opens the verification window.
 
 ## CI/CD
 

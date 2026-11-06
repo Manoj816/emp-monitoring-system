@@ -42,6 +42,7 @@ public class AdminController {
     private final ReferenceImageRepository referenceImages;
     private final VerificationCheckRepository checks;
     private final com.empverify.repo.CheckReviewRepository reviews;
+    private final com.empverify.repo.CheckPolicyRepository policies;
     private final DeviceService deviceService;
     private final EmployeeImportService employeeImport;
     private final ReferenceImageService referenceImageService;
@@ -53,6 +54,7 @@ public class AdminController {
             ReferenceImageRepository referenceImages,
             VerificationCheckRepository checks,
             com.empverify.repo.CheckReviewRepository reviews,
+            com.empverify.repo.CheckPolicyRepository policies,
             DeviceService deviceService,
             EmployeeImportService employeeImport,
             ReferenceImageService referenceImageService,
@@ -62,6 +64,7 @@ public class AdminController {
         this.referenceImages = referenceImages;
         this.checks = checks;
         this.reviews = reviews;
+        this.policies = policies;
         this.deviceService = deviceService;
         this.employeeImport = employeeImport;
         this.referenceImageService = referenceImageService;
@@ -361,6 +364,117 @@ public class AdminController {
         audit.record("admin", "RE_ENROLLMENT_REQUESTED", "employee", employeeId.toString(),
                 "{\"systemsReset\":" + reset + "}");
         return new ReEnrollResponse(employeeId.toString(), reset);
+    }
+
+    public record CheckWindowResponse(String workWindowStart, String workWindowEnd, String timezone) {}
+
+    /** The daily check window of the default policy — when the day's random check can land. */
+    @GetMapping("/policy/check-window")
+    public CheckWindowResponse checkWindow() {
+        var policy = defaultPolicy();
+        return new CheckWindowResponse(
+                policy.getWorkWindowStart().toString(), policy.getWorkWindowEnd().toString(),
+                policy.getTimezone());
+    }
+
+    public record UpdateCheckWindowRequest(@NotBlank String workWindowStart, @NotBlank String workWindowEnd) {}
+
+    /**
+     * Sets the daily check window ("HH:mm"–"HH:mm"). Each agent re-reads the policy
+     * within a minute: a day whose check has not fired yet is re-planned inside the
+     * new window; a day already checked stays checked.
+     */
+    @org.springframework.web.bind.annotation.PutMapping("/policy/check-window")
+    public CheckWindowResponse updateCheckWindow(@Valid @RequestBody UpdateCheckWindowRequest request) {
+        java.time.LocalTime start;
+        java.time.LocalTime end;
+        try {
+            start = java.time.LocalTime.parse(request.workWindowStart());
+            end = java.time.LocalTime.parse(request.workWindowEnd());
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Times must be HH:mm (e.g. 09:00)");
+        }
+        if (!end.isAfter(start)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "The window must end after it starts");
+        }
+        var policy = defaultPolicy();
+        policy.setWorkWindowStart(start);
+        policy.setWorkWindowEnd(end);
+        policies.save(policy);
+        audit.record("admin", "CHECK_WINDOW_UPDATED", "policy", policy.getId().toString(),
+                "{\"workWindowStart\":\"" + start + "\",\"workWindowEnd\":\"" + end + "\"}");
+        return new CheckWindowResponse(start.toString(), end.toString(), policy.getTimezone());
+    }
+
+    private com.empverify.domain.CheckPolicy defaultPolicy() {
+        return policies.findByName("default")
+                .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "default policy missing"));
+    }
+
+    public record RequestCheckRequest(String employeeId, String department) {}
+
+    public record RequestCheckResponse(
+            String employeeId, String employeeName, String department, int systems) {}
+
+    /**
+     * Sends a verification check now. With an employeeId it goes to that employee;
+     * without one, to a random ACTIVE employee who has an active system — across the
+     * whole company, or within the given department. The agent opens the scan within
+     * a minute (when the PC is on); the result lands in the checks list as ON_DEMAND.
+     */
+    @PostMapping("/checks/request")
+    public RequestCheckResponse requestCheck(
+            @RequestBody(required = false) RequestCheckRequest request) {
+        var employeeId = request == null ? null : trimToNull(request.employeeId());
+        var department = request == null ? null : trimToNull(request.department());
+
+        Employee target;
+        if (employeeId != null) {
+            target = employees.findById(UUID.fromString(employeeId))
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "employee not found"));
+            if (target.getStatus() != com.empverify.domain.Enums.EmployeeStatus.ACTIVE) {
+                throw new ApiException(HttpStatus.CONFLICT,
+                        target.getFullName() + " is not an active employee");
+            }
+        } else {
+            target = pickRandomCheckable(department);
+        }
+
+        int systems = deviceService.requestCheck(target.getId(), "admin");
+        if (systems == 0) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    target.getFullName() + " has no active system to open a check on");
+        }
+        return new RequestCheckResponse(
+                target.getId().toString(), target.getFullName(), target.getDepartment(), systems);
+    }
+
+    /**
+     * A random ACTIVE employee who actually has an active system — picking someone
+     * whose PC cannot open a scan would be a check that silently never happens.
+     */
+    private Employee pickRandomCheckable(String department) {
+        var checkable = new java.util.HashSet<UUID>();
+        deviceService.listDevices().forEach(d -> {
+            if (d.getStatus() == com.empverify.domain.Enums.DeviceStatus.ACTIVE && d.getEmployeeId() != null) {
+                checkable.add(d.getEmployeeId());
+            }
+        });
+        var candidates = employees.findAll().stream()
+                .filter(e -> e.getStatus() == com.empverify.domain.Enums.EmployeeStatus.ACTIVE)
+                .filter(e -> checkable.contains(e.getId()))
+                .filter(e -> department == null || department.equalsIgnoreCase(e.getDepartment()))
+                .toList();
+        if (candidates.isEmpty()) {
+            throw new ApiException(HttpStatus.CONFLICT, department == null
+                    ? "No active employee has an active system to check"
+                    : "No active employee in " + department + " has an active system to check");
+        }
+        return candidates.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(candidates.size()));
+    }
+
+    private static String trimToNull(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
     }
 
     public record AdminCheckRow(

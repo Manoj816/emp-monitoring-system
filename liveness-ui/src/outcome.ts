@@ -63,7 +63,7 @@ export function describeOutcome(status: string): Outcome {
       return {
         headline: "Check not completed",
         detail:
-          "This check ended before a scan was finished, so it is recorded as missed. The EmpVerify " +
+          "This check ended before a scan was finished, so it is recorded as missed. The PresenSure " +
           "app offers it again.",
         tone: "bad",
       };

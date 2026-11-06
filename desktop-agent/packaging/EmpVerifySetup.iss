@@ -30,10 +30,10 @@
 
 [Setup]
 AppId={{7C2B1D4E-6A33-4F0E-9B8D-2E5F1A7C9D21}
-AppName=EmpVerify Agent
+AppName=PresenSure Workforce
 AppVersion={#Version}
-AppVerName=EmpVerify Agent {#Version}
-AppPublisher=EmpVerify
+AppVerName=PresenSure Workforce {#Version}
+AppPublisher=Hyydra Tech
 DefaultDirName={autopf}\EmpVerify Agent
 DisableDirPage=yes
 DisableProgramGroupPage=yes
@@ -48,7 +48,7 @@ Compression=lzma2/fast
 SolidCompression=yes
 WizardStyle=modern
 SetupLogging=yes
-UninstallDisplayName=EmpVerify Agent
+UninstallDisplayName=PresenSure Workforce
 UninstallDisplayIcon={sys}\shell32.dll,43
 
 [Files]
@@ -70,8 +70,8 @@ var
 procedure InitializeWizard;
 begin
   ProvPage := CreateInputQueryPage(wpWelcome,
-    'Connect this PC to EmpVerify', 'Backend address and provisioning token',
-    'Both values come from your EmpVerify administrator. The token lets this PC register itself; ' +
+    'Connect this PC to PresenSure', 'Backend address and provisioning token',
+    'Both values come from your PresenSure administrator. The token lets this PC register itself; ' +
     'leave it empty only if this PC was provisioned before.');
   ProvPage.Add('Backend URL:', False);
   ProvPage.Add('Provisioning token:', True);
@@ -96,7 +96,7 @@ begin
     Space + 'check this PC (Windows 10 1809+ / 11, 64-bit)' + NewLine +
     Space + 'trust the package certificate and install the WebView2 runtime if missing' + NewLine +
     Space + 'store the backend address and provisioning token' + NewLine +
-    Space + 'install the EmpVerify agent for every user and start it' + NewLine + NewLine +
+    Space + 'install the PresenSure Workforce agent for every user and start it' + NewLine + NewLine +
     'Backend URL: ' + ProvPage.Values[0] + NewLine +
     'Provisioning token: ' + Copy(StringOfChar('*', Length(ProvPage.Values[1])), 1, 12);
 end;
@@ -125,7 +125,7 @@ begin
     Params := Params + ' -ProvisioningToken ' + PsQuote(Trim(ProvPage.Values[1]));
   Params := Params + ' *> ' + PsQuote(LogFile) + '; exit $LASTEXITCODE';
 
-  WizardForm.StatusLabel.Caption := 'Installing the EmpVerify agent (this takes a minute)...';
+  WizardForm.StatusLabel.Caption := 'Installing the PresenSure Workforce agent (this takes a minute)...';
   if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
       '-NoProfile -ExecutionPolicy Bypass -Command "' + Params + '"',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then

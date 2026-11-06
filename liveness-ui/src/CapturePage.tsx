@@ -37,7 +37,7 @@ export default function CapturePage() {
   useEffect(() => {
     if (!ready) {
       setState("error");
-      setMessage("This page must be opened from the EmpVerify desktop app.");
+      setMessage("This page must be opened from the PresenSure desktop app.");
       return;
     }
     let cancelled = false;
@@ -69,7 +69,7 @@ export default function CapturePage() {
     if (state !== "ready") return;
     if (remaining <= 0) {
       setState("expired");
-      setMessage("Time expired. Return to the EmpVerify app.");
+      setMessage("Time expired. Return to the PresenSure app.");
       stopCamera();
       return;
     }
@@ -134,7 +134,7 @@ export default function CapturePage() {
             <h2>{outcome.headline}</h2>
             <p className="outcome-detail">{outcome.detail}</p>
           </div>
-          <p className="closing">You can return to the EmpVerify app.</p>
+          <p className="closing">You can return to the PresenSure app.</p>
           {/* The agent honours window.close() once the check has ended. */}
           <button className="close-button" onClick={() => window.close()}>Close</button>
         </>

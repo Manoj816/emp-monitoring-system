@@ -132,6 +132,21 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
     });
   }
 
+  function sendCheck(employee: Employee) {
+    if (
+      !confirm(
+        `Send a verification check to ${employee.fullName} now? Their system opens the scan ` +
+          `within a minute of being online, outside the day's random plan.`,
+      )
+    ) {
+      return;
+    }
+    void run(async () => {
+      const r = await api.requestCheck({ employeeId: employee.id });
+      alert(`Check sent to ${r.employeeName}: ${r.systems} system(s) will open the scan.`);
+    });
+  }
+
   function pickFile(employee: Employee) {
     fileTargetRef.current = employee;
     fileInputRef.current?.click();
@@ -249,6 +264,11 @@ export default function EmployeesPage(props: { title: string; hint: string }) {
                   {
                     label: "Request first scan again", onClick: () => requestFirstScan(emp),
                     disabled: emp.status !== "ACTIVE", title: "Keep the photo; the employee enrolls again at the next check",
+                  },
+                  {
+                    label: "Send check now", onClick: () => sendCheck(emp),
+                    disabled: emp.status !== "ACTIVE" || systemsOf(emp).length === 0,
+                    title: "Their system opens a verification scan within a minute of being online",
                   },
                   {
                     label: "Offboard", onClick: () => offboard(emp), danger: true,

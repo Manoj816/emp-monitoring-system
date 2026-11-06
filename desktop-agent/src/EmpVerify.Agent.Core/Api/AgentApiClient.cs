@@ -59,7 +59,9 @@ public sealed class AgentApiClient : IAgentApi
 
     private sealed record ProvisionRequest(
         string ProvisioningToken, string Platform, string? Hostname, string? AgentVersion, string? MachineId);
-    private sealed record MeResponse(string DeviceId, string Status, bool Assigned, bool Enrolled, string? EmployeeId);
+    private sealed record MeResponse(
+        string DeviceId, string Status, bool Assigned, bool Enrolled, string? EmployeeId,
+        bool CheckRequested = false);
 
     public async Task<DeviceCredentials> ProvisionAsync(
         string provisioningToken, string platform, string? hostname, string? agentVersion, CancellationToken ct)
@@ -75,7 +77,7 @@ public sealed class AgentApiClient : IAgentApi
     public async Task<DeviceState> GetDeviceStateAsync(CancellationToken ct)
     {
         var body = (await _http.GetFromJsonAsync<MeResponse>("/api/v1/devices/me", ct))!;
-        return new DeviceState(body.Status, body.Assigned, body.Enrolled, body.EmployeeId);
+        return new DeviceState(body.Status, body.Assigned, body.Enrolled, body.EmployeeId, body.CheckRequested);
     }
 
     public async Task<string> AuthenticateAsync(DeviceCredentials credentials, CancellationToken ct)
@@ -111,6 +113,7 @@ public sealed class AgentApiClient : IAgentApi
             CheckType.Periodic => "PERIODIC",
             CheckType.Liveness => "LIVENESS",
             CheckType.Escalation => "ESCALATION",
+            CheckType.OnDemand => "ON_DEMAND",
             _ => throw new ArgumentOutOfRangeException(nameof(type)),
         };
         var response = await _http.PostAsync($"/api/v1/checks?checkType={checkType}", content: null, ct);

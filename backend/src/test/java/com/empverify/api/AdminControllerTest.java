@@ -44,6 +44,7 @@ class AdminControllerTest {
     @Mock private ReferenceImageRepository referenceImages;
     @Mock private VerificationCheckRepository checks;
     @Mock private CheckReviewRepository reviews;
+    @Mock private com.empverify.repo.CheckPolicyRepository policies;
     @Mock private DeviceService deviceService;
     @Mock private EmployeeImportService employeeImport;
     @Mock private ImageStorage storage;
@@ -60,7 +61,7 @@ class AdminControllerTest {
         // The tests below assert on what lands in each of those, so moving the writer
         // out of the controller must not turn them into assertions about a mock.
         controller = new AdminController(
-                employees, referenceImages, checks, reviews, deviceService, employeeImport,
+                employees, referenceImages, checks, reviews, policies, deviceService, employeeImport,
                 new ReferenceImageService(referenceImages, storage), storage, audit);
     }
 
@@ -283,5 +284,118 @@ class AdminControllerTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
         verify(referenceImages, never()).save(any());
+    }
+
+    // ---- the admin's check window ------------------------------------------------
+
+    private com.empverify.domain.CheckPolicy defaultPolicy() {
+        var policy = new com.empverify.domain.CheckPolicy();
+        policy.setName("default");
+        when(policies.findByName("default")).thenReturn(Optional.of(policy));
+        return policy;
+    }
+
+    @Test
+    void checkWindowUpdateIsStoredAndAudited() {
+        var policy = defaultPolicy();
+
+        var response = controller.updateCheckWindow(
+                new AdminController.UpdateCheckWindowRequest("10:30", "16:00"));
+
+        assertEquals("10:30", response.workWindowStart());
+        assertEquals("16:00", response.workWindowEnd());
+        assertEquals(java.time.LocalTime.of(10, 30), policy.getWorkWindowStart());
+        assertEquals(java.time.LocalTime.of(16, 0), policy.getWorkWindowEnd());
+        verify(policies).save(policy);
+        verify(audit).record(eq("admin"), eq("CHECK_WINDOW_UPDATED"), eq("policy"), anyString(), any());
+    }
+
+    @Test
+    void checkWindowThatEndsBeforeItStartsIsRefused() {
+        // No policy stub: the request is refused before the policy is ever read.
+        var e = assertThrows(ApiException.class, () -> controller.updateCheckWindow(
+                new AdminController.UpdateCheckWindowRequest("15:00", "12:00")));
+
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        verify(policies, never()).save(any());
+    }
+
+    @Test
+    void checkWindowWithUnparseableTimesIsRefused() {
+        var e = assertThrows(ApiException.class, () -> controller.updateCheckWindow(
+                new AdminController.UpdateCheckWindowRequest("noon", "16:00")));
+
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        verify(policies, never()).save(any());
+    }
+
+    // ---- "send a check now" ------------------------------------------------------
+
+    private Employee activeEmployee(String name, String department) {
+        var employee = new Employee();
+        employee.setFullName(name);
+        employee.setDepartment(department);
+        return employee; // status defaults to ACTIVE
+    }
+
+    private com.empverify.domain.Device activeDeviceOf(Employee employee) {
+        var device = new com.empverify.domain.Device();
+        device.setEmployeeId(employee.getId());
+        device.setStatus(com.empverify.domain.Enums.DeviceStatus.ACTIVE);
+        return device;
+    }
+
+    @Test
+    void requestCheckOnAChosenEmployeeFlagsTheirSystems() {
+        var employee = activeEmployee("Pat Example", "Engineering");
+        when(employees.findById(employee.getId())).thenReturn(Optional.of(employee));
+        when(deviceService.requestCheck(employee.getId(), "admin")).thenReturn(1);
+
+        var response = controller.requestCheck(
+                new AdminController.RequestCheckRequest(employee.getId().toString(), null));
+
+        assertEquals(employee.getId().toString(), response.employeeId());
+        assertEquals("Pat Example", response.employeeName());
+        assertEquals(1, response.systems());
+    }
+
+    @Test
+    void requestCheckOnAnEmployeeWithoutAnActiveSystemSaysSoInsteadOfPretending() {
+        var employee = activeEmployee("Pat Example", "Engineering");
+        when(employees.findById(employee.getId())).thenReturn(Optional.of(employee));
+        when(deviceService.requestCheck(employee.getId(), "admin")).thenReturn(0);
+
+        var e = assertThrows(ApiException.class, () -> controller.requestCheck(
+                new AdminController.RequestCheckRequest(employee.getId().toString(), null)));
+
+        assertEquals(HttpStatus.CONFLICT, e.getStatus());
+    }
+
+    @Test
+    void randomRequestPicksOnlyFromTheDepartmentAndOnlyWithActiveSystems() {
+        var inDept = activeEmployee("Dee Sales", "Sales");
+        var otherDept = activeEmployee("Eng Person", "Engineering");
+        var noSystem = activeEmployee("Sal NoPc", "Sales");
+        when(employees.findAll()).thenReturn(java.util.List.of(inDept, otherDept, noSystem));
+        when(deviceService.listDevices())
+                .thenReturn(java.util.List.of(activeDeviceOf(inDept), activeDeviceOf(otherDept)));
+        when(deviceService.requestCheck(inDept.getId(), "admin")).thenReturn(1);
+
+        var response = controller.requestCheck(new AdminController.RequestCheckRequest(null, "Sales"));
+
+        assertEquals(inDept.getId().toString(), response.employeeId());
+        assertEquals("Sales", response.department());
+    }
+
+    @Test
+    void randomRequestWithNobodyCheckableIsRefused() {
+        when(employees.findAll()).thenReturn(java.util.List.of(activeEmployee("Sal NoPc", "Sales")));
+        when(deviceService.listDevices()).thenReturn(java.util.List.of());
+
+        var e = assertThrows(ApiException.class,
+                () -> controller.requestCheck(new AdminController.RequestCheckRequest(null, null)));
+
+        assertEquals(HttpStatus.CONFLICT, e.getStatus());
+        verify(deviceService, never()).requestCheck(any(), anyString());
     }
 }

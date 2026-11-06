@@ -75,7 +75,7 @@ export default function App() {
   async function restart(reason: "cancelled" | "error", why: string) {
     if (!checkId || !token) return;
     if (restarts >= MAX_RESTARTS) {
-      await abandon(reason, `${why} The scan could not be completed on this device. The EmpVerify app will offer it again.`);
+      await abandon(reason, `${why} The scan could not be completed on this device. The PresenSure app will offer it again.`);
       return;
     }
     setNotice(`${why} This check is required — restarting the scan…`);
@@ -89,7 +89,7 @@ export default function App() {
       setRestarts(restarts + 1);
       setSession(body.sessionId); // new key below: the detector remounts with the fresh session
     } catch (e) {
-      await abandon(reason, `${why} The scan could not be restarted (${(e as Error).message}). The EmpVerify app will offer it again.`);
+      await abandon(reason, `${why} The scan could not be restarted (${(e as Error).message}). The PresenSure app will offer it again.`);
     }
   }
 
@@ -111,7 +111,7 @@ export default function App() {
     } catch (e) {
       // The scan ran but the server could not record it: tell it so the check is
       // closed out as an error (not left pending), then let the employee close.
-      await abandon("error", `Could not complete the check: ${(e as Error).message}. The EmpVerify app will offer it again.`);
+      await abandon("error", `Could not complete the check: ${(e as Error).message}. The PresenSure app will offer it again.`);
     }
   }
 
@@ -124,7 +124,7 @@ export default function App() {
   if (!identityPoolId) {
     body = <p className="message">Liveness is not configured (VITE_COGNITO_IDENTITY_POOL_ID is missing).</p>;
   } else if (!ready) {
-    body = <p className="message">This page must be opened from the EmpVerify desktop app.</p>;
+    body = <p className="message">This page must be opened from the PresenSure desktop app.</p>;
   } else if (state === "done" && outcome) {
     body = (
       <div className="ended">

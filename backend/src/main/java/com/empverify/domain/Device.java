@@ -52,6 +52,13 @@ public class Device {
     @Column(name = "machine_id")
     private String machineId;
 
+    /**
+     * An administrator asked this system for a check now ("send a check" in the
+     * portal). The agent sees it on its next state poll; opening any check clears it.
+     */
+    @Column(name = "check_requested_at")
+    private Instant checkRequestedAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -76,4 +83,6 @@ public class Device {
     public void setEnrolledAt(Instant v) { this.enrolledAt = v; }
     public String getMachineId() { return machineId; }
     public void setMachineId(String v) { this.machineId = v; }
+    public Instant getCheckRequestedAt() { return checkRequestedAt; }
+    public void setCheckRequestedAt(Instant v) { this.checkRequestedAt = v; }
 }

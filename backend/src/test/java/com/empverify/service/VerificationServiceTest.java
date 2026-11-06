@@ -309,6 +309,20 @@ class VerificationServiceTest {
     }
 
     @Test
+    void openingAnyCheckSettlesAPendingAdminRequest() {
+        // Whatever check opens first answers "send a check now": the request must
+        // never produce a second scan after the employee was already checked.
+        var device = new Device();
+        device.setEmployeeId(employeeId);
+        when(deviceService.requireActiveDevice(deviceId)).thenReturn(device);
+        when(checks.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service.openCheck(deviceId, CheckType.PERIODIC);
+
+        verify(deviceService).clearCheckRequest(device);
+    }
+
+    @Test
     void getOwnedCheckRejectsForeignDevice() {
         var check = pendingCheck("n", Instant.now().plusSeconds(60));
         when(checks.findById(check.getId())).thenReturn(Optional.of(check));

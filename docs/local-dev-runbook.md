@@ -59,7 +59,7 @@ curl.exe -X POST "http://localhost:8082/api/v1/admin/employees/$($emp.id)/refere
 
 # Issue a one-time enrollment token (single use, 24h expiry)
 $tok = Invoke-RestMethod -Method Post "http://localhost:8082/api/v1/admin/employees/$($emp.id)/enrollment-tokens" -Headers $h
-$tok.enrollmentToken   # paste into the agent's registration screen
+$tok.enrollmentToken   # for a manual (non-provisioned) agent install
 
 # Recent verification checks (audit feed)
 Invoke-RestMethod "http://localhost:8082/api/v1/admin/checks" -Headers $h |
@@ -68,9 +68,13 @@ Invoke-RestMethod "http://localhost:8082/api/v1/admin/checks" -Headers $h |
 
 ## 5. Verify
 
-In the agent, click **Verify now** (or wait for a scheduled prompt — up to 4
-random times inside the 9:00–17:00 policy window). One webcam frame uploads;
-the server decides and the activity log shows the verdict.
+Send the check from the portal: **Verification checks → Send a check** (or
+`POST /api/v1/admin/checks/request` with the admin key and
+`{"employeeId":"<id>"}`), or wait for the day's random check inside the
+policy's check window (**Verification checks → Check window** sets it). The
+agent has no window: one webcam scan uploads, the server decides, and the
+verdict lands in the portal; the agent's own log is
+`%LOCALAPPDATA%\EmpVerify\agent.log`.
 
 With the default **stub verifier** every capture returns `MATCH 95.0` — the
 test proves the pipeline, not real matching. Real matching:

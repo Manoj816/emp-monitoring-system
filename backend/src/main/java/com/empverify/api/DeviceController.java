@@ -67,9 +67,12 @@ public class DeviceController {
      *                 reassigned system starts with one)
      * @param employeeId the linked employee (null while unassigned); lets the agent
      *                   notice a reassignment or an offboarding without a restart
+     * @param checkRequested an administrator asked this system for a check now; the
+     *                       agent opens one, and opening any check clears the request
      */
     public record MeResponse(
-            String deviceId, String status, boolean assigned, boolean enrolled, String employeeId) {}
+            String deviceId, String status, boolean assigned, boolean enrolled, String employeeId,
+            boolean checkRequested) {}
 
     /**
      * Exchanges a one-time enrollment token (issued by an admin for one employee)
@@ -115,6 +118,7 @@ public class DeviceController {
                         device.getEmployeeId(), ReferenceImageStatus.ACTIVE, ReferenceImageSource.LIVE_ENROLLMENT)
                 .isPresent();
         return new MeResponse(device.getId().toString(), device.getStatus().name(), assigned, enrolled,
-                assigned ? device.getEmployeeId().toString() : null);
+                assigned ? device.getEmployeeId().toString() : null,
+                assigned && device.getCheckRequestedAt() != null);
     }
 }

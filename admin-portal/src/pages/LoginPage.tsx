@@ -23,12 +23,12 @@ export default function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
 
   return (
     <div className="login-wrap">
-      <section className="login-hero" aria-label="About EmpVerify">
+      <section className="login-hero" aria-label="About PresenSure Workforce">
         <div className="brand">
-          <span className="brand-mark">EV</span>
+          <span className="brand-mark">PW</span>
           <span>
-            <span className="brand-name">EmpVerify</span>
-            <span className="brand-sub">Admin console</span>
+            <span className="brand-name">PresenSure</span>
+            <span className="brand-sub">Workforce admin</span>
           </span>
         </div>
         <div>

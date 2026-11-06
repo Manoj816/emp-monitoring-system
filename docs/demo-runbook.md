@@ -90,14 +90,18 @@ only work on the laptop that runs them (step 4).
    the picture, so a roster of thousands is imported without photos and given
    them per person afterwards.
 3. **Devices**: this PC shows as Unassigned → pick the employee → **Assign**.
-   The agent notices within seconds; its log says the day's check is planned.
-4. On the agent window click **Verify now**. The first check is the
-   **enrollment scan**: a full-screen live face scan compared with the uploaded
-   photo. On a match, the matched frame is stored as the second reference and
-   Employees shows *Live enrollment: done* (see the **Details** button for both pictures).
-5. Every later check is a live scan compared with both references. Use the
-   agent's **Demo** panel to run one at an exact time, or **Liveness check** to run
-   one now. Hold up a photo or cover the camera to see a flagged result.
+   The agent notices within a minute (it has no window of its own — just the
+   tray icon; its activity goes to `%LOCALAPPDATA%\EmpVerify\agent.log`).
+4. On **Verification checks** click **Send a check** and pick the employee (or
+   use **Send check now** in their row on Employees). The agent opens the scan
+   within a minute. The first check is the **enrollment scan**: a full-screen
+   live face scan compared with the uploaded photo. On a match, the matched
+   frame is stored as the second reference and Employees shows
+   *Live enrollment: done* (see the **Details** button for both pictures).
+5. Every later check is a live scan compared with both references — the day's
+   random one inside the admin-set **Check window**, or any **Send a check**.
+   Picking nobody sends it to a random employee (optionally within one
+   department). Hold up a photo or cover the camera to see a flagged result.
 6. **Verification checks**: tiles, filters (every column, including a date range)
    and **Review** on flagged rows with the three pictures and the reason.
    Missed checks show as MISSED with why the workstation could not answer — the

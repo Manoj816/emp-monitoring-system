@@ -60,6 +60,21 @@ export interface AdminCheckRow {
   reviewResolution: string | null;
 }
 
+export interface CheckWindow {
+  /** "HH:mm" — when each day's random check can land, in the PC's local time. */
+  workWindowStart: string;
+  workWindowEnd: string;
+  timezone: string;
+}
+
+export interface RequestCheckResult {
+  employeeId: string;
+  employeeName: string;
+  department: string | null;
+  /** How many of their systems will open the check (normally 1). */
+  systems: number;
+}
+
 export type ReviewResolution =
   | "CONFIRMED_EMPLOYEE"
   | "CONFIRMED_MISMATCH"
@@ -205,6 +220,30 @@ export const api = {
     ),
 
   listChecks: (limit = 100) => request<AdminCheckRow[]>(`/api/v1/admin/checks?limit=${limit}`),
+
+  /** The daily check window of the default policy. */
+  getCheckWindow: () => request<CheckWindow>("/api/v1/admin/policy/check-window"),
+
+  /** Sets the daily check window; running agents re-plan within a minute. */
+  updateCheckWindow: (workWindowStart: string, workWindowEnd: string) =>
+    request<CheckWindow>("/api/v1/admin/policy/check-window", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workWindowStart, workWindowEnd }),
+    }),
+
+  /**
+   * Sends a verification check now: to the given employee, or — without an
+   * employeeId — to a random active employee (within the department, if given).
+   * The agent opens the scan within a minute of being online; the result lands
+   * in the checks list as ON_DEMAND.
+   */
+  requestCheck: (input: { employeeId?: string; department?: string }) =>
+    request<RequestCheckResult>("/api/v1/admin/checks/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }),
 
   reviewCheck: (checkId: string, resolution: ReviewResolution, notes: string) =>
     request<AdminCheckRow>(`/api/v1/admin/checks/${checkId}/review`, {

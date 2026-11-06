@@ -2,6 +2,7 @@ package com.empverify.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -493,5 +494,44 @@ class DeviceServiceTest {
         when(employees.findById(employee.getId())).thenReturn(Optional.of(employee));
 
         assertThrows(ApiException.class, () -> service.assignDevice(device.getId(), employee.getId(), "admin"));
+    }
+
+    @Test
+    void requestCheckFlagsOnlyTheActiveSystems() {
+        var employeeId = UUID.randomUUID();
+        var active = new Device();
+        active.setStatus(DeviceStatus.ACTIVE);
+        var revoked = new Device();
+        revoked.setStatus(DeviceStatus.REVOKED);
+        when(devices.findByEmployeeId(employeeId)).thenReturn(List.of(active, revoked));
+
+        int flagged = service.requestCheck(employeeId, "admin");
+
+        assertEquals(1, flagged);
+        assertNotNull(active.getCheckRequestedAt());
+        assertNull(revoked.getCheckRequestedAt());
+        verify(audit).record(eq("admin"), eq("CHECK_REQUESTED"), eq("employee"), eq(employeeId.toString()), any());
+    }
+
+    @Test
+    void requestCheckWithNothingToFlagIsNotAudited() {
+        var employeeId = UUID.randomUUID();
+        when(devices.findByEmployeeId(employeeId)).thenReturn(List.of());
+
+        assertEquals(0, service.requestCheck(employeeId, "admin"));
+
+        verify(audit, never()).record(any(), eq("CHECK_REQUESTED"), any(), any(), any());
+    }
+
+    @Test
+    void clearCheckRequestOnlySavesWhenThereWasARequest() {
+        var device = new Device();
+        service.clearCheckRequest(device);
+        verify(devices, never()).save(any());
+
+        device.setCheckRequestedAt(java.time.Instant.now());
+        service.clearCheckRequest(device);
+        assertNull(device.getCheckRequestedAt());
+        verify(devices).save(device);
     }
 }

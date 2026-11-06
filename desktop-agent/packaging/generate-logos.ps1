@@ -24,7 +24,7 @@ function New-Logo([string]$path, [int]$w, [int]$h, [string]$text) {
     Write-Output "wrote $path ($w x $h)"
 }
 
-New-Logo (Join-Path $OutDir "Square44x44Logo.png")   44  44  "EV"
-New-Logo (Join-Path $OutDir "Square150x150Logo.png") 150 150 "EV"
-New-Logo (Join-Path $OutDir "Wide310x150Logo.png")   310 150 "EmpVerify"
-New-Logo (Join-Path $OutDir "StoreLogo.png")         50  50  "EV"
+New-Logo (Join-Path $OutDir "Square44x44Logo.png")   44  44  "PW"
+New-Logo (Join-Path $OutDir "Square150x150Logo.png") 150 150 "PW"
+New-Logo (Join-Path $OutDir "Wide310x150Logo.png")   310 150 "PresenSure"
+New-Logo (Join-Path $OutDir "StoreLogo.png")         50  50  "PW"

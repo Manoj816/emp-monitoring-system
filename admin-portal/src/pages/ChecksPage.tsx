@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { api, type AdminCheckRow, type DeviceSummary } from "../api";
 import CardTitle from "../components/CardTitle";
 import CheckDetailsDialog from "../components/CheckDetailsDialog";
+import CheckWindowDialog from "../components/CheckWindowDialog";
+import SendCheckDialog from "../components/SendCheckDialog";
 import DataTable from "../components/DataTable";
 import { useStatsBar } from "../components/StatsBar";
 import { useTableFilters } from "../components/TableFilters";
@@ -21,6 +23,9 @@ export default function ChecksPage(props: { title: string; hint: string }) {
   const [error, setError] = useState<string | null>(null);
   const [details, setDetails] = useState<AdminCheckRow | null>(null);
   const [evidence, setEvidence] = useState<{ checkId: string; url: string } | null>(null);
+  const [editingWindow, setEditingWindow] = useState(false);
+  const [sendingCheck, setSendingCheck] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   // Hostnames for the deviceId a check carries. Fetched once: a system is
   // renamed far too rarely to re-read it on every 20s refresh.
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
@@ -107,6 +112,20 @@ export default function ChecksPage(props: { title: string; hint: string }) {
         <span className="toolbar-right">
           {tableFilters.control}
           {stats.controls}
+          <button
+            className="action toolbar-action"
+            title="When each day's random check can land (the employee's local time)"
+            onClick={() => setEditingWindow(true)}
+          >
+            Check window
+          </button>
+          <button
+            className="primary"
+            title="Open a verification scan on an employee's system now — a chosen one, or a random one"
+            onClick={() => setSendingCheck(true)}
+          >
+            Send a check
+          </button>
           <span className="muted">Auto-refreshes every 20s</span>
         </span>
       </div>
@@ -127,6 +146,7 @@ export default function ChecksPage(props: { title: string; hint: string }) {
       </div>
       {stats.panel}
 
+      {notice && <p className="notice">{notice}</p>}
       {error && <p className="error-text">{error}</p>}
 
       <DataTable
@@ -218,6 +238,27 @@ export default function ChecksPage(props: { title: string; hint: string }) {
           onClose={() => setDetails(null)}
           onReviewed={() => {
             setDetails(null);
+            void refresh();
+          }}
+        />
+      )}
+
+      {editingWindow && (
+        <CheckWindowDialog
+          onClose={() => setEditingWindow(false)}
+          onSaved={(message) => {
+            setEditingWindow(false);
+            setNotice(message);
+          }}
+        />
+      )}
+
+      {sendingCheck && (
+        <SendCheckDialog
+          onClose={() => setSendingCheck(false)}
+          onSent={(message) => {
+            setSendingCheck(false);
+            setNotice(message);
             void refresh();
           }}
         />

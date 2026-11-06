@@ -51,7 +51,8 @@ const SECTIONS: { id: Section; label: string; hint: string; description: string;
       "was shown and not completed, the work window closed with nobody ever back at the machine, or no check " +
       "was opened at all that day — the last of which the server records once the window has closed, with the " +
       "time the system was last online. Every missed scan says what was observed rather than guessing why. " +
-      "Click a row to open its details.",
+      "“Check window” sets the daily hours checks can land in; “Send a check” opens one now, on a chosen " +
+      "employee or a random one. Click a row to open its details.",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" />
@@ -117,10 +118,10 @@ export default function App() {
           ☰
         </button>
         <div className="brand">
-          <span className="brand-mark">EV</span>
+          <span className="brand-mark">PW</span>
           <span>
-            <span className="brand-name">EmpVerify</span>
-            <span className="brand-sub">Admin console</span>
+            <span className="brand-name">PresenSure</span>
+            <span className="brand-sub">Workforce admin</span>
           </span>
         </div>
         <div className="spacer" />
@@ -157,7 +158,7 @@ export default function App() {
             ))}
           </nav>
           <div className="sidenav-footer">
-            <span className="muted">EmpVerify · remote workforce identity verification</span>
+            <span className="muted">PresenSure Workforce · remote workforce identity verification</span>
           </div>
         </aside>
 

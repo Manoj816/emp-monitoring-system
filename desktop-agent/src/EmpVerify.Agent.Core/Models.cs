@@ -2,11 +2,12 @@ namespace EmpVerify.Agent.Core;
 
 /// <summary>
 /// Enrollment = the first live scan after assignment, matched against the uploaded
-/// ID/photo. SessionStart is part of the server contract but the Windows agent no
-/// longer opens one: signing in is not by itself a reason to scan an employee (see
-/// <see cref="Scheduling.StartupScan"/>).
+/// ID/photo. OnDemand = a check an administrator sent from the portal ("send a
+/// check now"). SessionStart is part of the server contract but the Windows agent
+/// no longer opens one: signing in is not by itself a reason to scan an employee
+/// (see <see cref="Scheduling.StartupScan"/>).
 /// </summary>
-public enum CheckType { Enrollment, SessionStart, Periodic, Liveness, Escalation }
+public enum CheckType { Enrollment, SessionStart, Periodic, Liveness, Escalation, OnDemand }
 
 public enum CheckStatus { Pending, Match, Check, NoFace, MultipleFaces, VerificationError, Expired }
 
@@ -38,7 +39,9 @@ public sealed record CaptureSession(string CaptureUrl, DateTimeOffset ExpiresAt)
 /// the uploaded ID/photo (until then the next check is the enrollment scan).
 /// </summary>
 /// <param name="EmployeeId">The linked employee (null while unassigned); a change means the system was reassigned.</param>
-public sealed record DeviceState(string Status, bool Assigned, bool Enrolled, string? EmployeeId = null);
+/// <param name="CheckRequested">An administrator asked this system for a check now; opening any check clears it.</param>
+public sealed record DeviceState(
+    string Status, bool Assigned, bool Enrolled, string? EmployeeId = null, bool CheckRequested = false);
 
 public sealed record CheckResult(
     string CheckId,

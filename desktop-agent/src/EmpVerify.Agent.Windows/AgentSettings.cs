@@ -12,11 +12,11 @@ public sealed class AgentSettings
 
     public string BackendUrl { get; set; } = "http://localhost:8082";
 
-    // Demo overrides (off by default). Edit settings.json to control checks for a demo:
+    // Demo override (off by default; dev-only, set by editing settings.json — the
+    // agent has no UI). For a one-off check on a real employee, use the portal's
+    // "send a check now" instead.
     //   DemoIntervalMinutes > 0  -> run a check every N minutes (ignores the 1/day plan)
-    //   DemoCheckAt = "HH:mm"    -> run one check today at this local time
     public int DemoIntervalMinutes { get; set; }
-    public string? DemoCheckAt { get; set; }
 
     // Checks run the AWS Face Liveness scan (proves a live person, defeats held-up
     // photos). Set false to fall back to the plain photo capture + compare.

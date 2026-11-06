@@ -344,6 +344,38 @@ public class DeviceService {
         return reset;
     }
 
+    /**
+     * Marks each of the employee's ACTIVE systems as owing a check now ("send a
+     * check" in the portal). The agent picks the request up on its next state poll,
+     * within a minute. Returns how many systems were flagged — zero means nothing
+     * will happen and the caller should say so instead of pretending a check is coming.
+     */
+    @Transactional
+    public int requestCheck(UUID employeeId, String actor) {
+        int flagged = 0;
+        for (var device : devices.findByEmployeeId(employeeId)) {
+            if (device.getStatus() == DeviceStatus.ACTIVE) {
+                device.setCheckRequestedAt(Instant.now());
+                devices.save(device);
+                flagged++;
+            }
+        }
+        if (flagged > 0) {
+            audit.record(actor, "CHECK_REQUESTED", "employee", employeeId.toString(),
+                    "{\"systems\":" + flagged + "}");
+        }
+        return flagged;
+    }
+
+    /** Any opened check answers a pending "send a check now" request. */
+    @Transactional
+    public void clearCheckRequest(Device device) {
+        if (device.getCheckRequestedAt() != null) {
+            device.setCheckRequestedAt(null);
+            devices.save(device);
+        }
+    }
+
     /** Called when an ENROLLMENT scan on the device matched: later checks on it are periodic. */
     @Transactional
     public void markEnrolled(UUID deviceId) {

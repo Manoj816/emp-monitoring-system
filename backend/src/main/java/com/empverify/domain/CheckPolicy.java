@@ -55,7 +55,9 @@ public class CheckPolicy {
     public String getName() { return name; }
     public void setName(String v) { this.name = v; }
     public LocalTime getWorkWindowStart() { return workWindowStart; }
+    public void setWorkWindowStart(LocalTime v) { this.workWindowStart = v; }
     public LocalTime getWorkWindowEnd() { return workWindowEnd; }
+    public void setWorkWindowEnd(LocalTime v) { this.workWindowEnd = v; }
     public String getTimezone() { return timezone; }
     public int getMaxChecksPerDay() { return maxChecksPerDay; }
     public int getResponseTimeoutSeconds() { return responseTimeoutSeconds; }

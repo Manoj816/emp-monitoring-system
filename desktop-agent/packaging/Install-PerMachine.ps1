@@ -108,7 +108,7 @@ if (-not $ProvisioningToken) {
 }
 
 Write-Host ""
-Write-Host "EmpVerify agent - per-machine install"
+Write-Host "PresenSure Workforce agent - per-machine install"
 Write-Host "  package : $MsixPath"
 Write-Host "  cert    : $(if ($TrustCert) { $TrustCert } else { '(none - package must be signed by a trusted CA)' })"
 Write-Host "  backend : $(if ($BackendUrl) { $BackendUrl } else { '(not set)' })"

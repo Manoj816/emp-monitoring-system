@@ -167,6 +167,13 @@ paths:
                       this state periodically: assigned=false means the system was
                       deregistered (employee offboarded) and checks stop; a different
                       employeeId means the system was reassigned and the day is re-planned.
+                  checkRequested:
+                    type: boolean
+                    description: >
+                      An administrator asked this system for a check now ("send a check"
+                      in the portal). The agent opens one (ON_DEMAND, or ENROLLMENT while
+                      the system still owes its first scan); opening any check clears the
+                      request server-side, so it can never fire twice.
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/policy:
@@ -216,7 +223,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [ENROLLMENT, SESSION_START, PERIODIC, LIVENESS, ESCALATION]
+            enum: [ENROLLMENT, SESSION_START, PERIODIC, LIVENESS, ESCALATION, ON_DEMAND]
       responses:
         "200":
           description: Check opened.

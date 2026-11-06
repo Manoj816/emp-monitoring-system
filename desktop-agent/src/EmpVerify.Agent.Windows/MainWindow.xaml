@@ -1,42 +1,14 @@
-﻿<Window x:Class="EmpVerify.Agent.Windows.MainWindow"
+<Window x:Class="EmpVerify.Agent.Windows.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="EmpVerify Agent" Width="560" Height="560"
+        Title="PresenSure Workforce" Width="0" Height="0"
+        ShowInTaskbar="False" WindowStyle="None" Visibility="Hidden"
         Icon="Assets/EmpVerify.ico">
-    <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <!-- Systems register themselves from the provisioning token the installer
-             placed on the machine; there is nothing for the employee to enter. -->
-        <TextBlock Grid.Row="0" FontSize="16" FontWeight="SemiBold" Text="EmpVerify identity checks"/>
-
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,0">
-            <Button x:Name="VerifyNowButton" Content="Verify now" Padding="10,4"
-                    IsEnabled="False" Click="VerifyNow_Click"/>
-            <Button x:Name="LivenessButton" Content="Liveness check" Padding="10,4" Margin="8,0,0,0"
-                    IsEnabled="False" Click="Liveness_Click"/>
-            <TextBlock x:Name="StatusText" Margin="12,4,0,0" Text="Not registered."/>
-        </StackPanel>
-
-        <GroupBox Grid.Row="2" Header="Demo" Padding="8" Margin="0,12,0,0">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Run a check at (HH:mm):" VerticalAlignment="Center"/>
-                <TextBox x:Name="DemoTimeBox" Width="70" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                <Button x:Name="DemoScheduleButton" Content="Schedule" Padding="10,4" Margin="8,0,0,0"
-                        IsEnabled="False" Click="DemoSchedule_Click"/>
-                <Button x:Name="DemoClearButton" Content="Clear" Padding="10,4" Margin="8,0,0,0"
-                        IsEnabled="False" Click="DemoClear_Click"/>
-                <TextBlock x:Name="DemoStatusText" Margin="12,4,0,0" Text=""/>
-            </StackPanel>
-        </GroupBox>
-
-        <TextBlock Grid.Row="3" Margin="0,12,0,4" FontWeight="SemiBold" Text="Activity"/>
-        <ListBox Grid.Row="4" x:Name="ActivityList"/>
-    </Grid>
+    <!-- The agent is a background app: this window is never shown. Everything is
+         scheduled by the administrator from the portal, so there is nothing here
+         for the employee to click and no activity list for them to read. The
+         class survives only as the WPF host for the tray icon and the scheduling
+         timer; the only windows an employee ever sees are the check windows,
+         which a scan cannot happen without. -->
+    <Grid/>
 </Window>
